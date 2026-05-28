@@ -1,0 +1,239 @@
+from pydantic import BaseModel, EmailStr, field_validator, model_validator, HttpUrl
+from datetime import date, datetime
+from typing import Optional, List
+
+import re
+
+
+class UserSchema(BaseModel):
+    firstname: str
+    lastname: str
+    phone: str
+    email: EmailStr
+    event_name: Optional[str] = None
+
+    @field_validator("phone")
+    def validate_phone(cls, value):
+        phone_regex = r"^\+?\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}$"
+        if not re.match(phone_regex, value):
+            raise ValueError("Invalid phone number format")
+        return value
+
+
+class ProfileSchema(BaseModel):
+    title: Optional[str] = ""
+    middle_name: Optional[str] = ""
+    country_id: Optional[int] = None
+    gender: Optional[str] = ""
+    organisation: Optional[str] = ""
+    position: Optional[str] = ""
+    profession: Optional[str] = ""
+    designation: Optional[str] = ""
+    certificate_name: Optional[str] = ""
+    address: Optional[str] = ""
+
+
+class EmailSchema(BaseModel):
+    email: EmailStr
+
+
+class AuthSchema(BaseModel):
+    username: EmailStr
+    password: str
+
+
+class PasswordResetSchema(BaseModel):
+    password: str
+    rest_token: str
+
+
+class VerificationTokenSchema(BaseModel):
+    verification_token: str
+
+
+class RoleSchema(BaseModel):
+    role: str
+    description: str
+
+
+class UserRoleSchema(BaseModel):
+    user_id: int
+    role_id: int
+
+
+class PermissionSchema(BaseModel):
+    permission: str
+    system_code: str
+    permission_code: str
+
+
+class RolePermissionSchema(BaseModel):
+    role_id: int
+    permission_id: int
+
+
+class CountrySchema(BaseModel):
+    country: str
+    short_code: str
+    phone_code: str
+
+
+class OrgUnitSchema(BaseModel):
+    name: str
+    type: str
+    description: str
+    primary_color: Optional[str] = '#0095B6'
+    secondary_color: Optional[str] = '#F7941D'
+    logo: Optional[str] = None
+
+
+class EventSchema(BaseModel):
+    org_unit_id: int
+    country_id: int
+    event: str
+    theme: str
+    description: Optional[str] = None
+    start_date: date
+    end_date: date
+    location: str
+    banner_image: Optional[str] = None
+    organizers: Optional[str] = None
+    participation_info: Optional[str] = None
+    logistics_info: Optional[str] = None
+    sponsors_info: Optional[str] = None
+
+    @field_validator("start_date", "end_date")
+    def check_dates_not_in_past(cls, v: date):
+        if v < date.today():
+            raise ValueError("Date must be today or in the future")
+        return v
+
+    @model_validator(mode="after")
+    def check_date_order(self):
+        if self.end_date < self.start_date:
+            raise ValueError("end_date must be after or equal to start_date")
+        return self
+
+
+class EventUpdateSchema(BaseModel):
+    """Schema for updating events — no past-date restriction so existing events can be edited."""
+    org_unit_id: int
+    country_id: int
+    event: str
+    theme: str
+    description: Optional[str] = None
+    start_date: date
+    end_date: date
+    location: str
+    banner_image: Optional[str] = None
+    organizers: Optional[str] = None
+    participation_info: Optional[str] = None
+    logistics_info: Optional[str] = None
+    sponsors_info: Optional[str] = None
+
+    @model_validator(mode="after")
+    def check_date_order(self):
+        if self.end_date < self.start_date:
+            raise ValueError("end_date must be after or equal to start_date")
+        return self
+
+
+class RegistrationSchema(BaseModel):
+    event_id: int
+    participation_role: str
+
+
+class OrganisationSchema(BaseModel):
+    country_id: int
+    organisation: str
+    organisation_type: str
+    sector: str
+    address: str
+    city: str
+    email: EmailStr
+    phone_number: str
+    is_donor: int
+    is_recipient: int
+
+
+class OrganisationIDSchema(BaseModel):
+    organisation_id: int
+
+
+class OrganisationApprovalSchema(BaseModel):
+    organisation_id: int
+    is_approved: str
+    comment: str
+
+
+class LinkSchema(BaseModel):
+    event_id: int
+    name: str
+    link: HttpUrl
+
+
+class AttendanceBase(BaseModel):
+    registration_id: int
+
+
+class AttendanceCreate(AttendanceBase):
+    pass
+
+
+class AttendanceRead(AttendanceBase):
+    id: int
+    attendance_date: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class AbstractAuthorSchema(BaseModel):
+    firstname: str
+    lastname: str
+    email: Optional[str] = None
+    affiliation: Optional[str] = None
+    country: Optional[str] = None
+    is_presenting: bool = False
+    author_order: int = 0
+
+class AbstractSubmitSchema(BaseModel):
+    event_id: int
+    title: str
+    abstract_text: str
+    keywords: Optional[str] = None
+    track: Optional[str] = None
+    presentation_type: str = "either"
+    authors: List[AbstractAuthorSchema]
+
+class AbstractUpdateSchema(BaseModel):
+    title: Optional[str] = None
+    abstract_text: Optional[str] = None
+    keywords: Optional[str] = None
+    track: Optional[str] = None
+    presentation_type: Optional[str] = None
+    status: Optional[str] = None
+    authors: Optional[List[AbstractAuthorSchema]] = None
+
+class AssignReviewerSchema(BaseModel):
+    reviewer_id: int
+
+class AbstractReviewSchema(BaseModel):
+    relevance_score: int
+    methodology_score: int
+    originality_score: int
+    overall_score: int
+    recommendation: str
+    comments: str
+    confidential_comments: Optional[str] = None
+
+class CreateReviewerSchema(BaseModel):
+    firstname: str
+    lastname: str
+    email: str
+    phone: Optional[str] = None
+
+
+class SendReceiptSchema(BaseModel):
+    membership_status: Optional[str] = None
+    membership_arrears: Optional[float] = None

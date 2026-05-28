@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+        color: #333333;
+      }
+      .email-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 40px;
+        box-sizing: border-box;
+        border-top: 6px solid rgb(254,80,103); /* ECSACONM Blue */
+      }
+      h1 {
+        font-size: 24px;
+        margin-bottom: 16px;
+        color: #003f5c;
+      }
+      p {
+        font-size: 16px;
+        line-height: 1.5;
+        margin-bottom: 16px;
+        color: #555555;
+      }
+      a.button {
+        display: inline-block;
+        background-color: rgb(254,80,103);
+        color: #ffffff;
+        text-decoration: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        margin-top: 20px;
+      }
+      a.button:hover {
+        background-color: #007a99;
+      }
+      .footer {
+        font-size: 14px;
+        color: #888888;
+        margin-top: 40px;
+        border-top: 1px solid #eaeaea;
+        padding-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <h1>{{subject}}</h1>
+      <p>Dear <strong>{{firstname}}</strong>,</p>
+      <p>
+        Your verification request for the organisation
+        <strong>{{organisation}}</strong> has been <strong>{{status}}</strong>.
+      </p>
+      <p>To view the details of your request, please use the button below:</p>
+      <a
+        href="https://dev.ecsaconm.org/organisation/{{organisation_id}}"
+        class="button"
+        >View Verification Status</a
+      >
+      <p>
+        If you need any assistance, feel free to contact our team at
+        <a href="mailto:support@ecsaconm.org">support@ecsaconm.org</a>.
+      </p>
+      <p><strong>About ECSACONM:</strong></p>
+      <p>
+        The East, Central and Southern Africa Health Community (ECSACONM) is a regional intergovernmental health organization dedicated to promoting sustainable health development and fostering collaboration among its member states.
+      </p>
+      <p>Sincerely,<br />The ECSACONM Secretariat</p>
+      <div class="footer">&copy; {{year}} ECSACONM. All rights reserved.</div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+        color: #333333;
+      }
+      .email-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 40px;
+        box-sizing: border-box;
+        border-top: 6px solid rgb(254,80,103);
+      }
+      h1 {
+        font-size: 24px;
+        margin-bottom: 16px;
+        color: #003f5c;
+      }
+      h2 {
+        font-size: 18px;
+        color: #003f5c;
+        margin-bottom: 8px;
+      }
+      p {
+        font-size: 16px;
+        line-height: 1.5;
+        margin-bottom: 16px;
+        color: #444444;
+      }
+      .credentials-box {
+        background-color: #f0f8ff;
+        border: 1px solid #b3d9e8;
+        border-radius: 8px;
+        padding: 20px 24px;
+        margin: 24px 0;
+      }
+      .credentials-box p {
+        margin: 6px 0;
+        font-size: 15px;
+      }
+      .payment-notice {
+        background-color: #fff8ed;
+        border-left: 4px solid #F7941D;
+        border-radius: 0 8px 8px 0;
+        padding: 16px 20px;
+        margin: 24px 0;
+      }
+      .payment-notice p {
+        margin: 0;
+        color: #7a4d00;
+        font-size: 15px;
+      }
+      a.button {
+        display: inline-block;
+        background-color: rgb(254,80,103);
+        color: #ffffff;
+        text-decoration: none;
+        padding: 12px 28px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        margin-top: 20px;
+      }
+      .footer {
+        font-size: 13px;
+        color: #888888;
+        margin-top: 40px;
+        border-top: 1px solid #eaeaea;
+        padding-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <h1>Welcome to ECSACONM Conference Portal</h1>
+      <p>Dear <strong>{{firstname}}</strong>,</p>
+
+      <p>
+        Thank you for registering{% if event_name %} for <strong>{{ event_name }}</strong>{% endif %}.
+        We are delighted to have you join us and look forward to your participation.
+      </p>
+
+      {% if password %}
+      <p>Your account has been created. Below are your login credentials:</p>
+
+      <div class="credentials-box">
+        <h2>Your Login Details</h2>
+        <p><strong>Email:</strong> {{username}}</p>
+        <p><strong>Temporary Password:</strong> {{password}}</p>
+      </div>
+
+      <p>
+        Please log in and change your password at your earliest convenience to keep your account secure.
+      </p>
+      {% else %}
+      <p>
+        You already have an account with us. Use your existing credentials to log in and complete your registration.
+        If you have forgotten your password, you can reset it from the login page.
+      </p>
+      {% endif %}
+
+      <a href="https://events.ecsaconm.org/login" class="button">Log In to ECSACONM Conference Portal</a>
+
+      <div class="payment-notice">
+        <p>
+          <strong>Payment Reminder:</strong> If you have not yet completed your event payment,
+          please do so to gain full access to the event{% if event_name %} — <em>{{ event_name }}</em>{% endif %}.
+          Unpaid registrations may have limited access to event resources and sessions.
+        </p>
+      </div>
+
+      <p>
+        If you need any assistance, please contact us at
+        <a href="mailto:admission@cosecsa.org">admission@cosecsa.org</a>.
+      </p>
+
+      <p>Warm regards,<br />ECSACONM Conference Team<br />ECSACONM Secretariat</p>
+      <div class="footer">&copy; {{year}} ECSACONM. All rights reserved.</div>
+    </div>
+  </body>
+</html>

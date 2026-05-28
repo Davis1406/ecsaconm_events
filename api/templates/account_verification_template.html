@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+        color: #333333;
+      }
+      .email-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 40px;
+        box-sizing: border-box;
+        border-top: 6px solid rgb(254,80,103); /* ECSACONM Primary Color */
+      }
+      h1 {
+        font-size: 24px;
+        margin-bottom: 16px;
+        color: #003f5c;
+      }
+      p {
+        font-size: 16px;
+        line-height: 1.5;
+        margin-bottom: 16px;
+        color: #555555;
+      }
+      a.button {
+        display: inline-block;
+        background-color: rgb(254,80,103);
+        color: #ffffff;
+        text-decoration: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        margin-top: 20px;
+      }
+      a.button:hover {
+        background-color: #007a99;
+      }
+      .footer {
+        font-size: 14px;
+        color: #888888;
+        margin-top: 40px;
+        border-top: 1px solid #eaeaea;
+        padding-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <h1>{{subject}}</h1>
+      <p>Dear <strong>{{firstname}}</strong>,</p>
+      <p>
+        Your account verification for <strong>{{email}}</strong> was successful.
+      </p>
+      <p>
+        You can now sign in to your ECSACONM account using the link below:
+      </p>
+      <a href="https://dev.ecsaconm.org/login" class="button">Log In to ECSACONM</a>
+      <p>
+        If you have any questions or encounter any issues, feel free to reach us at
+        <a href="mailto:support@ecsaconm.org">support@ecsaconm.org</a>.
+      </p>
+      <p><strong>About ECSACONM:</strong></p>
+      <p>
+        The East Central and Southern Africa College of Nursing and Midwifery (ECSACONM) promotes nursing and midwifery excellence across the region through education, research, and collaborative partnerships.
+      </p>
+      <p>Sincerely,<br />The ECSACONM Secretariat</p>
+      <div class="footer">&copy; {{year}} ECSACONM. All rights reserved.</div>
+    </div>
+  </body>
+</html>

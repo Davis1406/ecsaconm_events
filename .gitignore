@@ -1,0 +1,28 @@
+# Python
+api/venv/
+api/__pycache__/
+api/**/__pycache__/
+api/**/*.pyc
+api/.env
+api/scripts/token.json
+api/scripts/credentials.json
+
+# Uploads (user files — not tracked in git)
+api/uploads/
+
+# Node
+web_vue/node_modules/
+web_vue/dist/
+
+# Vue env overrides
+web_vue/.env.local
+web_vue/.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

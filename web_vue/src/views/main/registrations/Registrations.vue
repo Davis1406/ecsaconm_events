@@ -1,0 +1,443 @@
+<template>
+  <div class="flex flex-col space-y-4 flex-1">
+    <HeaderView :headerTitle="headerTitle"></HeaderView>
+
+    <div class="flex flex-col space-y-4">
+      <!-- Search + event filter -->
+      <div class="flex sm:flex-row flex-col sm:justify-between sm:items-center items-start gap-3 flex-wrap">
+        <search-component @search="handleSearch"></search-component>
+        <div class="flex items-center gap-2 flex-wrap">
+          <select v-model="selectedEventId" @change="handleFilterChange"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-pink-400 bg-white min-w-[180px]">
+            <option value="">All Events</option>
+            <option v-for="event in events" :key="event.id" :value="event.id">{{ event.event }}</option>
+          </select>
+          <select v-model="paidFilter" @change="handleFilterChange"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-pink-400 bg-white">
+            <option value="all">All Payments</option>
+            <option value="true">Paid</option>
+            <option value="false">Unpaid</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Spinner -->
+      <SpinnerComponent v-if="isLoading" />
+
+      <div v-else class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <!-- Table header -->
+        <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+          <div class="col-span-1">#</div>
+          <div class="col-span-2">Participant</div>
+          <div class="col-span-2">Email</div>
+          <div class="col-span-2">Event</div>
+          <div class="col-span-2">Category</div>
+          <div class="col-span-1">Date</div>
+          <div class="col-span-1">Payment</div>
+          <div class="col-span-1 text-right"></div>
+        </div>
+
+        <!-- Empty state -->
+        <div v-if="registrations.length === 0" class="flex flex-col items-center justify-center py-16 text-center px-6">
+          <div class="h-14 w-14 rounded-full flex items-center justify-center mb-4"
+            style="background-color: rgba(254,80,103,0.1);">
+            <svg class="w-7 h-7" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <p class="text-gray-400 text-sm italic">No registrations found.</p>
+        </div>
+
+        <!-- Rows -->
+        <div v-for="(reg, idx) in registrations" :key="reg.id || reg.registration_id"
+          class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3.5 border-b border-gray-50 hover:bg-gray-50 transition text-sm">
+          <!-- # -->
+          <div class="col-span-1 text-gray-400 text-xs font-medium hidden sm:block">
+            {{ (currentPage - 1) * pageSize + idx + 1 }}
+          </div>
+          <!-- Participant — click to open user profile -->
+          <div class="col-span-2">
+            <router-link
+              v-if="reg.user_id"
+              :to="{ name: 'User', params: { id: reg.user_id } }"
+              class="font-semibold hover:underline transition"
+              style="color: rgb(254,80,103);">
+              {{ [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ') || '—' }}
+            </router-link>
+            <span v-else class="font-semibold text-gray-800">
+              {{ [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ') || '—' }}
+            </span>
+          </div>
+          <!-- Email -->
+          <div class="col-span-2 text-gray-500 truncate">{{ reg.email || '—' }}</div>
+          <!-- Event -->
+          <div class="col-span-2 text-gray-700 text-xs">{{ reg.event || '—' }}</div>
+          <!-- Category -->
+          <div class="col-span-2 text-gray-600 text-xs leading-tight">
+            {{ reg.participation_role ? formatRole(reg.participation_role) : '—' }}
+          </div>
+          <!-- Date -->
+          <div class="col-span-1 text-gray-400 text-xs whitespace-nowrap">
+            {{ formatDate(reg.registered_at || reg.created_at) }}
+          </div>
+          <!-- Payment badge -->
+          <div class="col-span-1">
+            <span v-if="reg.paid"
+              class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+              Paid
+            </span>
+            <span v-else-if="reg.payment_proof"
+              class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+              Proof Sent
+            </span>
+            <span v-else
+              class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+              Pending
+            </span>
+          </div>
+          <!-- Actions — kebab popover -->
+          <div class="col-span-1 flex justify-end" style="position: relative;">
+            <button
+              @click.stop="toggleMenu(reg.id || reg.registration_id)"
+              class="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="5"  r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+              </svg>
+            </button>
+            <!-- Dropdown -->
+            <transition name="pop">
+              <div v-if="openMenuId === (reg.id || reg.registration_id)"
+                class="absolute right-0 top-8 z-30 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 text-sm"
+                @click.stop>
+                <!-- View proof -->
+                <button v-if="reg.payment_proof"
+                  @click="viewProof(reg); closeMenu()"
+                  class="w-full flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-gray-50 transition">
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                  </svg>
+                  View File
+                </button>
+                <div v-if="reg.payment_proof" class="border-t border-gray-50 mx-3"></div>
+                <!-- Verify -->
+                <button v-if="!reg.paid"
+                  @click="verifyPayment(reg); closeMenu()"
+                  :disabled="verifyingId === (reg.id || reg.registration_id)"
+                  class="w-full flex items-center gap-2.5 px-4 py-2 font-semibold hover:bg-green-50 transition disabled:opacity-50"
+                  style="color: rgb(22,163,74);">
+                  <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  {{ verifyingId === (reg.id || reg.registration_id) ? 'Verifying…' : 'Verify Payment' }}
+                </button>
+                <!-- Unverify -->
+                <button v-else
+                  @click="unverifyPayment(reg); closeMenu()"
+                  :disabled="verifyingId === (reg.id || reg.registration_id)"
+                  class="w-full flex items-center gap-2.5 px-4 py-2 font-semibold hover:bg-red-50 transition disabled:opacity-50"
+                  style="color: rgb(254,80,103);">
+                  <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                  {{ verifyingId === (reg.id || reg.registration_id) ? 'Processing…' : 'Unverify' }}
+                </button>
+              </div>
+            </transition>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toast notification -->
+      <transition name="fade">
+        <div v-if="toast.show"
+          class="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-white text-sm font-semibold shadow-lg"
+          :style="toast.type === 'success' ? 'background-color: rgb(34,197,94);' : 'background-color: rgb(239,68,68);'">
+          {{ toast.message }}
+        </div>
+      </transition>
+
+      <!-- Pagination -->
+      <pagination-component :currentPage="currentPage" :totalPages="totalPages"
+        @page-change="handlePageChange">
+      </pagination-component>
+    </div>
+
+    <!-- Proof of Payment Modal -->
+    <div v-if="proofModal.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      @click.self="closeProof">
+      <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+        <!-- Modal header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
+          style="background-color: rgba(254,80,103,0.04);">
+          <div>
+            <p class="font-bold text-gray-800">Payment Proof</p>
+            <p class="text-xs text-gray-400 mt-0.5">{{ proofModal.participantName }}</p>
+          </div>
+          <button @click="closeProof" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Proof content -->
+        <div class="p-6 overflow-y-auto flex-1">
+          <!-- Image -->
+          <div v-if="isImageProof(proofModal.proofUrl)" class="rounded-xl overflow-hidden border border-gray-100">
+            <img :src="proofModal.proofUrl" alt="Payment proof" class="w-full max-h-96 object-contain bg-gray-50" />
+          </div>
+          <!-- PDF — embedded inline -->
+          <div v-else>
+            <iframe
+              :src="proofModal.proofUrl"
+              class="w-full rounded-xl border border-gray-200"
+              style="height: 480px;"
+              title="Payment Proof PDF">
+            </iframe>
+            <a :href="proofModal.proofUrl" target="_blank"
+              class="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold hover:underline"
+              style="color: rgb(254,80,103);">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Open in new tab
+            </a>
+          </div>
+          <!-- Actions -->
+          <div class="flex justify-end gap-3 mt-5 pt-4 border-t border-gray-100">
+            <button @click="closeProof"
+              class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+              Close
+            </button>
+            <button v-if="!proofModal.reg.paid"
+              @click="verifyFromModal"
+              :disabled="verifyingId === proofModal.regId"
+              class="px-5 py-2 rounded-xl text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition"
+              style="background-color: rgb(254,80,103);">
+              {{ verifyingId === proofModal.regId ? 'Verifying…' : 'Verify Payment' }}
+            </button>
+            <button v-else
+              @click="unverifyFromModal"
+              :disabled="verifyingId === proofModal.regId"
+              class="px-5 py-2 rounded-xl text-sm font-semibold border-2 hover:bg-red-50 disabled:opacity-50 transition"
+              style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+              {{ verifyingId === proofModal.regId ? 'Processing…' : 'Un-verify' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import axios from 'axios'
+import HeaderView from '@/includes/Header.vue'
+import PaginationComponent from '@/components/PaginationComponent.vue'
+import SearchComponent from '@/components/SearchComponent.vue'
+import SpinnerComponent from '@/components/Spinner.vue'
+import { fetchData, fetchDataWithParams, updateItem } from '@/services/apiService'
+import { useAuthStore } from '@/store/authStore'
+
+const API_URL = import.meta.env.VITE_API_URL
+
+export default {
+  name: 'RegistrationsView',
+  components: {
+    PaginationComponent, SearchComponent, HeaderView, SpinnerComponent,
+  },
+  data() {
+    return {
+      headerTitle: 'Registrations',
+      registrations: [],
+      events: [],
+      isLoading: true,
+      verifyingId: null,
+      currentPage: 1,
+      totalPages: 1,
+      pageSize: 20,
+      searchPhrase: '',
+      selectedEventId: '',
+      paidFilter: 'all',
+      openMenuId: null,
+      toast: { show: false, message: '', type: 'success' },
+      proofModal: {
+        show: false,
+        proofUrl: '',
+        participantName: '',
+        regId: null,
+        reg: {},
+      },
+    }
+  },
+  setup() {
+    const authStore = useAuthStore()
+    const raw = authStore.permissions || []
+    const permissions = raw.map(p => typeof p === "string" ? p : p.permission_code)
+    return { permissions, authStore }
+  },
+  mounted() {
+    this.loadEvents()
+    this.loadRegistrations()
+    document.addEventListener('click', this.closeMenu)
+  },
+  beforeUnmount() {
+    document.removeEventListener('click', this.closeMenu)
+  },
+  methods: {
+    async loadEvents() {
+      try {
+        const response = await fetchData('events', 0, 200, '')
+        this.events = response.data || []
+      } catch (error) {
+        console.error('Error fetching events:', error)
+      }
+    },
+    async loadRegistrations() {
+      this.isLoading = true
+      try {
+        const params = {
+          skip: (this.currentPage - 1) * this.pageSize,
+          limit: this.pageSize,
+          search: this.searchPhrase || '',
+          paid: this.paidFilter,
+        }
+        if (this.selectedEventId) params.event_id = this.selectedEventId
+        const response = await fetchDataWithParams('registrations', params)
+        this.registrations = response.data || response || []
+        this.totalPages = response.pages || 1
+      } catch (error) {
+        console.error('Error fetching registrations:', error)
+        this.registrations = []
+      } finally {
+        this.isLoading = false
+      }
+    },
+    async verifyPayment(reg) {
+      const regId = reg.id || reg.registration_id
+      this.verifyingId = regId
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        await api.put(`/events/verify_payment/${regId}`, {})
+        const index = this.registrations.findIndex(r => (r.id || r.registration_id) === regId)
+        if (index !== -1) this.registrations[index].paid = true
+        if (this.proofModal.regId === regId) this.proofModal.reg = { ...this.proofModal.reg, paid: true }
+        this.showToast('Payment verified successfully!', 'success')
+      } catch (error) {
+        this.showToast(error.response?.data?.detail || 'Verification failed.', 'error')
+      } finally {
+        this.verifyingId = null
+      }
+    },
+    async unverifyPayment(reg) {
+      const regId = reg.id || reg.registration_id
+      this.verifyingId = regId
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        await api.put(`/events/unverify_payment/${regId}`, {})
+        const index = this.registrations.findIndex(r => (r.id || r.registration_id) === regId)
+        if (index !== -1) this.registrations[index].paid = false
+        if (this.proofModal.regId === regId) this.proofModal.reg = { ...this.proofModal.reg, paid: false }
+        this.showToast('Payment un-verified.', 'success')
+      } catch (error) {
+        this.showToast(error.response?.data?.detail || 'Failed to un-verify.', 'error')
+      } finally {
+        this.verifyingId = null
+      }
+    },
+    viewProof(reg) {
+      const regId = reg.id || reg.registration_id
+      const name = [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ')
+      const proof = reg.payment_proof || ''
+      const proofUrl = proof.startsWith('http') ? proof : `${API_URL}/${proof}`
+      this.proofModal = {
+        show: true,
+        proofUrl,
+        participantName: name,
+        regId,
+        reg,
+      }
+    },
+    closeProof() {
+      this.proofModal.show = false
+    },
+    verifyFromModal() {
+      this.verifyPayment(this.proofModal.reg)
+    },
+    unverifyFromModal() {
+      this.unverifyPayment(this.proofModal.reg)
+    },
+    isImageProof(url) {
+      if (!url) return false
+      return /\.(jpg|jpeg|png|gif|webp)$/i.test(url)
+    },
+    showToast(message, type = 'success') {
+      this.toast = { show: true, message, type }
+      setTimeout(() => { this.toast.show = false }, 3500)
+    },
+    handleSearch(query) {
+      this.searchPhrase = query
+      this.currentPage = 1
+      this.loadRegistrations()
+    },
+    handlePageChange(newPage) {
+      this.currentPage = newPage
+      this.loadRegistrations()
+    },
+    handleFilterChange() {
+      this.currentPage = 1
+      this.loadRegistrations()
+    },
+    formatDate(dateString) {
+      if (!dateString) return '—'
+      return new Date(dateString).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      })
+    },
+    toggleMenu(id) {
+      this.openMenuId = this.openMenuId === id ? null : id
+    },
+    closeMenu() {
+      this.openMenuId = null
+    },
+    formatRole(role) {
+      const map = {
+        member_state: 'Member State',
+        participant: 'Participant',
+        other_africa: 'Other Africa',
+        world: 'International',
+        student: 'Student',
+        exhibitor: 'Exhibitor/Sponsor',
+        secretariat: 'Secretariat',
+        delegate: 'Delegate',
+        presenter: 'Presenter',
+        speaker: 'Speaker',
+        sponsor: 'Sponsor',
+        moderator: 'Moderator',
+        moh: 'Ministry of Health',
+        member: 'Member',
+        non_member_member_state: 'Non-Member (Member State)',
+        non_member_other: 'Non-Member (Other)',
+      }
+      return map[role] || role
+    },
+  },
+}
+</script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.pop-enter-active { transition: opacity 0.12s ease, transform 0.12s ease; }
+.pop-leave-active { transition: opacity 0.08s ease, transform 0.08s ease; }
+.pop-enter-from  { opacity: 0; transform: scale(0.95) translateY(-4px); }
+.pop-leave-to    { opacity: 0; transform: scale(0.95) translateY(-4px); }
+</style>
