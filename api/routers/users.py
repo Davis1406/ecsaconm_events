@@ -508,6 +508,54 @@ async def update_profile(
     return profile_schema
 
 
+@router.post("/{user_id}/photo")
+async def upload_user_photo_by_id(
+    user_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload/replace passport photo for a user by user_id (used during registration)."""
+    try:
+        # Remove existing photos for this user
+        existing_photos = db.query(UserPhoto).filter(UserPhoto.user_id == user_id).all()
+        for photo in existing_photos:
+            if photo.path and os.path.isfile(photo.path):
+                os.remove(photo.path)
+            elif photo.path and os.path.isdir(os.path.dirname(photo.path)):
+                try:
+                    shutil.rmtree(os.path.dirname(photo.path))
+                except Exception:
+                    pass
+        db.query(UserPhoto).filter(UserPhoto.user_id == user_id).delete()
+        db.commit()
+
+        # Save new photo
+        unique_dir = os.path.join(
+            USER_PHOTO_DIR,
+            f"{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}",
+        )
+        os.makedirs(unique_dir, exist_ok=True)
+        file_path = os.path.join(unique_dir, file.filename)
+        with open(file_path, "wb+") as file_object:
+            file_object.write(await file.read())
+
+        user_photo_model = UserPhoto(user_id=user_id, path=file_path)
+        db.add(user_photo_model)
+        db.commit()
+        db.refresh(user_photo_model)
+
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": f"Photo uploaded for user {user_id}",
+                "file_path": file_path,
+            },
+            status_code=200,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Photo upload failed: {str(e)}")
+
+
 @router.post("/upload_user_photo/")
 async def upload_user_photo(
     current_user: user_dependency,

@@ -121,6 +121,17 @@
                   View File
                 </button>
                 <div v-if="reg.payment_proof" class="border-t border-gray-50 mx-3"></div>
+                <!-- Edit -->
+                <button
+                  @click="openEditModal(reg); closeMenu()"
+                  class="w-full flex items-center gap-2.5 px-4 py-2 text-gray-700 hover:bg-gray-50 transition">
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                  </svg>
+                  Edit
+                </button>
+                <div class="border-t border-gray-50 mx-3"></div>
                 <!-- Verify -->
                 <button v-if="!reg.paid"
                   @click="verifyPayment(reg); closeMenu()"
@@ -162,6 +173,174 @@
       <pagination-component :currentPage="currentPage" :totalPages="totalPages"
         @page-change="handlePageChange">
       </pagination-component>
+    </div>
+
+    <!-- Edit Registration Modal -->
+    <div v-if="editModal.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      @click.self="closeEditModal">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col max-h-[92vh] overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
+          style="background-color: rgba(254,80,103,0.04);">
+          <div>
+            <p class="font-bold text-gray-800">Edit Registration</p>
+            <p class="text-xs text-gray-400 mt-0.5">{{ editModal.participantName }}</p>
+          </div>
+          <button @click="closeEditModal" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Form body -->
+        <div class="p-6 overflow-y-auto flex-1 space-y-4">
+          <!-- Error -->
+          <div v-if="editModal.error"
+            class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+            {{ editModal.error }}
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-4">
+            <!-- Title -->
+            <div>
+              <label class="edit-label">Title</label>
+              <select v-model="editForm.title" class="edit-input">
+                <option value="">Select title</option>
+                <option value="Mr.">Mr.</option>
+                <option value="Mrs.">Mrs.</option>
+                <option value="Ms.">Ms.</option>
+                <option value="Dr.">Dr.</option>
+                <option value="Prof.">Prof.</option>
+                <option value="Sr.">Sr.</option>
+              </select>
+            </div>
+            <!-- Phone -->
+            <div>
+              <label class="edit-label">Phone</label>
+              <input v-model="editForm.phone" type="tel" class="edit-input" placeholder="+255700000000" />
+            </div>
+            <!-- First Name -->
+            <div>
+              <label class="edit-label">First Name <span class="text-red-500">*</span></label>
+              <input v-model="editForm.firstname" type="text" class="edit-input" placeholder="First name" />
+            </div>
+            <!-- Last Name -->
+            <div>
+              <label class="edit-label">Last Name <span class="text-red-500">*</span></label>
+              <input v-model="editForm.lastname" type="text" class="edit-input" placeholder="Last name" />
+            </div>
+            <!-- Email (readonly) -->
+            <div class="sm:col-span-2">
+              <label class="edit-label">Email <span class="text-xs text-gray-400">(cannot change)</span></label>
+              <input :value="editModal.email" type="email" class="edit-input bg-gray-50 text-gray-400 cursor-not-allowed" readonly />
+            </div>
+            <!-- Country -->
+            <div>
+              <label class="edit-label">Country</label>
+              <select v-model="editForm.country_id" class="edit-input">
+                <option value="">Select country</option>
+                <option v-for="c in editCountries" :key="c.id" :value="c.id">{{ c.country }}</option>
+              </select>
+            </div>
+            <!-- Address -->
+            <div class="sm:col-span-2">
+              <label class="edit-label">Address</label>
+              <textarea v-model="editForm.address" rows="2" class="edit-input" placeholder="Street / PO Box, City, Region"></textarea>
+            </div>
+            <!-- Designation -->
+            <div class="sm:col-span-2">
+              <label class="edit-label">Designation</label>
+              <select v-model="editForm.designation" class="edit-input">
+                <option value="">Select designation</option>
+                <option value="Chief Nursing Officer">Chief Nursing Officer</option>
+                <option value="Clinical Supervisor">Clinical Supervisor</option>
+                <option value="Communications Manager">Communications Manager</option>
+                <option value="Director Nursing Services">Director Nursing Services</option>
+                <option value="Educator">Educator</option>
+                <option value="Midwifery Specialist">Midwifery Specialist</option>
+                <option value="Nursing Midwifery Specialist">Nursing Midwifery Specialist</option>
+                <option value="Nursing Specialist">Nursing Specialist</option>
+                <option value="Nursing Superintendent">Nursing Superintendent</option>
+                <option value="Principal Nursing Officer">Principal Nursing Officer</option>
+                <option value="Project Manager">Project Manager</option>
+                <option value="Public Health Specialist">Public Health Specialist</option>
+                <option value="Registered Nurse">Registered Nurse</option>
+                <option value="Researcher">Researcher</option>
+                <option value="Student">Student</option>
+                <option value="Other">Other (specify below)</option>
+              </select>
+            </div>
+            <div v-if="editForm.designation === 'Other'" class="sm:col-span-2">
+              <label class="edit-label">Specify Designation <span class="text-red-500">*</span></label>
+              <input v-model="editForm.designation_other" type="text" class="edit-input" placeholder="Your designation" />
+            </div>
+            <!-- Organisation -->
+            <div class="sm:col-span-2">
+              <label class="edit-label">Organisation / Institution</label>
+              <input v-model="editForm.organisation" type="text" class="edit-input" placeholder="e.g. Ministry of Health" />
+            </div>
+          </div>
+
+          <!-- Participation Category -->
+          <div>
+            <label class="edit-label">Participation Category</label>
+            <div class="grid grid-cols-1 gap-2 mt-2">
+              <label v-for="opt in participationOptions" :key="opt.value"
+                class="flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition"
+                :style="editForm.participation_role === opt.value
+                  ? 'border-color: rgb(254,80,103); background-color: rgba(254,80,103,0.05);'
+                  : 'border-color: #e5e7eb; background-color: #fff;'">
+                <input type="radio" :value="opt.value" v-model="editForm.participation_role"
+                  class="mt-0.5 accent-pink-500 flex-shrink-0" />
+                <div>
+                  <span class="text-sm font-semibold text-gray-800">{{ opt.label }}</span>
+                  <p v-if="opt.fee" class="text-xs text-gray-500 mt-0.5">{{ opt.fee }}</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Passport Photo (optional) -->
+          <div>
+            <label class="edit-label">Passport Photo <span class="text-xs text-gray-400">(optional)</span></label>
+            <div class="flex items-center gap-4 mt-2">
+              <div v-if="editForm.photoPreview"
+                class="h-16 w-16 rounded-full overflow-hidden border-2 flex-shrink-0"
+                style="border-color: rgb(254,80,103);">
+                <img :src="editForm.photoPreview" alt="Photo preview" class="h-full w-full object-cover" />
+              </div>
+              <label class="cursor-pointer">
+                <div class="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-dashed text-sm font-semibold transition"
+                  style="border-color: rgba(254,80,103,0.4); color: rgb(254,80,103);">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  {{ editForm.photo ? 'Change Photo' : 'Upload Photo' }}
+                </div>
+                <input type="file" accept="image/*" class="hidden" @change="onEditPhotoChange" />
+              </label>
+              <span v-if="editForm.photo" class="text-xs text-gray-400">{{ editForm.photo.name }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button @click="closeEditModal"
+            class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <button @click="saveEditRegistration"
+            :disabled="editModal.saving"
+            class="px-5 py-2 rounded-xl text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition"
+            style="background-color: rgb(254,80,103);">
+            {{ editModal.saving ? 'Saving…' : 'Save Changes' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Proof of Payment Modal -->
@@ -271,6 +450,37 @@ export default {
         regId: null,
         reg: {},
       },
+      editModal: {
+        show: false,
+        regId: null,
+        participantName: '',
+        email: '',
+        error: '',
+        saving: false,
+      },
+      editForm: {
+        title: '',
+        firstname: '',
+        lastname: '',
+        phone: '',
+        country_id: '',
+        address: '',
+        designation: '',
+        designation_other: '',
+        organisation: '',
+        participation_role: '',
+        photo: null,
+        photoPreview: '',
+      },
+      editCountries: [],
+      participationOptions: [
+        { value: 'member_state', label: 'ECSACONM Member (no arrears)', fee: 'Early Bird: USD 200 | Late Bird: USD 250' },
+        { value: 'participant', label: 'Non-ECSACONM Member from the Region', fee: 'Early Bird: USD 300 | Late Bird: USD 400' },
+        { value: 'other_africa', label: 'Non-ECSACONM Member from Outside the Region', fee: 'Early Bird: USD 400 | Late Bird: USD 600' },
+        { value: 'student', label: 'Student', fee: 'Contact the secretariat for student rates.' },
+        { value: 'exhibitor', label: 'Sponsor / Exhibitor', fee: 'Contact the secretariat for sponsorship packages.' },
+        { value: 'secretariat', label: 'Secretariat / Staff', fee: 'Internal registration — no registration fee.' },
+      ],
     }
   },
   setup() {
@@ -428,6 +638,118 @@ export default {
       }
       return map[role] || role
     },
+    async loadEditCountries() {
+      if (this.editCountries.length > 0) return
+      try {
+        const api = axios.create({ baseURL: API_URL })
+        const token = this.authStore.accessToken
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.get('/countries/?skip=0&limit=500')
+        this.editCountries = res.data?.data || res.data || []
+      } catch (e) {
+        console.error('Error loading countries:', e)
+      }
+    },
+    openEditModal(reg) {
+      const name = [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ')
+      this.editModal = {
+        show: true,
+        regId: reg.id || reg.registration_id,
+        participantName: name,
+        email: reg.email || '',
+        error: '',
+        saving: false,
+      }
+      this.editForm = {
+        title: reg.title || '',
+        firstname: reg.firstname || '',
+        lastname: reg.lastname || '',
+        phone: reg.phone || '',
+        country_id: reg.country_id || '',
+        address: reg.address || '',
+        designation: reg.designation || '',
+        designation_other: '',
+        organisation: reg.organisation || '',
+        participation_role: reg.participation_role
+          ? reg.participation_role.toLowerCase().replace(/\s+/g, '_')
+          : '',
+        photo: null,
+        photoPreview: '',
+      }
+      this.loadEditCountries()
+    },
+    closeEditModal() {
+      this.editModal.show = false
+    },
+    onEditPhotoChange(e) {
+      const file = e.target.files && e.target.files[0]
+      if (!file) return
+      this.editForm.photo = file
+      const reader = new FileReader()
+      reader.onload = (evt) => { this.editForm.photoPreview = evt.target.result }
+      reader.readAsDataURL(file)
+    },
+    async saveEditRegistration() {
+      this.editModal.error = ''
+      if (!this.editForm.firstname.trim()) {
+        this.editModal.error = 'First name is required.'
+        return
+      }
+      if (!this.editForm.lastname.trim()) {
+        this.editModal.error = 'Last name is required.'
+        return
+      }
+      this.editModal.saving = true
+      try {
+        const resolvedDesignation = this.editForm.designation === 'Other'
+          ? this.editForm.designation_other
+          : this.editForm.designation
+
+        const payload = {
+          title: this.editForm.title || null,
+          firstname: this.editForm.firstname,
+          lastname: this.editForm.lastname,
+          phone: this.editForm.phone || null,
+          country_id: this.editForm.country_id ? parseInt(this.editForm.country_id) : null,
+          address: this.editForm.address || null,
+          designation: resolvedDesignation || null,
+          organisation: this.editForm.organisation || null,
+          participation_role: this.editForm.participation_role || null,
+        }
+
+        await updateItem('registrations', this.editModal.regId, payload)
+
+        // Upload photo if provided
+        if (this.editForm.photo) {
+          try {
+            const api = axios.create({ baseURL: API_URL })
+            const token = this.authStore.accessToken
+            if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+            const photoForm = new FormData()
+            photoForm.append('file', this.editForm.photo)
+            // Get user_id from the registration row
+            const reg = this.registrations.find(r => (r.id || r.registration_id) === this.editModal.regId)
+            if (reg && reg.user_id) {
+              await api.post(`/users/${reg.user_id}/photo`, photoForm, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              })
+            }
+          } catch (photoErr) {
+            console.warn('Photo upload failed (non-critical):', photoErr)
+          }
+        }
+
+        this.showToast('Registration updated successfully!', 'success')
+        this.closeEditModal()
+        await this.loadRegistrations()
+      } catch (e) {
+        this.editModal.error = e.response?.data?.detail
+          || (Array.isArray(e.response?.data) ? e.response.data.map(x => x.msg).join(', ') : null)
+          || 'Failed to save changes. Please try again.'
+      } finally {
+        this.editModal.saving = false
+      }
+    },
   },
 }
 </script>
@@ -440,4 +762,28 @@ export default {
 .pop-leave-active { transition: opacity 0.08s ease, transform 0.08s ease; }
 .pop-enter-from  { opacity: 0; transform: scale(0.95) translateY(-4px); }
 .pop-leave-to    { opacity: 0; transform: scale(0.95) translateY(-4px); }
+
+.edit-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.3rem;
+}
+.edit-input {
+  display: block;
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.875rem;
+  color: #1f2937;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.edit-input:focus {
+  border-color: rgb(254,80,103);
+  box-shadow: 0 0 0 3px rgba(254,80,103,0.1);
+}
 </style>

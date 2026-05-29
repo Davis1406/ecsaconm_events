@@ -1,8 +1,9 @@
 import io
 import math
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from openpyxl import Workbook
@@ -11,11 +12,23 @@ from openpyxl.utils import get_column_letter
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import Registration, User, Event
+from models.models import Registration, User, Event, UserProfile, ParticipationRole
 
 router = APIRouter()
 
 user_dependency = Annotated[dict, Depends(get_current_user)]
+
+
+class RegistrationUpdateSchema(BaseModel):
+    title: Optional[str] = None
+    firstname: Optional[str] = None
+    lastname: Optional[str] = None
+    phone: Optional[str] = None
+    country_id: Optional[int] = None
+    address: Optional[str] = None
+    designation: Optional[str] = None
+    organisation: Optional[str] = None
+    participation_role: Optional[str] = None
 
 
 def get_auth_dep(db: Session = Depends(get_db)) -> Auth:
@@ -250,3 +263,90 @@ async def export_registrations(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/{registration_id}")
+async def get_registration(
+    registration_id: int,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
+
+    reg = (
+        db.query(Registration)
+        .options(
+            joinedload(Registration.user).joinedload(User.user_profile),
+            joinedload(Registration.events),
+        )
+        .filter(Registration.id == registration_id, Registration.deleted_at == None)
+        .first()
+    )
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found")
+    return _serialize_reg(reg)
+
+
+@router.put("/{registration_id}")
+async def update_registration(
+    registration_id: int,
+    data: RegistrationUpdateSchema,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
+
+    reg = (
+        db.query(Registration)
+        .options(
+            joinedload(Registration.user).joinedload(User.user_profile),
+        )
+        .filter(Registration.id == registration_id, Registration.deleted_at == None)
+        .first()
+    )
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found")
+
+    user = reg.user
+
+    # Update user core fields
+    if data.firstname is not None:
+        user.firstname = data.firstname
+    if data.lastname is not None:
+        user.lastname = data.lastname
+    if data.phone is not None:
+        user.phone = data.phone
+
+    # Update user profile fields
+    profile = user.user_profile[0] if user.user_profile else None
+    if profile is None:
+        profile = UserProfile(user_id=user.id)
+        db.add(profile)
+
+    if data.title is not None:
+        profile.title = data.title
+    if data.country_id is not None:
+        profile.country_id = data.country_id
+    if data.address is not None:
+        profile.address = data.address
+    if data.designation is not None:
+        profile.designation = data.designation
+    if data.organisation is not None:
+        profile.organisation = data.organisation
+
+    # Update participation role on registration
+    if data.participation_role is not None:
+        try:
+            reg.participation_role = ParticipationRole(data.participation_role)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid participation_role: {data.participation_role}",
+            )
+
+    db.commit()
+    db.refresh(reg)
+
+    return _serialize_reg(reg)

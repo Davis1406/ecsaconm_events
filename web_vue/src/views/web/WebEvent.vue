@@ -41,6 +41,60 @@
       </div>
     </section>
 
+    <!-- ─── My Registration Summary Strip ───────────────────────────────────── -->
+    <div v-if="!isLoading && userAccess !== 'none'"
+      class="max-w-5xl mx-auto px-6 pt-6">
+      <div class="rounded-2xl border-2 flex flex-wrap items-center gap-4 px-5 py-4"
+        :style="userAccess === 'paid'
+          ? 'border-color: rgba(34,197,94,0.4); background-color: rgba(34,197,94,0.05);'
+          : 'border-color: rgba(254,80,103,0.3); background-color: rgba(254,80,103,0.04);'">
+        <!-- Initials avatar -->
+        <div class="h-11 w-11 rounded-full flex items-center justify-center font-bold text-white text-base flex-shrink-0"
+          style="background-color: rgb(254,80,103);">
+          {{ registrationInitials }}
+        </div>
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-bold text-gray-800">
+            {{ event.user_title ? event.user_title + ' ' : '' }}{{ event.user_firstname || '' }} {{ event.user_lastname || '' }}
+          </p>
+          <p class="text-xs text-gray-500 mt-0.5">
+            {{ event.user_email || '' }}
+          </p>
+        </div>
+        <!-- Category badge -->
+        <span v-if="event.user_participation_role"
+          class="inline-block px-3 py-1 rounded-full text-xs font-semibold text-white flex-shrink-0"
+          style="background-color: rgb(254,80,103);">
+          {{ formatRole(event.user_participation_role) }}
+        </span>
+        <!-- Payment status chip -->
+        <span v-if="userAccess === 'paid'"
+          class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 flex-shrink-0">
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+          </svg>
+          Paid
+        </span>
+        <span v-else
+          class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 flex-shrink-0">
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+          </svg>
+          Pending Payment
+        </span>
+        <!-- Link to registration summary -->
+        <router-link :to="{ name: 'MyDashboard' }"
+          class="inline-flex items-center gap-1 text-xs font-semibold hover:underline flex-shrink-0 transition"
+          style="color: rgb(254,80,103);">
+          My Registration
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </router-link>
+      </div>
+    </div>
+
     <!-- ─── Loading ──────────────────────────────────────────────────────────── -->
     <div v-if="isLoading" class="flex justify-center py-20">
       <svg class="animate-spin h-10 w-10" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
@@ -271,8 +325,8 @@
           <h2 class="text-xl font-bold" style="color: rgb(254,80,103);">Downloads</h2>
         </div>
         <div class="px-6 py-5">
-          <!-- Paid — show files -->
-          <div v-if="userAccess === 'paid' && documents.length">
+          <!-- Registered (paid or unpaid) — show files -->
+          <div v-if="(userAccess === 'paid' || userAccess === 'unpaid') && documents.length">
             <ul class="space-y-2">
               <li v-for="file in documents" :key="file.id"
                 class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition">
@@ -290,31 +344,10 @@
               </li>
             </ul>
           </div>
-          <!-- Paid but no files -->
-          <div v-else-if="userAccess === 'paid' && !documents.length"
+          <!-- Registered but no files yet -->
+          <div v-else-if="(userAccess === 'paid' || userAccess === 'unpaid') && !documents.length"
             class="text-sm text-gray-400 italic">No downloads available yet.</div>
-          <!-- Logged in but unpaid -->
-          <div v-else-if="userAccess === 'unpaid'"
-            class="flex items-start gap-4 rounded-xl p-4 border-2"
-            style="border-color: rgba(254,80,103,0.4); background-color: rgba(254,80,103,0.05);">
-            <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-              style="background-color: rgb(254,80,103);">
-              <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <div>
-              <p class="font-semibold text-gray-800 text-sm">Payment Required</p>
-              <p class="text-gray-500 text-sm mt-0.5">Documents are available to registered participants who have completed payment.</p>
-              <router-link :to="{ name: 'EventRegister', params: { id: event.id } }"
-                class="inline-block mt-3 px-4 py-2 rounded-full text-xs font-bold text-white transition hover:opacity-90"
-                style="background-color: rgb(254,80,103);">
-                Register &amp; Pay →
-              </router-link>
-            </div>
-          </div>
-          <!-- Not logged in -->
+          <!-- Not registered / not logged in -->
           <div v-else class="flex items-start gap-4 rounded-xl p-4 border-2 border-gray-200 bg-gray-50">
             <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 bg-gray-300">
               <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -323,12 +356,14 @@
               </svg>
             </div>
             <div>
-              <p class="font-semibold text-gray-700 text-sm">Members Only</p>
+              <p class="font-semibold text-gray-700 text-sm">Registered Participants Only</p>
               <p class="text-gray-500 text-sm mt-0.5">
-                Downloads are available to paid participants only.
+                Downloads are available to registered participants.
                 Please <router-link :to="{ name: 'Login' }" class="underline font-semibold"
                   style="color: rgb(254,80,103);">log in</router-link>
-                and ensure your registration is complete.
+                or <router-link :to="{ name: 'EventRegister', params: { id: event.id } }"
+                  class="underline font-semibold" style="color: rgb(254,80,103);">register</router-link>
+                to access downloads.
               </p>
             </div>
           </div>
@@ -348,8 +383,8 @@
           <h2 class="text-xl font-bold" style="color: rgb(220,50,75);">Useful Links</h2>
         </div>
         <div class="px-6 py-5">
-          <!-- Paid — show links -->
-          <div v-if="userAccess === 'paid' && links.length">
+          <!-- Registered (paid or unpaid) — show links -->
+          <div v-if="(userAccess === 'paid' || userAccess === 'unpaid') && links.length">
             <ul class="space-y-2">
               <li v-for="link in links" :key="link.id"
                 class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition">
@@ -367,31 +402,10 @@
               </li>
             </ul>
           </div>
-          <!-- Paid but no links -->
-          <div v-else-if="userAccess === 'paid' && !links.length"
+          <!-- Registered but no links yet -->
+          <div v-else-if="(userAccess === 'paid' || userAccess === 'unpaid') && !links.length"
             class="text-sm text-gray-400 italic">No links available yet.</div>
-          <!-- Logged in but unpaid -->
-          <div v-else-if="userAccess === 'unpaid'"
-            class="flex items-start gap-4 rounded-xl p-4 border-2"
-            style="border-color: rgba(220,50,75,0.4); background-color: rgba(220,50,75,0.05);">
-            <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-              style="background-color: rgb(220,50,75);">
-              <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <div>
-              <p class="font-semibold text-gray-800 text-sm">Payment Required</p>
-              <p class="text-gray-500 text-sm mt-0.5">Resource links are available to registered participants who have completed payment.</p>
-              <router-link :to="{ name: 'EventRegister', params: { id: event.id } }"
-                class="inline-block mt-3 px-4 py-2 rounded-full text-xs font-bold text-white transition hover:opacity-90"
-                style="background-color: rgb(220,50,75);">
-                Register &amp; Pay →
-              </router-link>
-            </div>
-          </div>
-          <!-- Not logged in -->
+          <!-- Not registered / not logged in -->
           <div v-else class="flex items-start gap-4 rounded-xl p-4 border-2 border-gray-200 bg-gray-50">
             <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 bg-gray-300">
               <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -400,12 +414,14 @@
               </svg>
             </div>
             <div>
-              <p class="font-semibold text-gray-700 text-sm">Members Only</p>
+              <p class="font-semibold text-gray-700 text-sm">Registered Participants Only</p>
               <p class="text-gray-500 text-sm mt-0.5">
-                Useful links are available to paid participants only.
+                Useful links are available to registered participants.
                 Please <router-link :to="{ name: 'Login' }" class="underline font-semibold"
                   style="color: rgb(254,80,103);">log in</router-link>
-                and ensure your registration is complete.
+                or <router-link :to="{ name: 'EventRegister', params: { id: event.id } }"
+                  class="underline font-semibold" style="color: rgb(254,80,103);">register</router-link>
+                to access links.
               </p>
             </div>
           </div>
@@ -467,6 +483,13 @@ export default {
       if (idx === -1) return ''
       return raw.slice(idx + 3).trim().replace(/\n/g, ' ')
     },
+    registrationInitials() {
+      const first = (this.event.user_firstname || '').trim()
+      const last = (this.event.user_lastname || '').trim()
+      if (first && last) return (first[0] + last[0]).toUpperCase()
+      if (first) return first[0].toUpperCase()
+      return '?'
+    },
     logisticsSections() {
       const raw = this.event.logistics_info || ''
       if (!raw) return []
@@ -510,6 +533,25 @@ export default {
     },
     toggleLogistics(i) {
       this.openLogistics = this.openLogistics === i ? -1 : i
+    },
+    formatRole(role) {
+      const map = {
+        member_state: 'Member State',
+        participant: 'Participant',
+        other_africa: 'Other Africa',
+        world: 'International',
+        student: 'Student',
+        exhibitor: 'Exhibitor/Sponsor',
+        secretariat: 'Secretariat',
+        delegate: 'Delegate',
+        presenter: 'Presenter',
+        speaker: 'Speaker',
+        sponsor: 'Sponsor',
+        moderator: 'Moderator',
+        moh: 'Ministry of Health',
+        member: 'Member',
+      }
+      return map[role] || role
     }
   }
 }

@@ -114,8 +114,55 @@
             </div>
           </div>
 
-          <!-- Step 1: Contact -->
+          <!-- Step 1: Photo -->
           <div v-else-if="currentStep === 1" key="step1" class="p-6 sm:p-8 space-y-5">
+            <h2 class="text-lg font-bold text-gray-800 mb-1">Passport Photo</h2>
+            <p class="text-sm text-gray-500">A clear passport-style photo will be used on your conference badge.</p>
+
+            <div class="flex flex-col items-center gap-5">
+              <!-- Preview or placeholder -->
+              <div class="relative">
+                <div v-if="form.photoPreview"
+                  class="h-36 w-36 rounded-full overflow-hidden border-4 flex-shrink-0"
+                  style="border-color: rgb(254,80,103);">
+                  <img :src="form.photoPreview" alt="Photo preview" class="h-full w-full object-cover" />
+                </div>
+                <div v-else
+                  class="h-36 w-36 rounded-full flex items-center justify-center border-4 border-dashed flex-shrink-0"
+                  style="border-color: rgba(254,80,103,0.4); background-color: rgba(254,80,103,0.04);">
+                  <svg class="w-12 h-12" style="color: rgba(254,80,103,0.4);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Upload control -->
+              <div class="w-full max-w-sm">
+                <label class="block cursor-pointer">
+                  <div class="flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-dashed transition text-sm font-semibold"
+                    style="border-color: rgba(254,80,103,0.5); color: rgb(254,80,103); background-color: rgba(254,80,103,0.04);">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {{ form.photo ? 'Change Photo' : 'Upload Photo' }}
+                  </div>
+                  <input type="file" accept="image/*" class="hidden" @change="onPhotoChange" />
+                </label>
+                <p v-if="form.photo" class="text-xs text-gray-400 mt-2 text-center">{{ form.photo.name }}</p>
+                <p class="text-xs text-gray-400 mt-2 text-center">Photo is optional. You can skip this step.</p>
+              </div>
+            </div>
+
+            <div class="flex justify-between pt-2">
+              <button @click="prevStep" class="btn-secondary">&larr; Back</button>
+              <button @click="nextStep" class="btn-primary">Next &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Step 2: Contact -->
+          <div v-else-if="currentStep === 2" key="step2c" class="p-6 sm:p-8 space-y-5">
             <h2 class="text-lg font-bold text-gray-800 mb-1">Contact Information</h2>
             <div class="grid sm:grid-cols-2 gap-4">
               <div class="sm:col-span-2">
@@ -146,8 +193,8 @@
             </div>
           </div>
 
-          <!-- Step 2: Professional -->
-          <div v-else-if="currentStep === 2" key="step2" class="p-6 sm:p-8 space-y-5">
+          <!-- Step 3: Professional -->
+          <div v-else-if="currentStep === 3" key="step3p" class="p-6 sm:p-8 space-y-5">
             <h2 class="text-lg font-bold text-gray-800 mb-1">Professional Details</h2>
             <div class="grid sm:grid-cols-2 gap-4">
               <div class="sm:col-span-2">
@@ -206,8 +253,8 @@
             </div>
           </div>
 
-          <!-- Step 3: Confirm -->
-          <div v-else-if="currentStep === 3" key="step3" class="p-6 sm:p-8 space-y-5">
+          <!-- Step 4: Confirm -->
+          <div v-else-if="currentStep === 4" key="step4" class="p-6 sm:p-8 space-y-5">
             <h2 class="text-lg font-bold text-gray-800 mb-1">Review &amp; Submit</h2>
             <div class="rounded-xl bg-gray-50 divide-y divide-gray-100 overflow-hidden text-sm">
               <div class="flex gap-3 px-5 py-3">
@@ -249,6 +296,14 @@
               <div class="flex gap-3 px-5 py-3">
                 <span class="text-xs text-gray-400 uppercase tracking-wide w-40 pt-0.5 flex-shrink-0">Category</span>
                 <span class="font-medium text-gray-800">{{ participationLabel }}</span>
+              </div>
+              <div class="flex gap-3 items-center px-5 py-3">
+                <span class="text-xs text-gray-400 uppercase tracking-wide w-40 flex-shrink-0">Photo</span>
+                <span v-if="form.photoPreview">
+                  <img :src="form.photoPreview" alt="Badge photo" class="h-12 w-12 rounded-full object-cover border-2"
+                    style="border-color: rgb(254,80,103);" />
+                </span>
+                <span v-else class="font-medium text-gray-400 italic text-sm">No photo uploaded</span>
               </div>
             </div>
 
@@ -314,8 +369,10 @@ export default {
         designation_other: '',
         organisation: '',
         participation_role: '',
+        photo: null,
+        photoPreview: '',
       },
-      stepLabels: ['Personal', 'Contact', 'Professional', 'Confirm'],
+      stepLabels: ['Personal', 'Photo', 'Contact', 'Professional', 'Confirm'],
       participationOptions: [
         {
           value: 'member_state',
@@ -400,7 +457,7 @@ export default {
     nextStep() {
       this.formError = ''
       if (!this.validateStep()) return
-      if (this.currentStep < 3) this.currentStep++
+      if (this.currentStep < 4) this.currentStep++
     },
     prevStep() {
       this.formError = ''
@@ -412,12 +469,13 @@ export default {
         if (!this.form.lastname.trim()) { this.formError = 'Last name is required.'; return false }
         if (!this.form.certificate_name.trim()) { this.formError = 'Please enter the name for your certificate.'; return false }
       }
-      if (this.currentStep === 1) {
+      // Step 1: Photo — optional, always passes
+      if (this.currentStep === 2) {
         if (!this.form.email.trim()) { this.formError = 'Email address is required.'; return false }
         if (!this.form.phone.trim()) { this.formError = 'Phone number is required.'; return false }
         if (!this.form.country_id) { this.formError = 'Please select a country.'; return false }
       }
-      if (this.currentStep === 2) {
+      if (this.currentStep === 3) {
         if (!this.form.designation) { this.formError = 'Please select a designation.'; return false }
         if (this.form.designation === 'Other' && !this.form.designation_other.trim()) {
           this.formError = 'Please specify your designation.'; return false
@@ -426,6 +484,14 @@ export default {
         if (!this.form.participation_role) { this.formError = 'Please select a participation category.'; return false }
       }
       return true
+    },
+    onPhotoChange(e) {
+      const file = e.target.files && e.target.files[0]
+      if (!file) return
+      this.form.photo = file
+      const reader = new FileReader()
+      reader.onload = (evt) => { this.form.photoPreview = evt.target.result }
+      reader.readAsDataURL(file)
     },
     async submitForm(mode) {
       this.formError = ''
@@ -463,6 +529,21 @@ export default {
           participation_role: this.form.participation_role,
         }
         await createItem(`events/registration/${userId}`, eventRegData)
+
+        // Step 4: Upload passport photo (optional)
+        if (this.form.photo) {
+          try {
+            const api = axios.create({ baseURL: import.meta.env.VITE_API_URL })
+            const photoForm = new FormData()
+            photoForm.append('file', this.form.photo)
+            await api.post(`/users/${userId}/photo`, photoForm, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            })
+          } catch (photoErr) {
+            // Non-critical: log but don't block registration success
+            console.warn('Photo upload failed (non-critical):', photoErr)
+          }
+        }
 
         if (mode === 'now') {
           this.submitted = true
