@@ -40,14 +40,14 @@
           <div>
             <h3 class="font-bold text-sm uppercase tracking-wide mb-2" style="color: rgb(254,80,103);">Address</h3>
             <p class="text-gray-600 text-sm leading-relaxed">
-              P.O. Box 30893<br />
-              Lilongwe 3<br />
-              Malawi
+              Plot No. 157, Oloirien Njiro Road<br />
+              P.O. Box 1009<br />
+              Arusha, Tanzania
             </p>
           </div>
         </div>
 
-        <!-- Phone -->
+        <!-- Phone / WhatsApp -->
         <div class="bg-white rounded-2xl shadow-md p-6 flex flex-col gap-4 hover:shadow-lg transition-shadow">
           <div class="h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0"
             style="background-color: rgb(220,50,75);">
@@ -57,9 +57,11 @@
             </svg>
           </div>
           <div>
-            <h3 class="font-bold text-sm uppercase tracking-wide mb-2" style="color: rgb(220,50,75);">Phone</h3>
-            <a href="tel:+2651771541" class="text-gray-600 text-sm hover:underline block">+265 1 771 541</a>
-            <p class="text-gray-400 text-xs mt-2">Mon – Fri · 08:00 – 17:00 (CAT)</p>
+            <h3 class="font-bold text-sm uppercase tracking-wide mb-2" style="color: rgb(220,50,75);">Phone / WhatsApp</h3>
+            <a href="tel:+255798288598" class="text-gray-600 text-sm hover:underline block">+255 798 288 598</a>
+            <a href="tel:+255757618084" class="text-gray-600 text-sm hover:underline block mt-1">+255 757 618 084</a>
+            <a href="tel:+255767963049" class="text-gray-600 text-sm hover:underline block mt-1">+255 767 963 049</a>
+            <p class="text-gray-400 text-xs mt-2">Mon – Fri · 08:00 – 17:00 (EAT)</p>
           </div>
         </div>
 
@@ -76,6 +78,9 @@
             <h3 class="font-bold text-sm uppercase tracking-wide mb-2" style="color: rgb(254,80,103);">Email</h3>
             <a href="mailto:info@ecsaconm.org" class="text-gray-600 text-sm hover:underline break-all block">
               info@ecsaconm.org
+            </a>
+            <a href="mailto:conference@ecsaconm.org" class="text-gray-600 text-sm hover:underline break-all block mt-1">
+              conference@ecsaconm.org
             </a>
           </div>
         </div>
@@ -124,7 +129,7 @@
             </div>
             <div class="flex items-center gap-2">
               <span class="h-1.5 w-1.5 rounded-full flex-shrink-0" style="background-color: rgb(254,80,103);"></span>
-              Secretariat: Lilongwe, Malawi
+              Secretariat: Arusha, Tanzania
             </div>
           </div>
         </div>
