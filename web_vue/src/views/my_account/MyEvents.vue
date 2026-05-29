@@ -346,6 +346,10 @@
                 foreground="#000000"
                 background="#ffffff" />
               <p class="text-xs text-gray-400">ID #{{ badgeParticipant.registration_id }}</p>
+              <p v-if="badgeParticipant.eventTheme" class="text-xs text-gray-500 text-center px-6 mt-0.5 leading-snug">
+                <span class="font-semibold not-italic">Theme:</span>
+                <span class="italic"> {{ badgeParticipant.eventTheme }}</span>
+              </p>
             </div>
 
             <!-- Website -->
@@ -547,6 +551,7 @@ export default {
         country: u.country || '',
         participation_role: item.registration_details?.participation_role || 'participant',
         registration_id: item.registration_details?.registration_id,
+        eventTheme: item.event?.theme || '',
       }
       // Try to enrich with profile data
       try {

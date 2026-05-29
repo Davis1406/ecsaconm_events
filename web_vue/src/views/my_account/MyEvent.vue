@@ -486,6 +486,10 @@
                 foreground="#000000"
                 background="#ffffff" />
               <p class="text-xs text-gray-400">ID #{{ badgeParticipant.registration_id }}</p>
+              <p v-if="badgeParticipant.eventTheme" class="text-xs text-gray-500 text-center px-6 mt-0.5 leading-snug">
+                <span class="font-semibold not-italic">Theme:</span>
+                <span class="italic"> {{ badgeParticipant.eventTheme }}</span>
+              </p>
             </div>
             <div class="text-center pb-3">
               <p class="text-xs text-gray-400">www.ecsaconm.org</p>
@@ -700,6 +704,7 @@ export default {
         participation_role: this.event.user_participation_role || 'participant',
         registration_id: this.registrationId,
         designation: '',
+        eventTheme: this.event.theme || '',
       }
       try {
         const token = this.authStore.accessToken

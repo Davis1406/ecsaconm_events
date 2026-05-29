@@ -62,7 +62,10 @@
             <QRCodeVue :value="qrValue" :size="110" foreground="#000000" background="#ffffff" />
             <p class="text-xs text-gray-400 mt-1">ID #{{ participant.id }}</p>
             <!-- Theme below ID -->
-            <p v-if="eventTheme" class="text-xs text-gray-400 italic text-center px-6 mt-0.5">{{ eventTheme }}</p>
+            <p v-if="eventTheme" class="text-xs text-gray-500 text-center px-6 mt-0.5 leading-snug">
+              <span class="font-semibold not-italic">Theme:</span>
+              <span class="italic"> {{ eventTheme }}</span>
+            </p>
           </div>
 
           <!-- Website -->
