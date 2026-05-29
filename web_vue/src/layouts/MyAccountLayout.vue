@@ -60,8 +60,8 @@
 
         <router-link :to="{ name: 'MyEvents' }"
           class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition"
-          :class="$route.name === 'MyEvents' ? 'text-white' : 'text-gray-600 hover:bg-gray-100'"
-          :style="$route.name === 'MyEvents' ? 'background-color: rgb(254,80,103);' : ''"
+          :class="['MyEvents','MyEvent'].includes($route.name) ? 'text-white' : 'text-gray-600 hover:bg-gray-100'"
+          :style="['MyEvents','MyEvent'].includes($route.name) ? 'background-color: rgb(254,80,103);' : ''"
           @click="sidebarOpen = false">
           <CalendarDaysIcon class="h-5 w-5 flex-shrink-0" />
           <span>My Events</span>
