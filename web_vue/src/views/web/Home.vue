@@ -43,7 +43,7 @@
         <!-- CTA Buttons -->
         <div class="flex flex-wrap justify-center gap-3">
           <router-link v-if="isRegistrationOpen"
-            :to="{ name: 'Register' }"
+            :to="{ name: 'EventRegister', params: { id: featuredEvent.id } }"
             class="inline-block px-8 py-3 rounded-full font-semibold text-sm sm:text-base shadow-lg transition hover:opacity-90 hover:-translate-y-0.5"
             style="background-color: rgb(254,80,103); color: #fff;">
             Register for conference →
