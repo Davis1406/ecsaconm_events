@@ -170,6 +170,7 @@ class LinkSchema(BaseModel):
     event_id: int
     name: str
     link: HttpUrl
+    access_level: str = "public"
 
 
 class AttendanceBase(BaseModel):

@@ -55,12 +55,8 @@
         </div>
         <!-- Info -->
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-bold text-gray-800">
-            {{ event.user_title ? event.user_title + ' ' : '' }}{{ event.user_firstname || '' }} {{ event.user_lastname || '' }}
-          </p>
-          <p class="text-xs text-gray-500 mt-0.5">
-            {{ event.user_email || '' }}
-          </p>
+          <p class="text-sm font-bold text-gray-800">{{ registrationName || 'My Registration' }}</p>
+          <p class="text-xs text-gray-500 mt-0.5">{{ currentUser?.email || '' }}</p>
         </div>
         <!-- Category badge -->
         <span v-if="event.user_participation_role"
@@ -325,10 +321,10 @@
           <h2 class="text-xl font-bold" style="color: rgb(254,80,103);">Downloads</h2>
         </div>
         <div class="px-6 py-5">
-          <!-- Registered (paid or unpaid) — show files -->
-          <div v-if="(userAccess === 'paid' || userAccess === 'unpaid') && documents.length">
+          <!-- Show visible docs (public or registered-only filtered) -->
+          <div v-if="visibleDocuments.length">
             <ul class="space-y-2">
-              <li v-for="file in documents" :key="file.id"
+              <li v-for="file in visibleDocuments" :key="file.id"
                 class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition">
                 <div class="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
                   style="background-color: rgb(254,80,103);">
@@ -344,8 +340,8 @@
               </li>
             </ul>
           </div>
-          <!-- Registered but no files yet -->
-          <div v-else-if="(userAccess === 'paid' || userAccess === 'unpaid') && !documents.length"
+          <!-- No visible docs yet -->
+          <div v-else-if="userAccess !== 'none'"
             class="text-sm text-gray-400 italic">No downloads available yet.</div>
           <!-- Not registered / not logged in -->
           <div v-else class="flex items-start gap-4 rounded-xl p-4 border-2 border-gray-200 bg-gray-50">
@@ -383,10 +379,10 @@
           <h2 class="text-xl font-bold" style="color: rgb(220,50,75);">Useful Links</h2>
         </div>
         <div class="px-6 py-5">
-          <!-- Registered (paid or unpaid) — show links -->
-          <div v-if="(userAccess === 'paid' || userAccess === 'unpaid') && links.length">
+          <!-- Show visible links -->
+          <div v-if="visibleLinks.length">
             <ul class="space-y-2">
-              <li v-for="link in links" :key="link.id"
+              <li v-for="link in visibleLinks" :key="link.id"
                 class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition">
                 <div class="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
                   style="background-color: rgb(220,50,75);">
@@ -402,8 +398,8 @@
               </li>
             </ul>
           </div>
-          <!-- Registered but no links yet -->
-          <div v-else-if="(userAccess === 'paid' || userAccess === 'unpaid') && !links.length"
+          <!-- No visible links yet -->
+          <div v-else-if="userAccess !== 'none'"
             class="text-sm text-gray-400 italic">No links available yet.</div>
           <!-- Not registered / not logged in -->
           <div v-else class="flex items-start gap-4 rounded-xl p-4 border-2 border-gray-200 bg-gray-50">
@@ -434,9 +430,14 @@
 
 <script>
 import { fetchItem } from '@/services/apiService'
+import { useAuthStore } from '@/store/authStore'
 
 export default {
   name: 'WebEventView',
+  setup() {
+    const authStore = useAuthStore()
+    return { currentUser: authStore.loginUser }
+  },
   data() {
     return {
       isLoading: true,
@@ -484,11 +485,32 @@ export default {
       return raw.slice(idx + 3).trim().replace(/\n/g, ' ')
     },
     registrationInitials() {
-      const first = (this.event.user_firstname || '').trim()
-      const last = (this.event.user_lastname || '').trim()
+      const first = (this.currentUser?.firstname || '').trim()
+      const last = (this.currentUser?.lastname || '').trim()
       if (first && last) return (first[0] + last[0]).toUpperCase()
       if (first) return first[0].toUpperCase()
       return '?'
+    },
+    registrationName() {
+      return [this.currentUser?.firstname, this.currentUser?.lastname].filter(Boolean).join(' ') || ''
+    },
+    visibleDocuments() {
+      return this.documents.filter(d => {
+        const level = d.access_level || 'public'
+        if (level === 'admin') return false
+        if (level === 'public') return true
+        if (level === 'registered') return this.userAccess !== 'none'
+        return true
+      })
+    },
+    visibleLinks() {
+      return this.links.filter(l => {
+        const level = l.access_level || 'public'
+        if (level === 'admin') return false
+        if (level === 'public') return true
+        if (level === 'registered') return this.userAccess !== 'none'
+        return true
+      })
     },
     logisticsSections() {
       const raw = this.event.logistics_info || ''

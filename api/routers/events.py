@@ -583,6 +583,7 @@ async def get_event(
                     "id": l.id,
                     "name": l.name,
                     "link": l.link,
+                    "access_level": l.access_level or "public",
                 }
                 for l in links
             ],
@@ -1138,6 +1139,7 @@ async def add_link(
         event_id=link_schema.event_id,
         name=link_schema.name,
         link=str(link_schema.link),
+        access_level=link_schema.access_level or "public",
     )
 
     db.add(create_event_link_model)

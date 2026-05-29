@@ -372,6 +372,15 @@
             <input v-model="newLink.link" type="url" placeholder="https://…"
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
           </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Access Level</label>
+            <select v-model="newLink.access_level"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none bg-white">
+              <option value="public">Public</option>
+              <option value="registered">Registered Participants</option>
+              <option value="admin">Admin Only</option>
+            </select>
+          </div>
         </div>
 
         <!-- Alerts -->
@@ -738,7 +747,7 @@ export default {
       docError: '',
       // Links
       links: [],
-      newLink: { name: '', link: '' },
+      newLink: { name: '', link: '', access_level: 'public' },
       editingLink: null,
       linkSaving: false,
       linkSuccess: '',
@@ -1003,8 +1012,9 @@ export default {
           event_id: parseInt(this.id),
           name: this.newLink.name,
           link: this.newLink.link,
+          access_level: this.newLink.access_level || 'public',
         });
-        this.newLink = { name: '', link: '' };
+        this.newLink = { name: '', link: '', access_level: 'public' };
         this.linkSuccess = 'Link added.';
         setTimeout(() => { this.linkSuccess = ''; }, 3000);
         await this.getEvent(true);

@@ -638,6 +638,7 @@ class Link(BaseWithSoftDelete):
     )
     link = Column(Text, nullable=False)
     name = Column(Text, nullable=False)
+    access_level = Column(Text, nullable=False, server_default='public')
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
