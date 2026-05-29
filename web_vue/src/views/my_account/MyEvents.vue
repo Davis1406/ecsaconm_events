@@ -76,7 +76,7 @@
               <!-- Actions -->
               <td class="px-5 py-4">
                 <div class="flex flex-wrap gap-2">
-                  <router-link :to="{ name: 'WebEvent', params: { id: item.event.id } }"
+                  <router-link :to="{ name: 'MyEvent', params: { id: item.event.id } }"
                     class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition"
                     style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
                     View Event

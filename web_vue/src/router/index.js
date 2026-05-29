@@ -80,6 +80,7 @@ const routeComponents = {
   // My Account
   MyDashboardView: () => import("@/views/my_account/MyDashboard.vue"),
   MyEventsAccountView: () => import("@/views/my_account/MyEvents.vue"),
+  MyEventView: () => import("@/views/my_account/MyEvent.vue"),
   MyAbstractsAccountView: () => import("@/views/my_account/MyAbstracts.vue"),
   MyAccountProfileView: () => import("@/views/my_account/MyProfile.vue"),
 
@@ -381,6 +382,12 @@ const routes = [
         path: "events",
         name: "MyEvents",
         component: routeComponents.MyEventsAccountView,
+        meta: { requiresAuth: true },
+      },
+      {
+        path: "my-event/:id",
+        name: "MyEvent",
+        component: routeComponents.MyEventView,
         meta: { requiresAuth: true },
       },
       {
