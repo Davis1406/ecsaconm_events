@@ -1722,6 +1722,7 @@ async def download_event_participants(
 
 
 @router.get("/with-registration/{user_id}")
+@router.get("/with-registration/{user_id}/")
 def list_events_with_user_registration(
     user_id: int,
     db: Session = Depends(get_db),

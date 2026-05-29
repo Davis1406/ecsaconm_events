@@ -343,6 +343,7 @@ def export_abstracts(
 
 
 @router.get("/my-submissions")
+@router.get("/my-submissions/")
 def my_submissions(
     current_user: user_dependency,
     db: Session = Depends(get_db),
