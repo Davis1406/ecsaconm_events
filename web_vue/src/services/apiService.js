@@ -67,13 +67,13 @@ const parseJwt = (token) => {
 
 export const fetchData = async (url, nextPage = 0, limit = "", search = "") => {
   const response = await instance.get(
-    `/${url}?skip=${nextPage}&limit=${limit}&search=${search}`
+    `/${url}/?skip=${nextPage}&limit=${limit}&search=${search}`
   );
   return response.data;
 };
 
 export const fetchDataWithParams = async (url, params = {}) => {
-  const response = await instance.get(`/${url}`, { params });
+  const response = await instance.get(`/${url}/`, { params });
   return response.data;
 };
 
