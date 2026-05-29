@@ -233,7 +233,7 @@
         </section>
 
         <!-- ── About This Event ────────────────────────────────────────────── -->
-        <section v-if="event.description" class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <section v-if="event.description && userAccess === 'none'" class="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 flex items-center gap-3 border-b border-gray-100">
             <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
               style="background-color: rgb(254,80,103);">
@@ -250,7 +250,7 @@
         </section>
 
         <!-- ── Organizers ──────────────────────────────────────────────────── -->
-        <section v-if="event.organizers" class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <section v-if="event.organizers && userAccess === 'none'" class="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div class="px-6 py-4 flex items-center gap-3 border-b border-gray-100">
             <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
               style="background-color: rgb(254,80,103);">
@@ -267,7 +267,7 @@
         </section>
 
         <!-- ── Participation Categories & Fees ─────────────────────────────── -->
-        <section v-if="participationCategories.length">
+        <section v-if="participationCategories.length && userAccess === 'none'">
           <div class="px-6 py-4 flex items-center gap-3 rounded-t-2xl"
             style="background-color: rgb(254,80,103);">
             <svg class="w-6 h-6 text-white flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -304,7 +304,7 @@
         </section>
 
         <!-- ── Logistics Accordion ─────────────────────────────────────────── -->
-        <section v-if="logisticsSections.length">
+        <section v-if="logisticsSections.length && userAccess === 'none'">
           <div class="px-6 py-4 flex items-center gap-3 rounded-t-2xl"
             style="background-color: rgb(254,80,103);">
             <svg class="w-6 h-6 text-white flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
