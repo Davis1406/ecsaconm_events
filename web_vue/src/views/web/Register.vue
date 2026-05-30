@@ -21,14 +21,42 @@
           </svg>
         </div>
         <h2 class="text-2xl font-bold text-gray-800 mb-3">Registration Successful!</h2>
-        <p class="text-gray-500 mb-8">
-          You have been registered for <strong>{{ eventName }}</strong>. The secretariat will be in touch with payment details.
+        <p class="text-gray-600 mb-2">
+          You have been registered for <strong>{{ eventName }}</strong>.
         </p>
-        <router-link :to="{ name: 'MyDashboard' }"
-          class="inline-flex items-center px-6 py-3 rounded-full text-white font-semibold transition hover:opacity-90"
-          style="background-color: rgb(254,80,103);">
-          Go to My Account &rarr;
-        </router-link>
+        <p class="text-gray-600 mb-5">
+          Your login credentials have been sent to your email address.
+        </p>
+        <ol class="text-left text-gray-600 text-sm space-y-3 mb-7 bg-gray-50 rounded-xl p-5">
+          <li class="flex items-start gap-3">
+            <span class="flex-shrink-0 h-5 w-5 rounded-full text-white text-xs flex items-center justify-center font-bold mt-0.5"
+              style="background-color: rgb(254,80,103);">1</span>
+            <span>Go to the <a href="https://ecsaconm.org/online-payment/" target="_blank"
+              class="font-semibold underline" style="color: rgb(254,80,103);">payment page</a> to complete your conference fee payment.</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="flex-shrink-0 h-5 w-5 rounded-full text-white text-xs flex items-center justify-center font-bold mt-0.5"
+              style="background-color: rgb(254,80,103);">2</span>
+            <span>Log in to the portal using the credentials sent to your email.</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="flex-shrink-0 h-5 w-5 rounded-full text-white text-xs flex items-center justify-center font-bold mt-0.5"
+              style="background-color: rgb(254,80,103);">3</span>
+            <span>Upload your proof of payment from your account dashboard.</span>
+          </li>
+        </ol>
+        <div class="flex flex-wrap justify-center gap-3">
+          <a href="https://ecsaconm.org/online-payment/" target="_blank"
+            class="inline-flex items-center px-6 py-3 rounded-full text-white font-semibold transition hover:opacity-90"
+            style="background-color: rgb(254,80,103);">
+            Go to Payment Page &rarr;
+          </a>
+          <router-link :to="{ name: 'Login' }"
+            class="inline-flex items-center px-6 py-3 rounded-full font-semibold border-2 transition hover:bg-gray-50"
+            style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+            Login to Portal
+          </router-link>
+        </div>
       </div>
     </div>
 
