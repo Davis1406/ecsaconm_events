@@ -51,18 +51,25 @@ def send_email(recipient_email, subject, email_body):
         return
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_username, smtp_password)
-            message = MIMEMultipart()
-            from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
-            from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
-            message["From"] = f"{from_name} <{from_email}>"
-            message["To"] = recipient_email
-            message["Subject"] = subject
-            message.attach(MIMEText(email_body, "html"))
-            server.sendmail(smtp_username, recipient_email, message.as_string())
-            logger.info("Email sent successfully to %s", recipient_email)
+        from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
+        from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
+        message = MIMEMultipart()
+        message["From"] = f"{from_name} <{from_email}>"
+        message["To"] = recipient_email
+        message["Subject"] = subject
+        message.attach(MIMEText(email_body, "html"))
+
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_username, smtp_password)
+                server.sendmail(smtp_username, recipient_email, message.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_username, smtp_password)
+                server.sendmail(smtp_username, recipient_email, message.as_string())
+
+        logger.info("Email sent successfully to %s", recipient_email)
     except Exception as e:
         logger.error("Failed to send email to %s: %s", recipient_email, str(e))
 
@@ -85,26 +92,31 @@ def send_email_with_attachment(recipient_email, subject, email_body, attachment_
         return
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_username, smtp_password)
+        from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
+        from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
+        msg = MIMEMultipart("mixed")
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = recipient_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(email_body, "html"))
 
-            msg = MIMEMultipart("mixed")
-            from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
-            from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
-            msg["From"] = f"{from_name} <{from_email}>"
-            msg["To"] = recipient_email
-            msg["Subject"] = subject
-            msg.attach(MIMEText(email_body, "html"))
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(attachment_bytes)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{attachment_filename}"')
+        msg.attach(part)
 
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(attachment_bytes)
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", f'attachment; filename="{attachment_filename}"')
-            msg.attach(part)
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_username, smtp_password)
+                server.sendmail(smtp_username, recipient_email, msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_username, smtp_password)
+                server.sendmail(smtp_username, recipient_email, msg.as_string())
 
-            server.sendmail(smtp_username, recipient_email, msg.as_string())
-            logger.info("Email with attachment sent to %s", recipient_email)
+        logger.info("Email with attachment sent to %s", recipient_email)
     except Exception as e:
         logger.error("Failed to send email with attachment to %s: %s", recipient_email, str(e))
         raise
