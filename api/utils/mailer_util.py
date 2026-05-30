@@ -1,10 +1,12 @@
 import os
 import smtplib
 import logging
+import uuid
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from email.utils import formatdate, make_msgid
 from passlib.context import CryptContext
 from starlette.templating import Jinja2Templates
 from dotenv import load_dotenv
@@ -53,11 +55,15 @@ def send_email(recipient_email, subject, email_body):
     try:
         from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
         from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
-        message = MIMEMultipart()
+        message = MIMEMultipart("alternative")
         message["From"] = f"{from_name} <{from_email}>"
         message["To"] = recipient_email
         message["Subject"] = subject
-        message.attach(MIMEText(email_body, "html"))
+        message["Date"] = formatdate(localtime=True)
+        message["Message-ID"] = make_msgid(domain="ecsaconm.org")
+        message["Reply-To"] = f"{from_name} <{from_email}>"
+        message["X-Mailer"] = "ECSACONM Events Portal"
+        message.attach(MIMEText(email_body, "html", "utf-8"))
 
         if smtp_port == 465:
             with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
@@ -98,7 +104,11 @@ def send_email_with_attachment(recipient_email, subject, email_body, attachment_
         msg["From"] = f"{from_name} <{from_email}>"
         msg["To"] = recipient_email
         msg["Subject"] = subject
-        msg.attach(MIMEText(email_body, "html"))
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain="ecsaconm.org")
+        msg["Reply-To"] = f"{from_name} <{from_email}>"
+        msg["X-Mailer"] = "ECSACONM Events Portal"
+        msg.attach(MIMEText(email_body, "html", "utf-8"))
 
         part = MIMEBase("application", "octet-stream")
         part.set_payload(attachment_bytes)
