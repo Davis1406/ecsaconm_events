@@ -71,14 +71,6 @@
             </button>
           </form>
 
-          <!-- Register link -->
-          <p class="text-center text-sm text-gray-500 mt-6">
-            New to the portal?
-            <router-link :to="{ name: 'Register' }" class="font-semibold hover:underline"
-              style="color: rgb(254,80,103);">
-              Create an account
-            </router-link>
-          </p>
         </div>
       </div>
 
