@@ -52,11 +52,18 @@ async def register(
     )
 
     if existing_user:
-        # Still send a reminder email with login link (no password resent for security)
+        # Generate a fresh set-password token for the existing user
+        existing_token = str(uuid.uuid4())
+        db.add(PasswordReset(
+            user_id=existing_user.id,
+            reset_token=existing_token,
+            expires_at=datetime.utcnow() + timedelta(hours=48),
+        ))
+        db.commit()
         mailer_util.new_account_email(
             existing_user.email,
             existing_user.firstname,
-            None,
+            existing_token,
             user_schema.event_name,
             background_tasks,
         )
