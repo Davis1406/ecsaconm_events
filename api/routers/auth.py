@@ -70,10 +70,6 @@ async def register(
     password = auth_dependencies.generate_random_password()
     hashed_password = auth_dependencies.hash_password(password)
 
-    mailer_util.new_account_email(
-        user_schema.email, user_schema.firstname, password, user_schema.event_name, background_tasks
-    )
-
     create_user_model = User(
         firstname=user_schema.firstname,
         lastname=user_schema.lastname,
@@ -88,6 +84,22 @@ async def register(
 
     db.add(UserRole(user_id=create_user_model.id, role_id=role.id))
     db.commit()
+
+    # Generate a set-password token and send welcome email with link (no plain-text password)
+    set_password_token = str(uuid.uuid4())
+    db.add(PasswordReset(
+        user_id=create_user_model.id,
+        reset_token=set_password_token,
+        expires_at=datetime.utcnow() + timedelta(hours=48),
+    ))
+    db.commit()
+    mailer_util.new_account_email(
+        user_schema.email,
+        user_schema.firstname,
+        set_password_token,
+        user_schema.event_name,
+        background_tasks,
+    )
 
     verification_token = str(uuid.uuid4())
     expires_at = datetime.utcnow() + timedelta(hours=1)
