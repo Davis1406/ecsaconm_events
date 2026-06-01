@@ -1,17 +1,27 @@
 <template>
-  <div v-if="show" class="fixed inset-0  flex items-center justify-center z-50">
-    <div
-      class="flex flex-col justify-center items-center border border-abbey-500 border-t-4 bg-white-50 rounded-2xl shadow-lg p-4 w-96 z-50 text-abbey-500">
-      <p class="text-lg font-light mb-4">
-        <XCircleIcon class="h-12 w-12 text-flamingo-900" />
-      </p>
-      <p class="text-2xl font-semibold mb-4">Are you sure?</p>
-      <p class="mb-4">{{ message }}</p>
-      <div class="flex justify-end">
-        <button @click="cancel" class="bg-abbey-50 hover:bg-abbey-100 text-abbey-600 py-1 px-4 rounded-2xl mr-2">
+  <div v-if="show"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    @click.self="cancel">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-7 text-center">
+      <!-- Icon -->
+      <div class="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+        <svg class="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </div>
+      <!-- Title -->
+      <h3 class="text-lg font-bold text-gray-800 mb-2">Are you sure?</h3>
+      <!-- Message -->
+      <p class="text-sm text-gray-500 mb-6">{{ message }}</p>
+      <!-- Buttons -->
+      <div class="flex gap-3">
+        <button @click="cancel"
+          class="flex-1 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
           Cancel
         </button>
-        <button @click="confirm" class="bg-flamingo-800 text-white hover:bg-flamingo-600 py-1 px-4 rounded-2xl">
+        <button @click="confirm"
+          class="flex-1 py-2.5 rounded-xl font-semibold text-sm text-white bg-red-600 hover:bg-red-700 transition">
           Delete
         </button>
       </div>
@@ -20,12 +30,7 @@
 </template>
 
 <script>
-import { XCircleIcon } from '@heroicons/vue/24/solid'
-
 export default {
-  components: {
-    XCircleIcon,
-  },
   props: {
     show: {
       type: Boolean,
@@ -37,12 +42,8 @@ export default {
     },
   },
   methods: {
-    confirm() {
-      this.$emit("confirmed");
-    },
-    cancel() {
-      this.$emit("canceled");
-    },
+    confirm() { this.$emit("confirmed") },
+    cancel() { this.$emit("canceled") },
   },
-};
+}
 </script>
