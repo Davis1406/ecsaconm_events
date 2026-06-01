@@ -15,6 +15,7 @@ const routeComponents = {
   EventRegisterView: () => import("@/views/web/Register.vue"),
   PaymentView: () => import("@/views/web/Payment.vue"),
   ResetPasswordView: () => import("@/views/auth/ResetPassword.vue"),
+  SetPasswordView: () => import("@/views/auth/SetPassword.vue"),
   DashboardView: () => import("@/views/main/dashboard/Dashboard.vue"),
   WebEventsView: () => import("@/views/web/WebEvents.vue"),
   WebEventView: () => import("@/views/web/WebEvent.vue"),
@@ -117,6 +118,11 @@ const routes = [
         path: "/reset-password",
         name: "ResetPassword",
         component: routeComponents.ResetPasswordView,
+      },
+      {
+        path: "/reset-password/:token",
+        name: "SetPassword",
+        component: routeComponents.SetPasswordView,
       },
       {
         path: "/web-events",
