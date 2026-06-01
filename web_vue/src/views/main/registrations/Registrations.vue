@@ -669,7 +669,7 @@ export default {
         await api.delete(`/events/deregister_participant/${regId}`)
         this.deleteModal = { show: false, reg: null, deleting: false }
         this.showToast('Registration deleted successfully.', 'success')
-        await this.fetchRegistrations()
+        await this.loadRegistrations()
       } catch (e) {
         this.deleteModal.deleting = false
         this.showToast(e.response?.data?.detail || 'Failed to delete registration.', 'error')
