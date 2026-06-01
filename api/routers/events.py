@@ -854,6 +854,14 @@ async def admin_deregister_participant(
         raise HTTPException(status_code=404, detail="Registration not found")
 
     try:
+        # Delete attendance records
+        from models.models import EventAttendance
+        db.query(EventAttendance).filter(
+            EventAttendance.registration_id == registration.id
+        ).delete(synchronize_session=False)
+        db.flush()
+
+        # Delete payment record
         existing_payment = (
             db.query(Payment).filter(Payment.registration_id == registration.id).first()
         )
