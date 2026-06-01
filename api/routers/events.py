@@ -415,7 +415,6 @@ async def send_receipt(
         <p>Please find attached your official payment receipt for the <b>{event.event if event else 'conference'}</b>.</p>
         <p>Receipt No: <b style="color:#c0392b;">{receipt_no}</b></p>
         {"<p>Payment Proof: <a href='" + payment_proof_url + "'>View / Download</a></p>" if payment_proof_url else ""}
-        {"<p>Badge Photo: <a href='" + photo_url + "'>View / Download</a></p>" if photo_url else ""}
         <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
         <p style="color:#888;font-size:12px;">© All Rights Reserved, ECSACONM</p>
       </div>
