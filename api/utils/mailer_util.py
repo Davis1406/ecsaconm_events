@@ -148,17 +148,20 @@ def send_email_backgroundable(
 def new_account_email(
     recipient_email, firstname, password, event_name=None, background_tasks: BackgroundTasks = None
 ):
-    subject = "Welcome to ECSA Events Portal – Your Account Details"
-    template = templates.get_template("acount_creation_template.html")
-    email_body = template.render(
-        subject=subject,
-        username=recipient_email,
-        password=password,
-        firstname=firstname,
-        event_name=event_name,
-        year=YEAR,
-    )
-    send_email_backgroundable(recipient_email, subject, email_body, background_tasks)
+    subject = "Welcome to ECSACONM Events Portal – Activate Your Account"
+    try:
+        template = templates.get_template("acount_creation_template.html")
+        email_body = template.render(
+            subject=subject,
+            username=recipient_email,
+            password=password,
+            firstname=firstname,
+            event_name=event_name,
+            year=YEAR,
+        )
+        send_email_backgroundable(recipient_email, subject, email_body, background_tasks)
+    except Exception as e:
+        logger.error("Failed to prepare/send welcome email to %s: %s", recipient_email, str(e))
 
 
 def reset_password_request_email(
