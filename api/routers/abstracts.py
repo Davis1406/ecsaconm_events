@@ -132,6 +132,73 @@ def submit_abstract(
     return _serialize_abstract(abstract)
 
 
+@router.get("/stats")
+def abstract_stats(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """Summary counts for the Accepted Abstracts dashboard."""
+    from sqlalchemy import func
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    base = db.query(Abstract).filter(
+        Abstract.deleted_at == None,
+        Abstract.status == "accepted",
+    )
+    if event_id:
+        base = base.filter(Abstract.event_id == event_id)
+
+    total     = base.count()
+    oral      = base.filter(Abstract.presentation_type == "oral").count()
+    poster    = base.filter(Abstract.presentation_type == "poster").count()
+
+    # Unique presenters (by distinct email on is_presenting authors)
+    presenter_q = (
+        db.query(AbstractAuthor.email)
+        .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+        .filter(
+            Abstract.deleted_at == None,
+            Abstract.status == "accepted",
+            AbstractAuthor.is_presenting == True,
+            AbstractAuthor.email != None,
+            AbstractAuthor.email != "",
+        )
+    )
+    if event_id:
+        presenter_q = presenter_q.filter(Abstract.event_id == event_id)
+    unique_presenter_emails = {r.email.strip().lower() for r in presenter_q.all()}
+    unique_presenters = len(unique_presenter_emails)
+
+    # Presenters with 2+ abstracts (by email)
+    from sqlalchemy import func as sqlfunc
+    multi_q = (
+        db.query(AbstractAuthor.email, sqlfunc.count(AbstractAuthor.abstract_id).label("cnt"))
+        .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+        .filter(
+            Abstract.deleted_at == None,
+            Abstract.status == "accepted",
+            AbstractAuthor.is_presenting == True,
+            AbstractAuthor.email != None,
+            AbstractAuthor.email != "",
+        )
+        .group_by(AbstractAuthor.email)
+        .having(sqlfunc.count(AbstractAuthor.abstract_id) > 1)
+    )
+    if event_id:
+        multi_q = multi_q.filter(Abstract.event_id == event_id)
+    multi_presenters = multi_q.count()
+
+    return {
+        "total": total,
+        "oral": oral,
+        "poster": poster,
+        "unique_presenters": unique_presenters,
+        "multi_presenters": multi_presenters,
+    }
+
+
 @router.get("/")
 def list_abstracts(
     current_user: user_dependency,
@@ -142,6 +209,8 @@ def list_abstracts(
     limit: int = 20,
     search: str = Query(None),
     status: str = Query(None),
+    presentation_type: str = Query(None),
+    presenter_email: str = Query(None),
 ):
     auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
     from sqlalchemy import or_
@@ -150,18 +219,39 @@ def list_abstracts(
         q = q.filter(Abstract.event_id == event_id)
     if status:
         q = q.filter(Abstract.status == status)
+    if presentation_type:
+        q = q.filter(Abstract.presentation_type == presentation_type)
     if search:
         q = q.filter(or_(
             Abstract.title.ilike(f"%{search}%"),
             Abstract.keywords.ilike(f"%{search}%"),
         ))
+    # Filter to abstracts where the presenter has 2+ accepted abstracts
+    if presenter_email == "multi":
+        from sqlalchemy import func as sqlfunc
+        multi_emails = (
+            db.query(AbstractAuthor.email)
+            .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+            .filter(
+                Abstract.deleted_at == None,
+                Abstract.status == "accepted",
+                AbstractAuthor.is_presenting == True,
+                AbstractAuthor.email != None,
+                AbstractAuthor.email != "",
+            )
+            .group_by(AbstractAuthor.email)
+            .having(sqlfunc.count(AbstractAuthor.abstract_id) > 1)
+            .subquery()
+        )
+        q = q.join(AbstractAuthor, AbstractAuthor.abstract_id == Abstract.id).filter(
+            AbstractAuthor.is_presenting == True,
+            AbstractAuthor.email.in_(db.query(multi_emails.c.email)),
+        )
     total = q.count()
     abstracts = q.options(
         joinedload(Abstract.authors),
         joinedload(Abstract.submitter),
         joinedload(Abstract.event),
-        joinedload(Abstract.reviewer_assignments).joinedload(AbstractReviewer.reviewer),
-        joinedload(Abstract.reviewer_assignments).joinedload(AbstractReviewer.review),
     ).order_by(Abstract.created_at.desc()).offset(skip).limit(limit).all()
     return {"data": [_serialize_abstract(a) for a in abstracts], "total": total}
 
