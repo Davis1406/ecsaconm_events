@@ -30,6 +30,7 @@ from routers import (
     event_attendance,
     registrations,
     abstracts,
+    presentation_templates,
     event_types,
     organisers,
     participants,
@@ -100,6 +101,7 @@ app.include_router(
     registrations.router, tags=["Registrations"], prefix="/registrations"
 )
 app.include_router(abstracts.router, prefix="/abstracts", tags=["abstracts"])
+app.include_router(presentation_templates.router, prefix="/presentation_templates", tags=["Presentation Templates"])
 app.include_router(event_types.router, prefix="/event_types", tags=["Event Types"])
 app.include_router(organisers.router, prefix="/organisers", tags=["Organisers"])
 app.include_router(participants.router, prefix="/participants", tags=["Participants"])

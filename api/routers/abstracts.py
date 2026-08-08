@@ -1,8 +1,10 @@
 import io
+import os
 import re
+import uuid
 from typing import Annotated
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -11,12 +13,17 @@ from openpyxl.utils import get_column_letter
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
 from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role, Registration, Event
-from datetime import datetime
+from datetime import datetime, timezone
 from schemas.events_space import (
     AbstractSubmitSchema, AbstractUpdateSchema,
     AssignReviewerSchema, AbstractReviewSchema,
     CreateReviewerSchema,
 )
+
+PRESENTATION_UPLOAD_DIR = "uploads/presentations"
+os.makedirs(PRESENTATION_UPLOAD_DIR, exist_ok=True)
+ALLOWED_PRESENTATION_EXTS = {".ppt", ".pptx", ".pdf", ".zip", ".mp4"}
+MAX_PRESENTATION_MB = 100
 
 router = APIRouter()
 
@@ -358,6 +365,48 @@ def my_submissions(
         Abstract.deleted_at == None,
     ).order_by(Abstract.created_at.desc()).all()
     return [_serialize_abstract(a) for a in abstracts]
+
+
+@router.get("/my-presenter-status")
+def my_presenter_status(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+):
+    """
+    Returns whether the current user is an accepted abstract presenter
+    and whether they have a paid event registration.
+    Used to gate access to presentation templates.
+    """
+    uid = current_user["user_id"]
+
+    # Check: has any accepted abstract where user is the presenting author
+    is_presenting = (
+        db.query(AbstractAuthor)
+        .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+        .join(User, User.email == AbstractAuthor.email)
+        .filter(
+            User.id == uid,
+            Abstract.status == "accepted",
+            Abstract.deleted_at == None,
+            AbstractAuthor.is_presenting == True,
+        )
+        .first()
+        is not None
+    )
+
+    # Check: has any paid registration for any event
+    has_paid = (
+        db.query(Registration)
+        .filter(Registration.user_id == uid, Registration.paid == True)
+        .first()
+        is not None
+    )
+
+    return {
+        "is_presenting": is_presenting,
+        "has_paid": has_paid,
+        "is_paid_presenter": is_presenting and has_paid,
+    }
 
 
 @router.get("/my-reviews")
@@ -851,48 +900,37 @@ def send_registration_reminders(
         firstname = pa.firstname or "Presenter"
 
         import utils.mailer_util as mailer_util
+        from models.models import EmailTemplate as EmailTemplateModel
+        from jinja2 import Template as Jinja2Template
 
         if has_account:
             subject = f"Reminder: Register for {event_name}"
-            template = mailer_util.templates.get_template("registration_reminder_template.html")
-            try:
-                email_body = template.render(
-                    subject=subject,
-                    firstname=firstname,
-                    event_name=event_name,
-                    abstract_title=pa.abstract.title,
-                    has_account=True,
-                    year=mailer_util.YEAR,
-                )
-            except Exception:
-                email_body = f"""
-                <h2>Registration Reminder</h2>
-                <p>Dear {firstname},</p>
-                <p>This is a friendly reminder to register for <strong>{event_name}</strong>.</p>
-                <p>Your abstract "<em>{pa.abstract.title}</em>" has been accepted.</p>
-                <p>Please log in and complete your registration.</p>
-                <p>Thank you,<br/>ECSACONM Events Team</p>
-                """
         else:
             subject = f"Action Required: Create Account & Register for {event_name}"
-            template = mailer_util.templates.get_template("registration_reminder_template.html")
-            try:
-                email_body = template.render(
-                    subject=subject,
-                    firstname=firstname,
-                    event_name=event_name,
-                    abstract_title=pa.abstract.title,
-                    has_account=False,
-                    year=mailer_util.YEAR,
-                )
-            except Exception:
-                email_body = f"""
-                <h2>Account & Registration Required</h2>
-                <p>Dear {firstname},</p>
-                <p>Your abstract "<em>{pa.abstract.title}</em>" has been accepted for <strong>{event_name}</strong>.</p>
-                <p>You don't have an account yet. Please create one to complete your registration.</p>
-                <p>Thank you,<br/>ECSACONM Events Team</p>
-                """
+
+        # Load template from DB first, fall back to file
+        db_tpl = db.query(EmailTemplateModel).filter_by(template_key="registration_reminder").first()
+        render_vars = dict(
+            subject=subject,
+            firstname=firstname,
+            event_name=event_name,
+            abstract_title=pa.abstract.title,
+            has_account=has_account,
+            year=mailer_util.YEAR,
+        )
+        try:
+            if db_tpl and db_tpl.body_html:
+                email_body = Jinja2Template(db_tpl.body_html).render(**render_vars)
+            else:
+                file_tpl = mailer_util.templates.get_template("registration_reminder_template.html")
+                email_body = file_tpl.render(**render_vars)
+        except Exception:
+            email_body = (
+                f"<p>Dear {firstname},</p>"
+                f"<p>Your abstract has been accepted for <strong>{event_name}</strong>. "
+                f"Please complete your registration.</p>"
+                f"<p>ECSACONM Events Team</p>"
+            )
 
         mailer_util.send_email_backgroundable(email, subject, email_body, background_tasks)
         reminders_sent += 1
@@ -1180,3 +1218,152 @@ def get_reviews(
         }
         for a in assignments
     ]
+
+
+# ── Presenter: upload presentation file ──────────────────────────────────────
+
+@router.post("/{abstract_id}/upload-presentation", status_code=status.HTTP_200_OK)
+async def upload_presentation(
+    abstract_id: int,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Presenter uploads their presentation file for a given abstract."""
+    abstract = (
+        db.query(Abstract)
+        .filter(Abstract.id == abstract_id, Abstract.deleted_at == None)
+        .first()
+    )
+    if not abstract:
+        raise HTTPException(status_code=404, detail="Abstract not found")
+
+    # Only the submitter (or an admin) may upload
+    if abstract.submitted_by != current_user["user_id"]:
+        # allow admin to upload on behalf of presenter
+        from models.models import UserRole, Role
+        is_admin = (
+            db.query(UserRole)
+            .join(Role, UserRole.role_id == Role.id)
+            .filter(UserRole.user_id == current_user["user_id"], Role.role == "Admin")
+            .first()
+        )
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Not authorised to upload for this abstract")
+
+    ext = os.path.splitext(file.filename or "")[-1].lower()
+    if ext not in ALLOWED_PRESENTATION_EXTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Allowed types: {', '.join(ALLOWED_PRESENTATION_EXTS)}",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_PRESENTATION_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File must be under {MAX_PRESENTATION_MB} MB")
+
+    # Remove previous file if it exists
+    if abstract.presentation_file and os.path.exists(abstract.presentation_file):
+        try:
+            os.remove(abstract.presentation_file)
+        except OSError:
+            pass
+
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    stored_path = os.path.join(PRESENTATION_UPLOAD_DIR, stored_name)
+    with open(stored_path, "wb") as fh:
+        fh.write(content)
+
+    abstract.presentation_file = stored_path
+    abstract.presentation_uploaded_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {
+        "message": "Presentation uploaded successfully",
+        "filename": file.filename,
+        "abstract_id": abstract_id,
+    }
+
+
+# ── Admin: list all uploaded presentations ────────────────────────────────────
+
+@router.get("/uploaded-presentations/list")
+def list_uploaded_presentations(
+    current_user: user_dependency,
+    skip: int = 0,
+    limit: int = 50,
+    search: str = "",
+    db: Session = Depends(get_db),
+):
+    """Returns all abstracts that have a presentation file uploaded."""
+    q = (
+        db.query(Abstract)
+        .options(
+            joinedload(Abstract.event),
+            joinedload(Abstract.submitter),
+            joinedload(Abstract.authors),
+        )
+        .filter(
+            Abstract.deleted_at == None,
+            Abstract.presentation_file != None,
+        )
+    )
+    if search:
+        q = q.filter(Abstract.title.ilike(f"%{search}%"))
+
+    total = q.count()
+    rows = q.order_by(Abstract.presentation_uploaded_at.desc()).offset(skip).limit(limit).all()
+
+    return {
+        "total": total,
+        "data": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "status": a.status.value if a.status else None,
+                "event": a.event.event if a.event else None,
+                "submitter_name": f"{a.submitter.firstname} {a.submitter.lastname}" if a.submitter else None,
+                "submitter_email": a.submitter.email if a.submitter else None,
+                "presentation_file": a.presentation_file,
+                "presentation_uploaded_at": (
+                    a.presentation_uploaded_at.isoformat()
+                    if a.presentation_uploaded_at else None
+                ),
+                "presenting_author": next(
+                    (
+                        {"name": f"{au.firstname} {au.lastname}", "email": au.email}
+                        for au in a.authors if au.is_presenting
+                    ),
+                    None,
+                ),
+            }
+            for a in rows
+        ],
+    }
+
+
+# ── Admin: download a presenter's uploaded file ───────────────────────────────
+
+@router.get("/{abstract_id}/download-presentation")
+def download_presentation(
+    abstract_id: int,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+):
+    abstract = (
+        db.query(Abstract)
+        .filter(Abstract.id == abstract_id, Abstract.deleted_at == None)
+        .first()
+    )
+    if not abstract or not abstract.presentation_file:
+        raise HTTPException(status_code=404, detail="No presentation file found")
+    if not os.path.exists(abstract.presentation_file):
+        raise HTTPException(status_code=404, detail="File not found on server")
+
+    ext = os.path.splitext(abstract.presentation_file)[-1]
+    download_name = f"presentation_{abstract_id}{ext}"
+    return FileResponse(
+        path=abstract.presentation_file,
+        filename=download_name,
+        media_type="application/octet-stream",
+    )

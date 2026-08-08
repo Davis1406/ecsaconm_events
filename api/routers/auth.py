@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
@@ -163,8 +164,10 @@ async def login(
         .first()
     )
 
+    # Read session lifetime from env (minutes); fall back to 60 min if not set.
+    token_minutes = float(os.getenv("ACCESS_TOKEN_EXPIRES_IN", "60"))
     token = auth_dependencies.create_access_token(
-        user.email, user.id, timedelta(minutes=20)
+        user.email, user.id, timedelta(minutes=token_minutes)
     )
 
     dependency.log_activity(

@@ -720,6 +720,9 @@ class Abstract(BaseWithSoftDelete):
     presentation_type = Column(Enum(PresentationType), nullable=False, server_default="either")
     status = Column(Enum(AbstractStatus), nullable=False, server_default="submitted")
     word_count = Column(Integer, nullable=True)
+    # Presenter-uploaded presentation file (path relative to /uploads/)
+    presentation_file = Column(String(500), nullable=True)
+    presentation_uploaded_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
@@ -729,6 +732,22 @@ class Abstract(BaseWithSoftDelete):
     reviewer_assignments = relationship("AbstractReviewer", back_populates="abstract")
 
     __table_args__ = (Index("ix_abstract", "event_id", "status", "deleted_at"),)
+
+
+class PresentationTemplate(Base):
+    """Admin-managed downloadable presentation templates (PPT, PPTX, DOCX, PDF)."""
+    __tablename__ = "presentation_template"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String(500), nullable=False)         # stored path under uploads/
+    original_name = Column(String(500), nullable=False)    # original filename shown to users
+    description = Column(String(500), nullable=True)
+    file_size = Column(Integer, nullable=True)             # bytes
+    uploaded_by = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    deleted_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    uploader = relationship("User", foreign_keys=[uploaded_by])
 
 class AbstractAuthor(Base):
     __tablename__ = "abstract_author"
