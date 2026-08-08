@@ -139,20 +139,31 @@ def list_abstracts(
     auth_dependency: Auth = Depends(get_auth_dep),
     event_id: int = None,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 20,
+    search: str = Query(None),
+    status: str = Query(None),
 ):
     auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
-    q = db.query(Abstract).options(
+    from sqlalchemy import or_
+    q = db.query(Abstract).filter(Abstract.deleted_at == None)
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+    if status:
+        q = q.filter(Abstract.status == status)
+    if search:
+        q = q.filter(or_(
+            Abstract.title.ilike(f"%{search}%"),
+            Abstract.keywords.ilike(f"%{search}%"),
+        ))
+    total = q.count()
+    abstracts = q.options(
         joinedload(Abstract.authors),
         joinedload(Abstract.submitter),
         joinedload(Abstract.event),
         joinedload(Abstract.reviewer_assignments).joinedload(AbstractReviewer.reviewer),
         joinedload(Abstract.reviewer_assignments).joinedload(AbstractReviewer.review),
-    ).filter(Abstract.deleted_at == None)
-    if event_id:
-        q = q.filter(Abstract.event_id == event_id)
-    abstracts = q.order_by(Abstract.created_at.desc()).offset(skip).limit(limit).all()
-    return [_serialize_abstract(a) for a in abstracts]
+    ).order_by(Abstract.created_at.desc()).offset(skip).limit(limit).all()
+    return {"data": [_serialize_abstract(a) for a in abstracts], "total": total}
 
 
 @router.get("/export")

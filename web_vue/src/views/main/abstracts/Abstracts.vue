@@ -510,9 +510,12 @@ export default {
       this.abstractsLoading = true
       try {
         const skip = (this.abstractsPage - 1) * this.abstractsPageSize
-        const res = await fetchData('abstracts', skip, this.abstractsPageSize, this.abstractsSearch)
-        this.abstracts = res.data || res || []
-        this.abstractsTotal = res.total || res.pages * this.abstractsPageSize || this.abstracts.length
+        const res = await axios.get(`${this.apiUrl}/abstracts/`, {
+          params: { skip, limit: this.abstractsPageSize, search: this.abstractsSearch || undefined, status: 'accepted' },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.abstracts = res.data?.data || []
+        this.abstractsTotal = res.data?.total || 0
       } catch (e) { console.error(e) }
       finally { this.abstractsLoading = false }
     },
