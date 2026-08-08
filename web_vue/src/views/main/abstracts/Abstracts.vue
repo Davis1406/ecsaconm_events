@@ -47,11 +47,96 @@
     <!-- ══════════════════════════════════════════════════════════════════════ -->
     <!-- TAB 1 · Accepted Abstracts                                           -->
     <!-- ══════════════════════════════════════════════════════════════════════ -->
-    <div v-if="activeTab === 'abstracts'" class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div v-if="activeTab === 'abstracts'" class="flex flex-col gap-4">
+
+      <!-- ── Stat cards ───────────────────────────────────────────────────── -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+
+        <!-- Total -->
+        <button @click="setAbstractFilter('all')"
+          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'all'
+            ? 'border-pink-500 bg-pink-50'
+            : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold"
+            :style="abstractsFilter === 'all' ? 'color:rgb(254,80,103)' : 'color:#1f2937'">
+            {{ stats.total ?? '—' }}
+          </span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</span>
+        </button>
+
+        <!-- Oral -->
+        <button @click="setAbstractFilter('oral')"
+          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'oral'
+            ? 'border-blue-500 bg-blue-50'
+            : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold"
+            :class="abstractsFilter === 'oral' ? 'text-blue-600' : 'text-gray-800'">
+            {{ stats.oral ?? '—' }}
+          </span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Oral</span>
+        </button>
+
+        <!-- Poster -->
+        <button @click="setAbstractFilter('poster')"
+          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'poster'
+            ? 'border-purple-500 bg-purple-50'
+            : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold"
+            :class="abstractsFilter === 'poster' ? 'text-purple-600' : 'text-gray-800'">
+            {{ stats.poster ?? '—' }}
+          </span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Poster</span>
+        </button>
+
+        <!-- Unique Presenters -->
+        <button @click="setAbstractFilter('presenters')"
+          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'presenters'
+            ? 'border-green-500 bg-green-50'
+            : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold"
+            :class="abstractsFilter === 'presenters' ? 'text-green-600' : 'text-gray-800'">
+            {{ stats.unique_presenters ?? '—' }}
+          </span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">Unique Presenters</span>
+        </button>
+
+        <!-- Multi-Presenters -->
+        <button @click="setAbstractFilter('multi')"
+          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'multi'
+            ? 'border-orange-500 bg-orange-50'
+            : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold"
+            :class="abstractsFilter === 'multi' ? 'text-orange-500' : 'text-gray-800'">
+            {{ stats.multi_presenters ?? '—' }}
+          </span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">2+ Abstracts</span>
+        </button>
+
+      </div>
+
+      <!-- ── Main card ─────────────────────────────────────────────────────── -->
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
 
       <!-- Toolbar -->
       <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-        <h2 class="text-sm font-bold text-gray-700 flex-1">Accepted Abstracts</h2>
+        <h2 class="text-sm font-bold text-gray-700 flex-1">
+          Accepted Abstracts
+          <span v-if="abstractsFilter !== 'all'" class="ml-2 text-xs font-normal px-2 py-0.5 rounded-full"
+            :class="{
+              'bg-blue-100 text-blue-700': abstractsFilter === 'oral',
+              'bg-purple-100 text-purple-700': abstractsFilter === 'poster',
+              'bg-green-100 text-green-700': abstractsFilter === 'presenters',
+              'bg-orange-100 text-orange-700': abstractsFilter === 'multi',
+            }">
+            {{ { oral:'Oral only', poster:'Poster only', presenters:'All (by presenter)', multi:'2+ abstracts' }[abstractsFilter] }}
+            <button @click="setAbstractFilter('all')" class="ml-1 hover:opacity-70">✕</button>
+          </span>
+        </h2>
         <search-component @search="handleAbstractSearch" />
         <button @click="activeTab = 'reminders'"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
@@ -136,7 +221,9 @@
       <div class="px-5 py-3 border-t border-gray-100">
         <pagination-component :currentPage="abstractsPage" :totalPages="abstractsTotalPages" @page-change="handleAbstractPage" />
       </div>
-    </div>
+
+      </div><!-- /main card -->
+    </div><!-- /tab 1 -->
 
     <!-- ══════════════════════════════════════════════════════════════════════ -->
     <!-- TAB 2 · Presentation Templates                                       -->
@@ -452,6 +539,8 @@ export default {
       abstracts: [], abstractsLoading: true,
       abstractsPage: 1, abstractsPageSize: 20,
       abstractsTotal: 0, abstractsSearch: '',
+      abstractsFilter: 'all',  // 'all' | 'oral' | 'poster' | 'presenters' | 'multi'
+      stats: { total: null, oral: null, poster: null, unique_presenters: null, multi_presenters: null },
       showImport: false,
       importFile: null, importLoading: false,
       importPreview: null, importResult: null,
@@ -499,6 +588,7 @@ export default {
 
   mounted() {
     this.loadAbstracts()
+    this.loadStats()
     this.loadTemplates()
     this.loadUploads()
   },
@@ -506,12 +596,38 @@ export default {
   methods: {
 
     // ── Abstracts ─────────────────────────────────────────────────────────
+    async loadStats() {
+      try {
+        const res = await axios.get(`${this.apiUrl}/abstracts/stats`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.stats = res.data
+      } catch (e) { console.error('stats:', e) }
+    },
+
+    setAbstractFilter(filter) {
+      this.abstractsFilter = filter
+      this.abstractsPage = 1
+      this.loadAbstracts()
+    },
+
     async loadAbstracts() {
       this.abstractsLoading = true
       try {
         const skip = (this.abstractsPage - 1) * this.abstractsPageSize
+        const params = {
+          skip,
+          limit: this.abstractsPageSize,
+          status: 'accepted',
+        }
+        if (this.abstractsSearch) params.search = this.abstractsSearch
+        if (this.abstractsFilter === 'oral')   params.presentation_type = 'oral'
+        if (this.abstractsFilter === 'poster') params.presentation_type = 'poster'
+        if (this.abstractsFilter === 'multi')  params.presenter_email = 'multi'
+        // 'presenters' and 'all' → no extra filter, just show all accepted
+
         const res = await axios.get(`${this.apiUrl}/abstracts/`, {
-          params: { skip, limit: this.abstractsPageSize, search: this.abstractsSearch || undefined, status: 'accepted' },
+          params,
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.abstracts = res.data?.data || []
