@@ -4,6 +4,11 @@
         <div class="flex flex-col space-y-4">
             <div class="flex sm:flex-row flex-col sm:justify-between sm:items-center items-start">
                 <search-component @search="handleSearch"></search-component>
+                <router-link :to="{ name: 'AbstractNotifications' }"
+                    class="px-4 py-2 text-sm rounded-md text-white font-semibold hover:opacity-90 transition"
+                    style="background-color: rgb(220,50,75);">
+                    Registration Reminders
+                </router-link>
             </div>
             <SpinnerComponent v-if="isLoading" />
             <div v-else class="rounded-md border-2 border-white-600 shadow-sm text-abbey-500">

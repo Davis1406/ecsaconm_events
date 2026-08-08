@@ -1,6 +1,22 @@
-from fastapi import FastAPI
+import json
+from fastapi import FastAPI, Request
+from fastapi.responses import Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
+
+
+class AsciiJSONResponse(JSONResponse):
+    """JSON response that ASCII-escapes all non-ASCII characters (\\uXXXX).
+    This avoids charset mismatches in browsers that don't honour the UTF-8 default."""
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("ascii")
 
 from routers import (
     auth,
@@ -23,6 +39,7 @@ from routers import (
 
 app = FastAPI(
     title="ECSACONM Events API Documentation",
+    default_response_class=AsciiJSONResponse,
     description="The ECSACONM Events API is an API for ECSACONM Events Management System.",
     version="0.0.1",
     terms_of_service="http://example.com/terms/",
@@ -57,6 +74,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure all JSON responses carry explicit charset so browsers decode as UTF-8
+@app.middleware("http")
+async def add_charset_to_json(request: Request, call_next) -> Response:
+    response = await call_next(request)
+    ct = response.headers.get("content-type", "")
+    if "application/json" in ct and "charset" not in ct:
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    return response
 
 # Routers
 app.include_router(auth.router, tags=["Auth"], prefix="/auth")

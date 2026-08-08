@@ -177,7 +177,7 @@ export default {
   },
   async mounted() {
     try {
-      const response = await fetchData('events/active/', 0, 100, '')
+      const response = await fetchData('events/active', 0, 100, '')
       const all = (response.data || []).sort((a, b) => new Date(a.start_date) - new Date(b.start_date))
       this.featuredEvent = all[0] || null
       this.otherEvents = all.slice(1)

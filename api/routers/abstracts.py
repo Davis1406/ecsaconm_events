@@ -1,6 +1,7 @@
 import io
+import re
 from typing import Annotated
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from openpyxl import Workbook
@@ -9,7 +10,7 @@ from openpyxl.utils import get_column_letter
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role
+from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role, Registration, Event
 from datetime import datetime
 from schemas.events_space import (
     AbstractSubmitSchema, AbstractUpdateSchema,
@@ -435,6 +436,472 @@ def list_reviewers(
             "completed": a.completed,
         })
     return list(reviewers.values())
+
+
+@router.get("/registration-reminder-preview")
+def registration_reminder_preview(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    q = db.query(AbstractAuthor).join(
+        Abstract, AbstractAuthor.abstract_id == Abstract.id
+    ).options(
+        joinedload(AbstractAuthor.abstract).joinedload(Abstract.event),
+    ).filter(
+        AbstractAuthor.is_presenting == True,
+        AbstractAuthor.email != None,
+        AbstractAuthor.email != "",
+        Abstract.status == "accepted",
+        Abstract.deleted_at == None,
+    )
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+
+    presenters = q.all()
+
+    # Deduplicate by email (a presenter may have multiple abstracts)
+    seen_emails = set()
+    results = []
+    for pa in presenters:
+        email = pa.email.strip().lower()
+        if email in seen_emails:
+            continue
+        seen_emails.add(email)
+
+        user = db.query(User).filter(User.email == email).first()
+        has_account = user is not None
+        has_registration = False
+        if has_account:
+            has_registration = db.query(Registration).filter(
+                Registration.user_id == user.id,
+                Registration.event_id == (event_id or pa.abstract.event_id),
+            ).first() is not None
+
+        results.append({
+            "firstname": pa.firstname,
+            "lastname": pa.lastname,
+            "email": pa.email,
+            "abstract_title": pa.abstract.title,
+            "abstract_id": pa.abstract_id,
+            "has_account": has_account,
+            "has_registered": has_registration,
+        })
+
+    # Only return those who haven't registered
+    unregistered = [r for r in results if not r["has_registered"]]
+    return unregistered
+
+
+@router.post("/import-preview")
+async def import_abstracts_preview(
+    file: UploadFile = File(...),
+    event_id: int = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """
+    Dry-run parse an ODS/XLSX file and return what would be imported
+    without writing to the database.
+    """
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    rows, parse_error = await _parse_import_file(file)
+    if parse_error:
+        raise HTTPException(status_code=400, detail=parse_error)
+
+    # Resolve event
+    event = _resolve_event(db, event_id, rows)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found. Pass event_id or ensure an event name matches.")
+
+    # Get existing abstract titles for duplicate detection
+    existing_titles = {
+        a.title.strip().lower()
+        for a in db.query(Abstract.title).filter(Abstract.event_id == event.id, Abstract.deleted_at == None).all()
+    }
+
+    preview = []
+    for row in rows:
+        title = str(row.get("Title") or "").strip()
+        if not title:
+            continue
+        presenter_email = str(row.get("Presenter Email") or "").strip().lower()
+        user = db.query(User).filter(User.email == presenter_email).first() if presenter_email else None
+        preview.append({
+            "title": title,
+            "presenter_name": str(row.get("Presenter Name") or "").strip(),
+            "presenter_email": presenter_email,
+            "presentation_type": _map_ptype(str(row.get("Status") or "")),
+            "track": str(row.get("Topic") or "").strip(),
+            "keywords": str(row.get("Keywords") or "").strip(),
+            "is_duplicate": title.lower() in existing_titles,
+            "has_account": user is not None,
+            "user_id": user.id if user else None,
+            "author_count": _count_authors(row),
+        })
+
+    total = len(preview)
+    to_import = sum(1 for r in preview if not r["is_duplicate"])
+    duplicates = total - to_import
+    with_accounts = sum(1 for r in preview if r["has_account"])
+
+    return {
+        "event_id": event.id,
+        "event_name": event.event,
+        "total": total,
+        "to_import": to_import,
+        "duplicates": duplicates,
+        "with_accounts": with_accounts,
+        "without_accounts": total - with_accounts,
+        "rows": preview,
+    }
+
+
+@router.post("/import")
+async def import_abstracts(
+    file: UploadFile = File(...),
+    event_id: int = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """
+    Import abstracts from an ODS/XLSX file into the database.
+    Skips duplicates (same title + event). Marks presenting author with is_presenting=True.
+    Falls back to the current admin user as submitted_by when presenter has no account.
+    """
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    rows, parse_error = await _parse_import_file(file)
+    if parse_error:
+        raise HTTPException(status_code=400, detail=parse_error)
+
+    event = _resolve_event(db, event_id, rows)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    existing_titles = {
+        a.title.strip().lower()
+        for a in db.query(Abstract.title).filter(Abstract.event_id == event.id, Abstract.deleted_at == None).all()
+    }
+
+    imported = 0
+    skipped_duplicate = 0
+    errors = []
+
+    for idx, row in enumerate(rows):
+        title = str(row.get("Title") or "").strip()
+        if not title:
+            continue
+        if title.lower() in existing_titles:
+            skipped_duplicate += 1
+            continue
+
+        try:
+            presenter_email = str(row.get("Presenter Email") or "").strip().lower()
+            presenter_name = str(row.get("Presenter Name") or "").strip()
+            abstract_text = str(row.get("Description") or "").strip()
+            keywords = str(row.get("Keywords") or "").strip()
+            track = str(row.get("Topic") or "").strip()
+            ptype = _map_ptype(str(row.get("Status") or ""))
+
+            # Find presenter user for submitted_by; fall back to current admin
+            submitter = db.query(User).filter(User.email == presenter_email).first() if presenter_email else None
+            submitted_by = submitter.id if submitter else current_user["user_id"]
+
+            abstract = Abstract(
+                event_id=event.id,
+                submitted_by=submitted_by,
+                title=title,
+                abstract_text=abstract_text or "(imported)",
+                keywords=keywords,
+                track=track,
+                presentation_type=ptype,
+                status="accepted",
+                word_count=len(abstract_text.split()) if abstract_text else 0,
+            )
+            db.add(abstract)
+            db.flush()
+
+            # Parse authors (pipe-separated in Author Name / Author Affiliation)
+            author_names = [n.strip() for n in str(row.get("Author Name") or "").split("|") if n.strip()]
+            affiliations = [a.strip() for a in str(row.get("Author Affiliation") or "").split("|") if True]
+            # Pad affiliations list to match author count
+            while len(affiliations) < len(author_names):
+                affiliations.append("")
+
+            # Regex to strip honorific prefixes (with or without trailing period)
+            _title_prefix = re.compile(
+                r'^(Dr\.?|Prof\.?|Mr\.?|Mrs\.?|Ms\.?|Assoc\.?|Prof\.?)\s+',
+                flags=re.IGNORECASE,
+            )
+
+            def _clean_name(raw: str):
+                """Return (firstname, lastname) cleaned from a raw author name."""
+                name = re.sub(r'\d+$', '', raw).strip()
+                parts = name.split(None, 1)
+                fn = _title_prefix.sub('', parts[0] if parts else name).strip()[:99]
+                ln = (parts[1] if len(parts) > 1 else "")[:99]
+                # If lastname is suspiciously long it likely contains all authors → use full name
+                if len(ln) > 60:
+                    fn = name[:99]
+                    ln = ""
+                return fn, ln
+
+            def _valid_email(val):
+                """Return val if it looks like an email, else None."""
+                v = str(val or "").strip()
+                return v if "@" in v and "." in v.split("@")[-1] else None
+
+            presenter_marked = False
+            for order, name in enumerate(author_names):
+                firstname, lastname = _clean_name(name)
+
+                # Check if this author is the presenter
+                is_presenting = (
+                    presenter_name.lower() in name.lower() or
+                    name.lower() in presenter_name.lower()
+                )
+                if is_presenting:
+                    presenter_marked = True
+
+                # Get email: for presenting author, prefer Presenter Email over Author Email column
+                email_col = f"Author Email_{order + 1}"
+                raw_author_email = _valid_email(row.get(email_col))
+                if is_presenting:
+                    # Presenter Email is the authoritative source; fall back to column value
+                    email = _valid_email(presenter_email) or raw_author_email
+                else:
+                    email = raw_author_email
+
+                db.add(AbstractAuthor(
+                    abstract_id=abstract.id,
+                    firstname=firstname,
+                    lastname=lastname,
+                    email=email,
+                    affiliation=(affiliations[order] if order < len(affiliations) else "")[:299],
+                    country=None,
+                    is_presenting=is_presenting,
+                    author_order=order,
+                ))
+
+            # If no author was matched as presenter, add presenter as a standalone record
+            if not presenter_marked:
+                firstname, lastname = _clean_name(presenter_name)
+                db.add(AbstractAuthor(
+                    abstract_id=abstract.id,
+                    firstname=firstname,
+                    lastname=lastname,
+                    email=_valid_email(presenter_email),
+                    affiliation="",
+                    country=None,
+                    is_presenting=True,
+                    author_order=len(author_names),
+                ))
+
+            existing_titles.add(title.lower())
+            imported += 1
+
+        except Exception as e:
+            errors.append({"row": idx + 2, "title": title[:60], "error": str(e)})
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database commit failed: {str(e)}")
+
+    return {
+        "success": True,
+        "event_id": event.id,
+        "event_name": event.event,
+        "imported": imported,
+        "skipped_duplicate": skipped_duplicate,
+        "errors": errors,
+        "message": f"Imported {imported} abstract(s). Skipped {skipped_duplicate} duplicate(s)."
+            + (f" {len(errors)} error(s) — check 'errors' field." if errors else ""),
+    }
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+async def _parse_import_file(file: UploadFile):
+    """Read uploaded ODS or XLSX and return (list[dict], error_string|None)."""
+    import pandas as pd
+
+    content = await file.read()
+    fname = (file.filename or "").lower()
+    try:
+        if fname.endswith(".ods") or "ods" in fname:
+            df = pd.read_excel(io.BytesIO(content), engine="odf")
+            # Fix mojibake: some ODS files have UTF-8 bytes mis-stored as latin-1 strings.
+            # Try re-encoding latin-1 → UTF-8; silently skip values that are already correct.
+            def _fix_encoding(v):
+                if not isinstance(v, str):
+                    return v
+                try:
+                    return v.encode("latin-1").decode("utf-8")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    return v
+            for col in df.select_dtypes(include="object").columns:
+                df[col] = df[col].apply(_fix_encoding)
+        else:
+            df = pd.read_excel(io.BytesIO(content))
+    except Exception as e:
+        return [], f"Could not parse file: {e}"
+
+    # Drop fully-empty rows and the unnamed trailing columns
+    df = df.dropna(how="all")
+    cols_to_keep = [c for c in df.columns if not str(c).startswith("Unnamed")]
+    df = df[cols_to_keep]
+
+    return df.to_dict("records"), None
+
+
+def _resolve_event(db: Session, event_id, rows: list):
+    """Find event by id, or by matching the event name from the first data row."""
+    if event_id:
+        return db.query(Event).filter(Event.id == event_id, Event.deleted_at == None).first()
+    # Try to match by name from the data
+    if rows:
+        event_name = str(rows[0].get("Event Name") or "").strip()
+        if event_name:
+            ev = db.query(Event).filter(
+                Event.event.ilike(f"%{event_name[:40]}%"),
+                Event.deleted_at == None,
+            ).first()
+            if ev:
+                return ev
+    # Fall back to the first active event
+    return db.query(Event).filter(Event.deleted_at == None).order_by(Event.id).first()
+
+
+def _map_ptype(status_str: str) -> str:
+    sl = status_str.lower()
+    if "poster" in sl:
+        return "poster"
+    return "oral"
+
+
+def _count_authors(row: dict) -> int:
+    names = str(row.get("Author Name") or "")
+    return max(1, len([n for n in names.split("|") if n.strip()]))
+
+
+@router.post("/send-registration-reminders")
+def send_registration_reminders(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    body: dict = None,
+):
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    event_id = (body or {}).get("event_id")
+
+    q = db.query(AbstractAuthor).join(
+        Abstract, AbstractAuthor.abstract_id == Abstract.id
+    ).options(
+        joinedload(AbstractAuthor.abstract).joinedload(Abstract.event),
+    ).filter(
+        AbstractAuthor.is_presenting == True,
+        AbstractAuthor.email != None,
+        AbstractAuthor.email != "",
+        Abstract.status == "accepted",
+        Abstract.deleted_at == None,
+    )
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+
+    presenters = q.all()
+
+    seen_emails = set()
+    reminders_sent = 0
+    skipped_registered = 0
+
+    for pa in presenters:
+        email = pa.email.strip().lower()
+        if email in seen_emails:
+            continue
+        seen_emails.add(email)
+
+        user = db.query(User).filter(User.email == email).first()
+        has_account = user is not None
+
+        target_event_id = event_id or pa.abstract.event_id
+        has_registration = False
+        if has_account:
+            has_registration = db.query(Registration).filter(
+                Registration.user_id == user.id,
+                Registration.event_id == target_event_id,
+            ).first() is not None
+
+        if has_registration:
+            skipped_registered += 1
+            continue
+
+        # Send the reminder email
+        event_name = pa.abstract.event.event if pa.abstract and pa.abstract.event else "ECSACONM Event"
+        firstname = pa.firstname or "Presenter"
+
+        import utils.mailer_util as mailer_util
+
+        if has_account:
+            subject = f"Reminder: Register for {event_name}"
+            template = mailer_util.templates.get_template("registration_reminder_template.html")
+            try:
+                email_body = template.render(
+                    subject=subject,
+                    firstname=firstname,
+                    event_name=event_name,
+                    abstract_title=pa.abstract.title,
+                    has_account=True,
+                    year=mailer_util.YEAR,
+                )
+            except Exception:
+                email_body = f"""
+                <h2>Registration Reminder</h2>
+                <p>Dear {firstname},</p>
+                <p>This is a friendly reminder to register for <strong>{event_name}</strong>.</p>
+                <p>Your abstract "<em>{pa.abstract.title}</em>" has been accepted.</p>
+                <p>Please log in and complete your registration.</p>
+                <p>Thank you,<br/>ECSACONM Events Team</p>
+                """
+        else:
+            subject = f"Action Required: Create Account & Register for {event_name}"
+            template = mailer_util.templates.get_template("registration_reminder_template.html")
+            try:
+                email_body = template.render(
+                    subject=subject,
+                    firstname=firstname,
+                    event_name=event_name,
+                    abstract_title=pa.abstract.title,
+                    has_account=False,
+                    year=mailer_util.YEAR,
+                )
+            except Exception:
+                email_body = f"""
+                <h2>Account & Registration Required</h2>
+                <p>Dear {firstname},</p>
+                <p>Your abstract "<em>{pa.abstract.title}</em>" has been accepted for <strong>{event_name}</strong>.</p>
+                <p>You don't have an account yet. Please create one to complete your registration.</p>
+                <p>Thank you,<br/>ECSACONM Events Team</p>
+                """
+
+        mailer_util.send_email_backgroundable(email, subject, email_body, background_tasks)
+        reminders_sent += 1
+
+    return {
+        "message": f"Reminders sent: {reminders_sent}, skipped (already registered): {skipped_registered}",
+        "reminders_sent": reminders_sent,
+        "skipped_registered": skipped_registered,
+    }
 
 
 @router.get("/{abstract_id}")

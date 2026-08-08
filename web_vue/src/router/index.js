@@ -71,6 +71,7 @@ const routeComponents = {
   // Abstracts
   AbstractsView: () => import("@/views/main/abstracts/Abstracts.vue"),
   AbstractView: () => import("@/views/main/abstracts/Abstract.vue"),
+  AbstractNotificationsView: () => import("@/views/main/abstracts/AbstractNotifications.vue"),
 
   // Registrations
   RegistrationsView: () => import("@/views/main/registrations/Registrations.vue"),
@@ -358,6 +359,12 @@ const routes = [
         path: "/abstract/:id",
         name: "Abstract",
         component: routeComponents.AbstractView,
+      },
+
+      {
+        path: "/abstract-notifications",
+        name: "AbstractNotifications",
+        component: routeComponents.AbstractNotificationsView,
       },
 
       {
