@@ -94,6 +94,7 @@ async def update_email_template(
             "password_reset": "password_reset_template.html",
             "account_verification_request": "account_verification_request_template.html",
             "account_verification": "account_verification_template.html",
+            "registration_reminder": "registration_reminder_template.html",
         }
         fname = fname_map.get(template_key)
         if fname:

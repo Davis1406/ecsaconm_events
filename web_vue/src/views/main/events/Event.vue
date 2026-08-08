@@ -193,16 +193,24 @@
 
         <!-- Name — clickable link to participant profile -->
         <div class="col-span-4">
-          <router-link
-            v-if="participant.user_id"
-            :to="{ name: 'User', params: { id: participant.user_id } }"
-            class="font-medium hover:underline transition"
-            style="color: rgb(254,80,103);">
-            {{ [participant.title, participant.firstname, participant.lastname].filter(Boolean).join(' ') || '—' }}
-          </router-link>
-          <span v-else class="font-medium text-gray-800">
-            {{ [participant.title, participant.firstname, participant.lastname].filter(Boolean).join(' ') || '—' }}
-          </span>
+          <div class="flex items-center gap-2 flex-wrap">
+            <router-link
+              v-if="participant.user_id"
+              :to="{ name: 'User', params: { id: participant.user_id } }"
+              class="font-medium hover:underline transition"
+              style="color: rgb(254,80,103);">
+              {{ [participant.title, participant.firstname, participant.lastname].filter(Boolean).join(' ') || '—' }}
+            </router-link>
+            <span v-else class="font-medium text-gray-800">
+              {{ [participant.title, participant.firstname, participant.lastname].filter(Boolean).join(' ') || '—' }}
+            </span>
+            <!-- Abstract Presenter badge -->
+            <span v-if="participant.is_abstract_presenter"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
+              title="Accepted abstract presenter">
+              Abstract Presenter
+            </span>
+          </div>
         </div>
 
         <!-- Institution -->

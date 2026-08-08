@@ -54,6 +54,19 @@
       <span>Users</span>
     </router-link>
 
+    <!-- ABSTRACTS section -->
+    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 px-4 mt-4 mb-1">Abstracts</p>
+
+    <router-link
+      v-if="permissionCodes.includes('ADMIN_DASHBOARD')"
+      :to="{ name: 'Abstracts' }"
+      class="flex flex-row items-center space-x-2 p-2 px-4 ml-4 rounded-l-xl transition"
+      :class="abstractRoutes.includes($route.name) ? 'text-white' : 'text-gray-600 hover:text-gray-900 hover:bg-white'"
+      :style="abstractRoutes.includes($route.name) ? 'background-color: rgb(254,80,103);' : ''">
+      <DocumentTextIcon class="h-5 w-5 flex-shrink-0" />
+      <span>Abstracts</span>
+    </router-link>
+
     <!-- SETTINGS section -->
     <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 px-4 mt-4 mb-1">Settings</p>
 
@@ -107,7 +120,10 @@ import {
   RectangleGroupIcon, UsersIcon, Cog8ToothIcon,
   CalendarDaysIcon, UserCircleIcon, CheckCircleIcon,
 } from '@heroicons/vue/24/solid'
-import { ClipboardDocumentListIcon, EnvelopeIcon, PhoneIcon } from '@heroicons/vue/24/outline'
+import {
+  ClipboardDocumentListIcon, EnvelopeIcon, PhoneIcon,
+  DocumentTextIcon,
+} from '@heroicons/vue/24/outline'
 import { useAuthStore } from '@/store/authStore'
 
 export default {
@@ -115,6 +131,7 @@ export default {
   components: {
     RectangleGroupIcon, UsersIcon, Cog8ToothIcon, CalendarDaysIcon,
     ClipboardDocumentListIcon, UserCircleIcon, EnvelopeIcon, PhoneIcon, CheckCircleIcon,
+    DocumentTextIcon,
   },
   setup() {
     const authStore = useAuthStore()
@@ -122,7 +139,8 @@ export default {
     const permissionCodes = Array.isArray(permissions)
       ? permissions.map(p => (typeof p === 'string' ? p : p.permission_code))
       : []
-    return { permissionCodes }
+    const abstractRoutes = ['Abstracts', 'Abstract', 'AbstractNotifications', 'PresentationTemplates', 'UploadedPresentations']
+    return { permissionCodes, abstractRoutes }
   },
 }
 </script>

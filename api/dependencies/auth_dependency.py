@@ -8,7 +8,7 @@ from jose import jwt, JWTError
 from passlib.hash import bcrypt
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from models.models import User, Role, User, RolePermission, UserRole, Permission
@@ -25,7 +25,9 @@ class Auth:
 
     def create_access_token(self, username, user_id, expires_delta: timedelta):
         encode = {"sub": username, "id": user_id}
-        expires = datetime.now() + expires_delta
+        # Use UTC explicitly so the exp claim is always a true UTC timestamp,
+        # regardless of the server's local timezone.
+        expires = datetime.now(timezone.utc) + expires_delta
         encode["exp"] = expires
         return jwt.encode(encode, os.getenv("SECRET_KEY", ""), algorithm=os.getenv("ALGORITHM", ""))
 

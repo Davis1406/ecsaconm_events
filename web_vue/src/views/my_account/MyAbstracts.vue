@@ -68,15 +68,69 @@
               </p>
             </div>
           </div>
+
+          <!-- Upload presentation -->
+          <div class="border-t border-gray-100 pt-4 mt-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Presentation File</p>
+
+            <!-- Already uploaded -->
+            <div v-if="abstract.presentation_file" class="flex items-center gap-3 mb-2">
+              <span class="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-3 py-1 rounded-full font-semibold">
+                ✓ Presentation uploaded
+              </span>
+              <span class="text-xs text-gray-400">{{ formatDate(abstract.presentation_uploaded_at) }}</span>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+              <input type="file"
+                accept=".ppt,.pptx,.pdf,.zip,.mp4"
+                @change="e => abstract._file = e.target.files[0]"
+                class="text-sm text-gray-600 border border-gray-200 rounded-xl px-3 py-1.5
+                       file:mr-3 file:py-1 file:px-3 file:rounded-full file:border-0
+                       file:text-xs file:font-semibold file:text-white cursor-pointer"
+                style="--tw-ring-color: rgb(254,80,103);" />
+              <button
+                @click="uploadPresentation(abstract)"
+                :disabled="!abstract._file || abstract._uploading"
+                class="px-4 py-1.5 text-xs rounded-full font-semibold text-white disabled:opacity-50 transition hover:opacity-90"
+                style="background-color: rgb(254,80,103);">
+                {{ abstract._uploading ? 'Uploading…' : (abstract.presentation_file ? 'Replace file' : 'Upload') }}
+              </button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Accepted: .pptx .ppt .pdf .zip .mp4 · Max 100 MB</p>
+            <p v-if="abstract._uploadMsg" class="text-xs mt-1 font-medium"
+              :class="abstract._uploadErr ? 'text-red-600' : 'text-green-600'">
+              {{ abstract._uploadMsg }}
+            </p>
+          </div>
+
         </div>
       </div>
     </div>
+
+    <!-- Presentation templates callout — only for paid presenters -->
+    <div v-if="isPaidPresenter"
+      class="bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+      <div class="flex-1">
+        <h3 class="font-semibold text-gray-800 mb-1">Presentation Templates</h3>
+        <p class="text-sm text-gray-500">
+          Download the official ECSACONM presentation template to ensure your slides meet conference requirements.
+        </p>
+      </div>
+      <router-link :to="{ name: 'PresentationTemplates' }"
+        class="flex-shrink-0 px-5 py-2 rounded-full text-sm font-semibold text-white transition hover:opacity-90"
+        style="background-color: rgb(0,150,180);">
+        View Templates →
+      </router-link>
+    </div>
+
   </div>
 </template>
 
 <script>
 import { fetchData } from "@/services/apiService";
 import { useAuthStore } from "@/store/authStore";
+import axios from "axios";
 
 export default {
     name: 'MyAbstracts',
@@ -84,22 +138,46 @@ export default {
         return {
             isLoading: true,
             abstracts: [],
+            isPaidPresenter: false,
+            apiUrl: import.meta.env.VITE_API_URL,
         };
     },
     mounted() {
         this.getMyAbstracts();
+        this.checkPresenterStatus();
     },
     setup() {
         const authStore = useAuthStore();
         const user = authStore.loginUser;
-        return { user };
+        const token = authStore.accessToken;
+        return { user, token };
     },
     methods: {
+        async checkPresenterStatus() {
+            try {
+                const res = await axios.get(
+                    `${this.apiUrl}/abstracts/my-presenter-status`,
+                    { headers: { Authorization: `Bearer ${this.token}` } }
+                );
+                this.isPaidPresenter = res.data.is_paid_presenter === true;
+            } catch (e) {
+                console.warn("Could not check presenter status:", e);
+                this.isPaidPresenter = false;
+            }
+        },
+
         async getMyAbstracts() {
             try {
                 const response = await fetchData("abstracts/my-submissions", 1, 100, "");
                 const data = response.data || response || [];
-                this.abstracts = data.map(a => ({ ...a, _expanded: false }));
+                this.abstracts = data.map(a => ({
+                    ...a,
+                    _expanded: false,
+                    _file: null,
+                    _uploading: false,
+                    _uploadMsg: '',
+                    _uploadErr: false,
+                }));
             } catch (error) {
                 console.error("Error fetching my abstracts:", error);
                 this.abstracts = [];
@@ -107,6 +185,37 @@ export default {
                 this.isLoading = false;
             }
         },
+
+        async uploadPresentation(abstract) {
+            if (!abstract._file) return;
+            abstract._uploading = true;
+            abstract._uploadMsg = '';
+            abstract._uploadErr = false;
+            try {
+                const form = new FormData();
+                form.append('file', abstract._file);
+                await axios.post(
+                    `${this.apiUrl}/abstracts/${abstract.id}/upload-presentation`,
+                    form,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${this.token}`,
+                            'Content-Type': 'multipart/form-data',
+                        },
+                    }
+                );
+                abstract._uploadMsg = 'Uploaded successfully!';
+                abstract.presentation_file = 'uploaded'; // flag so badge shows
+                abstract.presentation_uploaded_at = new Date().toISOString();
+                abstract._file = null;
+            } catch (e) {
+                abstract._uploadMsg = e.response?.data?.detail || 'Upload failed.';
+                abstract._uploadErr = true;
+            } finally {
+                abstract._uploading = false;
+            }
+        },
+
         formatDate(dateString) {
             if (!dateString) return '—';
             const date = new Date(dateString);

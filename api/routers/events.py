@@ -18,7 +18,7 @@ from dependencies.auth_dependency import get_current_user, get_optional_current_
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from models.models import Event, User, Registration, Document, Link, Payment, UserProfile, Country, UserPhoto, UserRole
-from models.models import ParticipationRole, PaymentStatus, PaymentMethod
+from models.models import ParticipationRole, PaymentStatus, PaymentMethod, Abstract, AbstractAuthor
 from utils.mailer_util import hash_password
 from schemas.events_space import EventSchema, EventUpdateSchema, RegistrationSchema, LinkSchema, SendReceiptSchema
 from utils.receipt_generator import generate_receipt_pdf
@@ -456,6 +456,23 @@ async def get_event(
         documents = event.documents or []
         links = event.links or []
 
+        # Build a set of emails that are accepted abstract presenters for this event
+        presenter_emails = set(
+            row.email.strip().lower()
+            for row in db.query(AbstractAuthor.email)
+            .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+            .filter(
+                Abstract.event_id == event_id,
+                Abstract.deleted_at == None,
+                Abstract.status == "accepted",
+                AbstractAuthor.is_presenting == True,
+                AbstractAuthor.email != None,
+                AbstractAuthor.email != "",
+            )
+            .all()
+            if row.email
+        )
+
         # ── Determine the current user's access level ─────────────────────────
         # "none"   → not logged in
         # "unpaid" → logged in but no paid registration for this event
@@ -562,6 +579,10 @@ async def get_event(
                         if r.payment and r.payment.payment_amount else 0
                     ),
                     "registered_at": r.registered_at,
+                    "is_abstract_presenter": (
+                        (r.user.email or "").strip().lower() in presenter_emails
+                        if r.user else False
+                    ),
                 }
                 for r in registrations
             ],
