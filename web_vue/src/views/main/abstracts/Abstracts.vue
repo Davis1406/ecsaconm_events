@@ -124,9 +124,10 @@
 
       <!-- Toolbar -->
       <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-        <h2 class="text-sm font-bold text-gray-700 flex-1">
+        <h2 class="text-sm font-bold text-gray-700 flex-1 flex items-center gap-2">
           Accepted Abstracts
-          <span v-if="abstractsFilter !== 'all'" class="ml-2 text-xs font-normal px-2 py-0.5 rounded-full"
+          <span v-if="abstractsTotal" class="text-xs font-normal text-gray-400">({{ abstractsTotal }})</span>
+          <span v-if="abstractsFilter !== 'all'" class="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
             :class="{
               'bg-blue-100 text-blue-700': abstractsFilter === 'oral',
               'bg-purple-100 text-purple-700': abstractsFilter === 'poster',
@@ -134,9 +135,16 @@
               'bg-orange-100 text-orange-700': abstractsFilter === 'multi',
             }">
             {{ { oral:'Oral only', poster:'Poster only', presenters:'All (by presenter)', multi:'2+ abstracts' }[abstractsFilter] }}
-            <button @click="setAbstractFilter('all')" class="ml-1 hover:opacity-70">✕</button>
+            <button @click="setAbstractFilter('all')" class="hover:opacity-70">✕</button>
           </span>
         </h2>
+        <!-- Page size picker -->
+        <select v-model.number="abstractsPageSize" @change="abstractsPage = 1; loadAbstracts()"
+          class="px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 focus:outline-none">
+          <option :value="25">25 / page</option>
+          <option :value="50">50 / page</option>
+          <option :value="100">100 / page</option>
+        </select>
         <search-component @search="handleAbstractSearch" />
         <button @click="activeTab = 'reminders'"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
@@ -192,28 +200,87 @@
       <!-- Abstract list table -->
       <SpinnerComponent v-if="abstractsLoading" />
       <div v-else>
-        <div class="flex bg-mercury-500 px-5 py-2 uppercase text-xs font-bold text-gray-500">
-          <div class="w-5/12">Title</div>
-          <div class="w-2/12">Event</div>
-          <div class="w-2/12">Submitter</div>
-          <div class="w-1/12">Type</div>
-          <div class="w-1/12">Status</div>
-          <div class="w-1/12">Date</div>
+        <!-- Table header with sortable columns -->
+        <div class="hidden sm:flex bg-mercury-500 px-5 py-2 uppercase text-xs font-bold text-gray-500 select-none">
+          <div class="w-8 flex-shrink-0 text-center">#</div>
+          <div class="flex-1 pl-3 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
+            @click="setSort('title')">
+            Title
+            <span class="text-gray-300">
+              <svg v-if="abstractsSort.field === 'title'" class="w-3 h-3" :class="abstractsSort.dir === 'asc' ? 'text-pink-500' : 'text-pink-500'" fill="currentColor" viewBox="0 0 20 20">
+                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
+                <path v-else d="M10 17l7-7H3l7 7z"/>
+              </svg>
+              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
+            </span>
+          </div>
+          <div class="w-3/12 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
+            @click="setSort('presenter')">
+            Presenter
+            <span>
+              <svg v-if="abstractsSort.field === 'presenter'" class="w-3 h-3 text-pink-500" fill="currentColor" viewBox="0 0 20 20">
+                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
+                <path v-else d="M10 17l7-7H3l7 7z"/>
+              </svg>
+              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
+            </span>
+          </div>
+          <div class="w-2/12 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
+            @click="setSort('type')">
+            Type
+            <span>
+              <svg v-if="abstractsSort.field === 'type'" class="w-3 h-3 text-pink-500" fill="currentColor" viewBox="0 0 20 20">
+                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
+                <path v-else d="M10 17l7-7H3l7 7z"/>
+              </svg>
+              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
+            </span>
+          </div>
+          <div class="w-2/12 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
+            @click="setSort('created_at')">
+            Date
+            <span>
+              <svg v-if="abstractsSort.field === 'created_at'" class="w-3 h-3 text-pink-500" fill="currentColor" viewBox="0 0 20 20">
+                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
+                <path v-else d="M10 17l7-7H3l7 7z"/>
+              </svg>
+              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
+            </span>
+          </div>
         </div>
+
         <div v-if="abstracts.length === 0" class="px-5 py-10 text-center text-sm text-gray-400 italic">No abstracts found.</div>
-        <div v-for="a in abstracts" :key="a.id"
-          class="flex sm:flex-row flex-col px-5 py-3 text-sm items-center border-t border-gray-100 cursor-pointer hover:bg-gray-50 transition"
+        <div v-for="(a, idx) in sortedAbstracts" :key="a.id"
+          class="flex sm:flex-row flex-col px-5 py-3 text-sm items-start sm:items-center border-t border-gray-100 cursor-pointer hover:bg-gray-50 transition group"
           @click="$router.push({ name: 'Abstract', params: { id: a.id } })">
-          <div class="sm:w-5/12 w-full font-medium text-gray-800 leading-snug pr-3">{{ a.title }}</div>
-          <div class="sm:w-2/12 w-full text-xs text-gray-500 pr-2 leading-snug">{{ a.event }}</div>
-          <div class="sm:w-2/12 w-full text-xs text-gray-600">{{ a.submitter_name }}</div>
-          <div class="sm:w-1/12 w-full">
-            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">{{ a.presentation_type || '—' }}</span>
+          <!-- Row number -->
+          <div class="hidden sm:flex w-8 flex-shrink-0 justify-center text-xs text-gray-300 group-hover:text-gray-400 font-mono tabular-nums">
+            {{ (abstractsPage - 1) * abstractsPageSize + idx + 1 }}
           </div>
-          <div class="sm:w-1/12 w-full">
-            <span :class="statusClass(a.status)" class="px-2 py-1 rounded-full text-xs font-semibold capitalize">{{ a.status }}</span>
+          <!-- Title -->
+          <div class="flex-1 sm:pl-3 font-medium text-gray-800 leading-snug pr-3">
+            {{ a.title }}
           </div>
-          <div class="sm:w-1/12 w-full text-xs text-gray-400">{{ formatDate(a.created_at) }}</div>
+          <!-- Presenter -->
+          <div class="sm:w-3/12 w-full text-xs text-gray-600 pr-2 mt-1 sm:mt-0">
+            <span class="sm:hidden text-gray-400 mr-1">Presenter:</span>
+            {{ presenterName(a) }}
+            <div v-if="presenterEmail(a)" class="text-gray-400 truncate">{{ presenterEmail(a) }}</div>
+          </div>
+          <!-- Type badge -->
+          <div class="sm:w-2/12 w-full mt-1 sm:mt-0">
+            <span v-if="a.presentation_type === 'oral'"
+              class="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700 capitalize">
+              {{ a.presentation_type }}
+            </span>
+            <span v-else-if="a.presentation_type === 'poster'"
+              class="text-xs px-2 py-0.5 rounded-full font-semibold bg-purple-100 text-purple-700 capitalize">
+              {{ a.presentation_type }}
+            </span>
+            <span v-else class="text-xs text-gray-400">—</span>
+          </div>
+          <!-- Date -->
+          <div class="sm:w-2/12 w-full text-xs text-gray-400 mt-1 sm:mt-0">{{ formatDate(a.created_at) }}</div>
         </div>
       </div>
 
@@ -537,9 +604,10 @@ export default {
 
       // ── Tab 1: Abstracts ──────────────────────────────────────────────────
       abstracts: [], abstractsLoading: true,
-      abstractsPage: 1, abstractsPageSize: 20,
+      abstractsPage: 1, abstractsPageSize: 25,
       abstractsTotal: 0, abstractsSearch: '',
       abstractsFilter: 'all',  // 'all' | 'oral' | 'poster' | 'presenters' | 'multi'
+      abstractsSort: { field: 'created_at', dir: 'desc' },
       stats: { total: null, oral: null, poster: null, unique_presenters: null, multi_presenters: null },
       showImport: false,
       importFile: null, importLoading: false,
@@ -576,6 +644,16 @@ export default {
   computed: {
     abstractsTotalPages() { return Math.max(1, Math.ceil(this.abstractsTotal / this.abstractsPageSize)) },
     uploadsTotalPages()   { return Math.max(1, Math.ceil(this.uploadsTotal / this.uploadsPageSize)) },
+    // Client-side sort for presenter (server sorts by title/type/date)
+    sortedAbstracts() {
+      if (this.abstractsSort.field !== 'presenter') return this.abstracts
+      return [...this.abstracts].sort((a, b) => {
+        const pa = this.presenterName(a).toLowerCase()
+        const pb = this.presenterName(b).toLowerCase()
+        const cmp = pa < pb ? -1 : pa > pb ? 1 : 0
+        return this.abstractsSort.dir === 'asc' ? cmp : -cmp
+      })
+    },
   },
 
   watch: {
@@ -624,7 +702,11 @@ export default {
         if (this.abstractsFilter === 'oral')   params.presentation_type = 'oral'
         if (this.abstractsFilter === 'poster') params.presentation_type = 'poster'
         if (this.abstractsFilter === 'multi')  params.presenter_email = 'multi'
-        // 'presenters' and 'all' → no extra filter, just show all accepted
+        // presenter sort is handled client-side; all others are server-side
+        if (this.abstractsSort.field !== 'presenter') {
+          params.sort_by  = this.abstractsSort.field
+          params.sort_dir = this.abstractsSort.dir
+        }
 
         const res = await axios.get(`${this.apiUrl}/abstracts/`, {
           params,
@@ -637,6 +719,30 @@ export default {
     },
     handleAbstractSearch(q) { this.abstractsSearch = q; this.abstractsPage = 1; this.loadAbstracts() },
     handleAbstractPage(p)   { this.abstractsPage = p; this.loadAbstracts() },
+
+    setSort(field) {
+      if (this.abstractsSort.field === field) {
+        this.abstractsSort.dir = this.abstractsSort.dir === 'asc' ? 'desc' : 'asc'
+      } else {
+        this.abstractsSort.field = field
+        this.abstractsSort.dir = field === 'title' ? 'asc' : 'desc'
+      }
+      this.abstractsPage = 1
+      // presenter sort is client-side only — no reload needed
+      if (field !== 'presenter') this.loadAbstracts()
+    },
+
+    presenterName(abstract) {
+      const authors = abstract.authors || []
+      const presenter = authors.find(au => au.is_presenting) || authors[0]
+      if (presenter) return [presenter.firstname, presenter.lastname].filter(Boolean).join(' ') || '—'
+      return abstract.submitter_name || '—'
+    },
+    presenterEmail(abstract) {
+      const authors = abstract.authors || []
+      const presenter = authors.find(au => au.is_presenting) || null
+      return presenter?.email || ''
+    },
 
     onImportFileSelected(e) { this.importFile = e.target.files[0] || null; this.importPreview = null; this.importResult = null },
 
