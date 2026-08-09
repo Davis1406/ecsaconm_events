@@ -206,11 +206,13 @@ def list_abstracts(
     auth_dependency: Auth = Depends(get_auth_dep),
     event_id: int = None,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 25,
     search: str = Query(None),
     status: str = Query(None),
     presentation_type: str = Query(None),
     presenter_email: str = Query(None),
+    sort_by: str = Query("created_at"),   # title | type | created_at
+    sort_dir: str = Query("desc"),         # asc | desc
 ):
     auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
     from sqlalchemy import or_
@@ -225,6 +227,7 @@ def list_abstracts(
         q = q.filter(or_(
             Abstract.title.ilike(f"%{search}%"),
             Abstract.keywords.ilike(f"%{search}%"),
+            Abstract.track.ilike(f"%{search}%"),
         ))
     # Filter to abstracts where the presenter has 2+ accepted abstracts
     if presenter_email == "multi":
@@ -248,11 +251,19 @@ def list_abstracts(
             AbstractAuthor.email.in_(db.query(multi_emails.c.email)),
         )
     total = q.count()
+    # Sort
+    _sort_map = {
+        "title":        Abstract.title,
+        "type":         Abstract.presentation_type,
+        "created_at":   Abstract.created_at,
+    }
+    sort_col = _sort_map.get(sort_by, Abstract.created_at)
+    order_expr = sort_col.asc() if sort_dir == "asc" else sort_col.desc()
     abstracts = q.options(
         joinedload(Abstract.authors),
         joinedload(Abstract.submitter),
         joinedload(Abstract.event),
-    ).order_by(Abstract.created_at.desc()).offset(skip).limit(limit).all()
+    ).order_by(order_expr).offset(skip).limit(limit).all()
     return {"data": [_serialize_abstract(a) for a in abstracts], "total": total}
 
 
