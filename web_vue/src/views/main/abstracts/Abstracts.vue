@@ -883,7 +883,8 @@ export default {
     presenterStatus(abstract) {
       const email = this.presenterEmail(abstract)
       if (!email) return null
-      return this.presenterStatusMap[email.toLowerCase()] || null
+      const key = `${email.toLowerCase()}:${abstract.event_id}`
+      return this.presenterStatusMap[key] || null
     },
 
     // ── Edit modal ────────────────────────────────────────────────────────

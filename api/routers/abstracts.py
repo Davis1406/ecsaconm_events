@@ -310,25 +310,30 @@ def list_abstracts(
         if event_id:
             pres_q = pres_q.filter(Abstract.event_id == event_id)
 
-        # Build email → status map using event-specific registration check
+        # Build (email, event_id) → status map — event-specific per abstract
         matched_abstract_ids = set()
-        seen_emails: dict = {}
+        seen_pairs: dict = {}   # (email, ev_id) → status
+        user_cache2: dict = {}  # email → User
         for row in pres_q.all():
             email = row.email.strip().lower()
-            if email not in seen_emails:
-                user = db.query(User).filter(User.email == email).first()
+            ev = row.ev_id
+            pair = (email, ev)
+            if pair not in seen_pairs:
+                if email not in user_cache2:
+                    user_cache2[email] = db.query(User).filter(User.email == email).first()
+                user = user_cache2[email]
                 has_registered = False
                 has_paid = False
                 if user:
                     reg = db.query(Registration).filter(
                         Registration.user_id == user.id,
-                        Registration.event_id == row.ev_id,
+                        Registration.event_id == ev,
                     ).first()
                     if reg:
                         has_registered = True
                         has_paid = bool(reg.paid)
-                seen_emails[email] = {"has_registered": has_registered, "has_paid": has_paid}
-            st = seen_emails[email]
+                seen_pairs[pair] = {"has_registered": has_registered, "has_paid": has_paid}
+            st = seen_pairs[pair]
             reg_ok = (
                 presenter_registered is None or
                 (presenter_registered == "yes" and st["has_registered"]) or
@@ -721,25 +726,38 @@ def presenter_registration_status(
     if event_id:
         q = q.filter(Abstract.event_id == event_id)
 
+    # Key by "email:event_id" so the same presenter in multiple events
+    # gets an independent registration check per event.
     status_map = {}
+    user_cache: dict = {}   # email → User (avoid repeated user lookups)
+    processed: set = set()  # (email, event_id) pairs already handled
+
     for pa in q.all():
         email = pa.email.strip().lower()
-        if email in status_map:
+        ev = pa.abstract.event_id
+        pair = (email, ev)
+        if pair in processed:
             continue
-        user = db.query(User).filter(User.email == email).first()
+        processed.add(pair)
+
+        if email not in user_cache:
+            user_cache[email] = db.query(User).filter(User.email == email).first()
+        user = user_cache[email]
+
         has_account = user is not None
         has_registered = False
         has_paid = False
         if has_account:
-            target_event_id = event_id or pa.abstract.event_id
             reg = db.query(Registration).filter(
                 Registration.user_id == user.id,
-                Registration.event_id == target_event_id,
+                Registration.event_id == ev,
             ).first()
             if reg:
                 has_registered = True
                 has_paid = bool(reg.paid)
-        status_map[email] = {
+
+        key = f"{email}:{ev}"
+        status_map[key] = {
             "user_id": user.id if user else None,
             "has_account": has_account,
             "has_registered": has_registered,
