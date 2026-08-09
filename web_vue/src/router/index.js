@@ -72,6 +72,7 @@ const routeComponents = {
   AbstractsView: () => import("@/views/main/abstracts/Abstracts.vue"),
   AbstractView: () => import("@/views/main/abstracts/Abstract.vue"),
   AbstractNotificationsView: () => import("@/views/main/abstracts/AbstractNotifications.vue"),
+  AbstractNotificationsView: () => import("@/views/main/abstracts/AbstractNotifications.vue"),
   PresentationTemplatesView: () => import("@/views/main/abstracts/PresentationTemplates.vue"),
   UploadedPresentationsView: () => import("@/views/main/abstracts/UploadedPresentations.vue"),
 
@@ -355,6 +356,12 @@ const routes = [
         path: "/abstracts",
         name: "Abstracts",
         component: routeComponents.AbstractsView,
+      },
+
+      {
+        path: "/abstract-notifications",
+        name: "AbstractNotifications",
+        component: routeComponents.AbstractNotificationsView,
       },
 
       {

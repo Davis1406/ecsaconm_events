@@ -67,6 +67,16 @@
       <span>Abstracts</span>
     </router-link>
 
+    <router-link
+      v-if="permissionCodes.includes('ADMIN_DASHBOARD')"
+      :to="{ name: 'AbstractNotifications' }"
+      class="flex flex-row items-center space-x-2 p-2 px-4 ml-4 rounded-l-xl transition"
+      :class="$route.name === 'AbstractNotifications' ? 'text-white' : 'text-gray-600 hover:text-gray-900 hover:bg-white'"
+      :style="$route.name === 'AbstractNotifications' ? 'background-color: rgb(254,80,103);' : ''">
+      <BellAlertIcon class="h-5 w-5 flex-shrink-0" />
+      <span>Notifications</span>
+    </router-link>
+
     <!-- SETTINGS section -->
     <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 px-4 mt-4 mb-1">Settings</p>
 
@@ -122,7 +132,7 @@ import {
 } from '@heroicons/vue/24/solid'
 import {
   ClipboardDocumentListIcon, EnvelopeIcon, PhoneIcon,
-  DocumentTextIcon,
+  DocumentTextIcon, BellAlertIcon,
 } from '@heroicons/vue/24/outline'
 import { useAuthStore } from '@/store/authStore'
 
@@ -131,7 +141,7 @@ export default {
   components: {
     RectangleGroupIcon, UsersIcon, Cog8ToothIcon, CalendarDaysIcon,
     ClipboardDocumentListIcon, UserCircleIcon, EnvelopeIcon, PhoneIcon, CheckCircleIcon,
-    DocumentTextIcon,
+    DocumentTextIcon, BellAlertIcon,
   },
   setup() {
     const authStore = useAuthStore()
