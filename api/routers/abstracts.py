@@ -12,8 +12,9 @@ from openpyxl.utils import get_column_letter
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role, Registration, Event
+from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role, Registration, Event, AbstractStatus
 from datetime import datetime, timezone
+from sqlalchemy import text as _sql_text
 from schemas.events_space import (
     AbstractSubmitSchema, AbstractUpdateSchema,
     AssignReviewerSchema, AbstractReviewSchema,
@@ -190,12 +191,46 @@ def abstract_stats(
         multi_q = multi_q.filter(Abstract.event_id == event_id)
     multi_presenters = multi_q.count()
 
+    # Registered / paid counts (by presenter email)
+    all_pres_q = (
+        db.query(AbstractAuthor.email)
+        .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+        .filter(
+            Abstract.deleted_at == None,
+            Abstract.status == "accepted",
+            AbstractAuthor.is_presenting == True,
+            AbstractAuthor.email != None,
+            AbstractAuthor.email != "",
+        )
+    )
+    if event_id:
+        all_pres_q = all_pres_q.filter(Abstract.event_id == event_id)
+
+    registered_count = 0
+    paid_count = 0
+    seen_reg: set = set()
+    for row in all_pres_q.all():
+        email = row.email.strip().lower()
+        if email in seen_reg:
+            continue
+        seen_reg.add(email)
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            reg = db.query(Registration).filter(Registration.user_id == user.id).first()
+            if reg:
+                registered_count += 1
+                if reg.paid:
+                    paid_count += 1
+
     return {
         "total": total,
         "oral": oral,
         "poster": poster,
         "unique_presenters": unique_presenters,
         "multi_presenters": multi_presenters,
+        "registered": registered_count,
+        "paid": paid_count,
+        "not_registered": unique_presenters - registered_count,
     }
 
 
@@ -213,6 +248,8 @@ def list_abstracts(
     presenter_email: str = Query(None),
     sort_by: str = Query("created_at"),   # title | type | created_at
     sort_dir: str = Query("desc"),         # asc | desc
+    presenter_registered: str = Query(None),  # "yes" | "no"
+    presenter_paid: str = Query(None),        # "yes" | "no"
 ):
     auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
     from sqlalchemy import or_
@@ -250,6 +287,56 @@ def list_abstracts(
             AbstractAuthor.is_presenting == True,
             AbstractAuthor.email.in_(db.query(multi_emails.c.email)),
         )
+    # Filter by presenter registration / payment status
+    if presenter_registered in ("yes", "no") or presenter_paid in ("yes", "no"):
+        # Gather all presenting author emails for accepted abstracts in scope
+        pres_q = (
+            db.query(AbstractAuthor.email, AbstractAuthor.abstract_id)
+            .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+            .filter(
+                Abstract.deleted_at == None,
+                Abstract.status == "accepted",
+                AbstractAuthor.is_presenting == True,
+                AbstractAuthor.email != None,
+                AbstractAuthor.email != "",
+            )
+        )
+        if event_id:
+            pres_q = pres_q.filter(Abstract.event_id == event_id)
+
+        # Build email → abstract_id map and evaluate registration per email
+        matched_abstract_ids = set()
+        seen_emails: dict = {}
+        for row in pres_q.all():
+            email = row.email.strip().lower()
+            if email not in seen_emails:
+                user = db.query(User).filter(User.email == email).first()
+                has_registered = False
+                has_paid = False
+                if user:
+                    reg = db.query(Registration).filter(
+                        Registration.user_id == user.id,
+                    ).first()
+                    if reg:
+                        has_registered = True
+                        has_paid = bool(reg.paid)
+                seen_emails[email] = {"has_registered": has_registered, "has_paid": has_paid}
+            st = seen_emails[email]
+            reg_ok = (
+                presenter_registered is None or
+                (presenter_registered == "yes" and st["has_registered"]) or
+                (presenter_registered == "no" and not st["has_registered"])
+            )
+            paid_ok = (
+                presenter_paid is None or
+                (presenter_paid == "yes" and st["has_paid"]) or
+                (presenter_paid == "no" and not st["has_paid"])
+            )
+            if reg_ok and paid_ok:
+                matched_abstract_ids.add(row.abstract_id)
+
+        q = q.filter(Abstract.id.in_(matched_abstract_ids))
+
     total = q.count()
     # Sort
     _sort_map = {
@@ -599,6 +686,60 @@ def list_reviewers(
     return list(reviewers.values())
 
 
+@router.get("/presenter-registration-status")
+def presenter_registration_status(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """
+    Returns registration + payment status keyed by presenter email.
+    Used to show badges and enable filtering on the abstracts list.
+    """
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    q = (
+        db.query(AbstractAuthor)
+        .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+        .options(joinedload(AbstractAuthor.abstract))
+        .filter(
+            AbstractAuthor.is_presenting == True,
+            AbstractAuthor.email != None,
+            AbstractAuthor.email != "",
+            Abstract.status == "accepted",
+            Abstract.deleted_at == None,
+        )
+    )
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+
+    status_map = {}
+    for pa in q.all():
+        email = pa.email.strip().lower()
+        if email in status_map:
+            continue
+        user = db.query(User).filter(User.email == email).first()
+        has_account = user is not None
+        has_registered = False
+        has_paid = False
+        if has_account:
+            target_event_id = event_id or pa.abstract.event_id
+            reg = db.query(Registration).filter(
+                Registration.user_id == user.id,
+                Registration.event_id == target_event_id,
+            ).first()
+            if reg:
+                has_registered = True
+                has_paid = bool(reg.paid)
+        status_map[email] = {
+            "has_account": has_account,
+            "has_registered": has_registered,
+            "has_paid": has_paid,
+        }
+    return status_map
+
+
 @router.get("/registration-reminder-preview")
 def registration_reminder_preview(
     current_user: user_dependency,
@@ -655,6 +796,77 @@ def registration_reminder_preview(
     # Only return those who haven't registered
     unregistered = [r for r in results if not r["has_registered"]]
     return unregistered
+
+
+@router.post("/send-registration-reminders")
+def send_registration_reminders(
+    current_user: user_dependency,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    q = db.query(AbstractAuthor).join(
+        Abstract, AbstractAuthor.abstract_id == Abstract.id
+    ).options(
+        joinedload(AbstractAuthor.abstract).joinedload(Abstract.event),
+    ).filter(
+        AbstractAuthor.is_presenting == True,
+        AbstractAuthor.email != None,
+        AbstractAuthor.email != "",
+        Abstract.status == "accepted",
+        Abstract.deleted_at == None,
+    )
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+
+    presenters = q.all()
+
+    seen_emails = set()
+    recipients = []
+    for pa in presenters:
+        email = pa.email.strip().lower()
+        if email in seen_emails:
+            continue
+        seen_emails.add(email)
+
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            has_registration = db.query(Registration).filter(
+                Registration.user_id == user.id,
+                Registration.event_id == (event_id or pa.abstract.event_id),
+            ).first() is not None
+            if has_registration:
+                continue
+
+        recipients.append({
+            "firstname": pa.firstname,
+            "lastname": pa.lastname,
+            "email": email,
+            "abstract_title": pa.abstract.title,
+            "has_account": user is not None,
+        })
+
+    event = db.query(Event).filter(Event.id == event_id).first() if event_id else None
+    event_name = event.event if event else "the conference"
+
+    import utils.mailer_util as mailer_util
+    for r in recipients:
+        mailer_util.registration_reminder_email(
+            recipient_email=r["email"],
+            firstname=r["firstname"],
+            lastname=r["lastname"],
+            event_name=event_name,
+            has_account=r["has_account"],
+            background_tasks=background_tasks,
+        )
+
+    return {
+        "sent": len(recipients),
+        "message": f"Registration reminders queued for {len(recipients)} presenter(s).",
+    }
 
 
 @router.post("/import-preview")

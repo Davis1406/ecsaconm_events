@@ -49,72 +49,68 @@
     <!-- ══════════════════════════════════════════════════════════════════════ -->
     <div v-if="activeTab === 'abstracts'" class="flex flex-col gap-4">
 
-      <!-- ── Stat cards ───────────────────────────────────────────────────── -->
+      <!-- ── Stat cards row 1: abstract counts ──────────────────────────── -->
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
 
-        <!-- Total -->
         <button @click="setAbstractFilter('all')"
           class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'all'
-            ? 'border-pink-500 bg-pink-50'
-            : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold"
-            :style="abstractsFilter === 'all' ? 'color:rgb(254,80,103)' : 'color:#1f2937'">
-            {{ stats.total ?? '—' }}
-          </span>
+          :class="abstractsFilter === 'all' ? 'border-pink-500 bg-pink-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold" :style="abstractsFilter === 'all' ? 'color:rgb(254,80,103)' : 'color:#1f2937'">{{ stats.total ?? '—' }}</span>
           <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</span>
         </button>
 
-        <!-- Oral -->
         <button @click="setAbstractFilter('oral')"
           class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'oral'
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold"
-            :class="abstractsFilter === 'oral' ? 'text-blue-600' : 'text-gray-800'">
-            {{ stats.oral ?? '—' }}
-          </span>
+          :class="abstractsFilter === 'oral' ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'oral' ? 'text-blue-600' : 'text-gray-800'">{{ stats.oral ?? '—' }}</span>
           <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Oral</span>
         </button>
 
-        <!-- Poster -->
         <button @click="setAbstractFilter('poster')"
           class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'poster'
-            ? 'border-purple-500 bg-purple-50'
-            : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold"
-            :class="abstractsFilter === 'poster' ? 'text-purple-600' : 'text-gray-800'">
-            {{ stats.poster ?? '—' }}
-          </span>
+          :class="abstractsFilter === 'poster' ? 'border-purple-500 bg-purple-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'poster' ? 'text-purple-600' : 'text-gray-800'">{{ stats.poster ?? '—' }}</span>
           <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Poster</span>
         </button>
 
-        <!-- Unique Presenters -->
         <button @click="setAbstractFilter('presenters')"
           class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'presenters'
-            ? 'border-green-500 bg-green-50'
-            : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold"
-            :class="abstractsFilter === 'presenters' ? 'text-green-600' : 'text-gray-800'">
-            {{ stats.unique_presenters ?? '—' }}
-          </span>
+          :class="abstractsFilter === 'presenters' ? 'border-green-500 bg-green-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'presenters' ? 'text-green-600' : 'text-gray-800'">{{ stats.unique_presenters ?? '—' }}</span>
           <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">Unique Presenters</span>
         </button>
 
-        <!-- Multi-Presenters -->
         <button @click="setAbstractFilter('multi')"
           class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'multi'
-            ? 'border-orange-500 bg-orange-50'
-            : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold"
-            :class="abstractsFilter === 'multi' ? 'text-orange-500' : 'text-gray-800'">
-            {{ stats.multi_presenters ?? '—' }}
-          </span>
+          :class="abstractsFilter === 'multi' ? 'border-orange-500 bg-orange-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'multi' ? 'text-orange-500' : 'text-gray-800'">{{ stats.multi_presenters ?? '—' }}</span>
           <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">2+ Abstracts</span>
+        </button>
+
+      </div>
+
+      <!-- ── Stat cards row 2: registration / payment ─────────────────────── -->
+      <div class="grid grid-cols-3 gap-3">
+
+        <button @click="setAbstractFilter('registered')"
+          class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'registered' ? 'border-teal-500 bg-teal-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-xl font-extrabold" :class="abstractsFilter === 'registered' ? 'text-teal-600' : 'text-gray-800'">{{ stats.registered ?? '—' }}</span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">✓ Registered</span>
+        </button>
+
+        <button @click="setAbstractFilter('not_registered')"
+          class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'not_registered' ? 'border-red-400 bg-red-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-xl font-extrabold" :class="abstractsFilter === 'not_registered' ? 'text-red-500' : 'text-gray-800'">{{ stats.not_registered ?? '—' }}</span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">✗ Not Registered</span>
+        </button>
+
+        <button @click="setAbstractFilter('paid')"
+          class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl shadow-sm border-2 transition"
+          :class="abstractsFilter === 'paid' ? 'border-emerald-500 bg-emerald-50' : 'border-transparent bg-white hover:border-gray-200'">
+          <span class="text-xl font-extrabold" :class="abstractsFilter === 'paid' ? 'text-emerald-600' : 'text-gray-800'">{{ stats.paid ?? '—' }}</span>
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">💳 Paid</span>
         </button>
 
       </div>
@@ -133,8 +129,11 @@
               'bg-purple-100 text-purple-700': abstractsFilter === 'poster',
               'bg-green-100 text-green-700': abstractsFilter === 'presenters',
               'bg-orange-100 text-orange-700': abstractsFilter === 'multi',
+              'bg-teal-100 text-teal-700': abstractsFilter === 'registered',
+              'bg-red-100 text-red-600': abstractsFilter === 'not_registered',
+              'bg-emerald-100 text-emerald-700': abstractsFilter === 'paid',
             }">
-            {{ { oral:'Oral only', poster:'Poster only', presenters:'All (by presenter)', multi:'2+ abstracts' }[abstractsFilter] }}
+            {{ { oral:'Oral only', poster:'Poster only', presenters:'All (by presenter)', multi:'2+ abstracts', registered:'Registered', not_registered:'Not Registered', paid:'Paid' }[abstractsFilter] }}
             <button @click="setAbstractFilter('all')" class="hover:opacity-70">✕</button>
           </span>
         </h2>
@@ -264,8 +263,23 @@
           <!-- Presenter -->
           <div class="sm:w-3/12 w-full text-xs text-gray-600 pr-2 mt-1 sm:mt-0">
             <span class="sm:hidden text-gray-400 mr-1">Presenter:</span>
-            {{ presenterName(a) }}
-            <div v-if="presenterEmail(a)" class="text-gray-400 truncate">{{ presenterEmail(a) }}</div>
+            <span class="font-medium">{{ presenterName(a) }}</span>
+            <!-- Registration / payment badge -->
+            <template v-if="presenterEmail(a) && presenterStatus(a)">
+              <span v-if="presenterStatus(a).has_paid"
+                class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 whitespace-nowrap">
+                💳 Paid
+              </span>
+              <span v-else-if="presenterStatus(a).has_registered"
+                class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-700 whitespace-nowrap">
+                ✓ Registered
+              </span>
+              <span v-else
+                class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 whitespace-nowrap">
+                ✗ Not Registered
+              </span>
+            </template>
+            <div v-if="presenterEmail(a)" class="text-gray-400 truncate mt-0.5">{{ presenterEmail(a) }}</div>
           </div>
           <!-- Type badge -->
           <div class="sm:w-2/12 w-full mt-1 sm:mt-0">
@@ -281,6 +295,16 @@
           </div>
           <!-- Date -->
           <div class="sm:w-2/12 w-full text-xs text-gray-400 mt-1 sm:mt-0">{{ formatDate(a.created_at) }}</div>
+          <!-- Edit icon -->
+          <div class="sm:w-8 flex-shrink-0 flex justify-end">
+            <button @click.stop="openEditModal(a)" title="Edit abstract"
+              class="p-1.5 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition opacity-0 group-hover:opacity-100">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -566,6 +590,116 @@
     </div>
 
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- Edit Abstract Modal                                                   -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <Teleport to="body">
+    <div v-if="editModal.open"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      @click.self="closeEditModal">
+      <!-- Backdrop -->
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeEditModal"></div>
+
+      <!-- Panel -->
+      <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+
+        <!-- Modal header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <h2 class="font-semibold text-gray-800 text-base truncate pr-4">Edit Abstract</h2>
+          <button @click="closeEditModal" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Scrollable body -->
+        <div class="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+
+          <!-- Save feedback -->
+          <div v-if="editModal.successMsg" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">
+            ✓ {{ editModal.successMsg }}
+          </div>
+          <div v-if="editModal.errorMsg" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+            {{ editModal.errorMsg }}
+          </div>
+
+          <!-- Title -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Title</label>
+            <input v-model="editModal.form.title" type="text"
+              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400" />
+          </div>
+
+          <!-- Type + Status row -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Presentation Type</label>
+              <select v-model="editModal.form.presentation_type"
+                class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400">
+                <option value="oral">Oral</option>
+                <option value="poster">Poster</option>
+                <option value="either">Either</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Status</label>
+              <select v-model="editModal.form.status"
+                class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400">
+                <option value="submitted">Submitted</option>
+                <option value="under_review">Under Review</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+                <option value="revision_required">Revision Required</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Track -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Track</label>
+            <input v-model="editModal.form.track" type="text" placeholder="e.g. Maternal Health"
+              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400" />
+          </div>
+
+          <!-- Keywords -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Keywords</label>
+            <input v-model="editModal.form.keywords" type="text" placeholder="Comma-separated"
+              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400" />
+          </div>
+
+          <!-- Abstract body -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Abstract Text</label>
+            <textarea v-model="editModal.form.abstract_text" rows="10"
+              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 resize-y leading-relaxed font-[inherit]"></textarea>
+          </div>
+
+          <p class="text-xs text-gray-400 italic">
+            To edit authors, open the
+            <button @click="$router.push({ name: 'Abstract', params: { id: editModal.form.id } }); closeEditModal()"
+              class="text-blue-500 hover:underline">full abstract view →</button>
+          </p>
+        </div>
+
+        <!-- Modal footer -->
+        <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+          <button @click="closeEditModal"
+            class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <button @click="saveEditModal" :disabled="editModal.saving"
+            class="px-6 py-2 rounded-xl text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 transition disabled:opacity-50">
+            {{ editModal.saving ? 'Saving…' : 'Save Changes' }}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </Teleport>
+
 </template>
 
 <script>
@@ -580,6 +714,9 @@ import {
   DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon,
 } from '@heroicons/vue/24/outline'
 import { PresentationChartBarIcon, BellAlertIcon } from '@heroicons/vue/24/solid'
+
+// Registration filter values that require server-side filtering
+const REGISTRATION_FILTERS = ['registered', 'not_registered', 'paid']
 
 export default {
   name: 'AbstractsView',
@@ -638,6 +775,27 @@ export default {
       uploadsTotal: 0, uploadsSearch: '',
 
       successMsg: '', errorMsg: '',
+
+      // ── Presenter registration status map (email → {has_registered, has_paid}) ──
+      presenterStatusMap: {},
+      presenterStatusLoading: false,
+
+      // ── Edit modal ────────────────────────────────────────────────────────
+      editModal: {
+        open: false,
+        saving: false,
+        successMsg: '',
+        errorMsg: '',
+        form: {
+          id: null,
+          title: '',
+          presentation_type: 'oral',
+          status: 'accepted',
+          track: '',
+          keywords: '',
+          abstract_text: '',
+        },
+      },
     }
   },
 
@@ -669,6 +827,7 @@ export default {
     this.loadStats()
     this.loadTemplates()
     this.loadUploads()
+    this.loadPresenterStatuses()
   },
 
   methods: {
@@ -699,9 +858,12 @@ export default {
           status: 'accepted',
         }
         if (this.abstractsSearch) params.search = this.abstractsSearch
-        if (this.abstractsFilter === 'oral')   params.presentation_type = 'oral'
-        if (this.abstractsFilter === 'poster') params.presentation_type = 'poster'
-        if (this.abstractsFilter === 'multi')  params.presenter_email = 'multi'
+        if (this.abstractsFilter === 'oral')           params.presentation_type = 'oral'
+        if (this.abstractsFilter === 'poster')         params.presentation_type = 'poster'
+        if (this.abstractsFilter === 'multi')          params.presenter_email = 'multi'
+        if (this.abstractsFilter === 'registered')     params.presenter_registered = 'yes'
+        if (this.abstractsFilter === 'not_registered') params.presenter_registered = 'no'
+        if (this.abstractsFilter === 'paid')           params.presenter_paid = 'yes'
         // presenter sort is handled client-side; all others are server-side
         if (this.abstractsSort.field !== 'presenter') {
           params.sort_by  = this.abstractsSort.field
@@ -730,6 +892,85 @@ export default {
       this.abstractsPage = 1
       // presenter sort is client-side only — no reload needed
       if (field !== 'presenter') this.loadAbstracts()
+    },
+
+    // ── Presenter registration status ─────────────────────────────────────
+    async loadPresenterStatuses() {
+      this.presenterStatusLoading = true
+      try {
+        const res = await axios.get(`${this.apiUrl}/abstracts/presenter-registration-status`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.presenterStatusMap = res.data || {}
+      } catch (e) { console.error('presenter status:', e) }
+      finally { this.presenterStatusLoading = false }
+    },
+
+    presenterStatus(abstract) {
+      const email = this.presenterEmail(abstract)
+      if (!email) return null
+      return this.presenterStatusMap[email.toLowerCase()] || null
+    },
+
+    // ── Edit modal ────────────────────────────────────────────────────────
+    openEditModal(abstract) {
+      this.editModal.successMsg = ''
+      this.editModal.errorMsg = ''
+      this.editModal.saving = false
+      this.editModal.form = {
+        id: abstract.id,
+        title: abstract.title || '',
+        presentation_type: abstract.presentation_type || 'oral',
+        status: abstract.status || 'accepted',
+        track: abstract.track || '',
+        keywords: abstract.keywords || '',
+        abstract_text: abstract.abstract_text || '',
+      }
+      this.editModal.open = true
+    },
+
+    closeEditModal() {
+      this.editModal.open = false
+    },
+
+    async saveEditModal() {
+      this.editModal.saving = true
+      this.editModal.successMsg = ''
+      this.editModal.errorMsg = ''
+      try {
+        const f = this.editModal.form
+        await axios.put(
+          `${this.apiUrl}/abstracts/${f.id}`,
+          {
+            title: f.title.trim(),
+            presentation_type: f.presentation_type,
+            status: f.status,
+            track: f.track.trim(),
+            keywords: f.keywords.trim(),
+            abstract_text: f.abstract_text.trim(),
+          },
+          { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        )
+        // Update the abstract in the local list
+        const idx = this.abstracts.findIndex(a => a.id === f.id)
+        if (idx !== -1) {
+          this.abstracts[idx] = {
+            ...this.abstracts[idx],
+            title: f.title,
+            presentation_type: f.presentation_type,
+            status: f.status,
+            track: f.track,
+            keywords: f.keywords,
+            abstract_text: f.abstract_text,
+          }
+        }
+        this.editModal.successMsg = 'Saved successfully.'
+        setTimeout(() => { this.editModal.open = false }, 1200)
+      } catch (e) {
+        this.editModal.errorMsg = e.response?.data?.detail || 'Failed to save.'
+      } finally {
+        this.editModal.saving = false
+      }
     },
 
     presenterName(abstract) {

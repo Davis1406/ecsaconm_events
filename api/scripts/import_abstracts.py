@@ -1,288 +1,153 @@
-"""
-Import accepted abstracts from an ODS spreadsheet into the ECSACONM Events database.
-
-Reads the file at the configured path, maps columns to the abstract and
-abstract_author tables, creates user accounts for presenters who don't have one
-yet, and assigns the abstract's submitted_by to the matching user.
-
-Idempotent: skips abstracts that already exist (matched by title + event_id).
-
-Usage:
-    cd api/
-    python scripts/import_abstracts.py
-"""
-
-import os
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
-from sqlalchemy.orm import Session
+import mysql.connector
+from urllib.parse import quote_plus
 
-from core.database import SessionLocal
-from models.models import Abstract, AbstractAuthor, User, UserRole, Role
-
-# ── Configuration ────────────────────────────────────────────────────────────
-ODS_FILE = "/Users/davishyacinth/Downloads/All-Abstracts.xlsx.ods"
+MYSQL_HOSTNAME = "localhost"
+MYSQL_USER = "root"
+MYSQL_PASSWORD = "root"
+MYSQL_DB = "ecsaconm_events"
 EVENT_ID = 1
-ADMIN_USER_ID = 1
-ABSTRACT_STATUS = "accepted"
+ODS_FILE = "/Users/davishyacinth/Downloads/All-Abstracts.xlsx.ods"
+
+conn = mysql.connector.connect(
+    host=MYSQL_HOSTNAME,
+    user=MYSQL_USER,
+    password=MYSQL_PASSWORD,
+    database=MYSQL_DB,
+    unix_socket="/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock",
+    charset="utf8mb4"
+)
+cursor = conn.cursor()
+
+df = pd.read_excel(ODS_FILE, engine="odf")
+
+existing_emails_q = "SELECT id, LOWER(TRIM(email)) AS email FROM user"
+cursor.execute(existing_emails_q)
+user_by_email = {row[1]: row[0] for row in cursor.fetchall()}
+
+existing_abstracts_q = "SELECT title FROM abstract WHERE event_id = %s"
+cursor.execute(existing_abstracts_q, (EVENT_ID,))
+existing_titles = {row[0] for row in cursor.fetchall()}
 
 
-def parse_name(full_name: str) -> tuple[str, str]:
-    """Split a full name into (firstname, lastname).
-    Splits on the last space: everything before = firstname, last token = lastname.
-    """
-    if not full_name or not isinstance(full_name, str):
-        return ("", "")
-    parts = full_name.strip().split()
-    if len(parts) == 0:
-        return ("", "")
-    if len(parts) == 1:
-        return (parts[0], "")
-    firstname = " ".join(parts[:-1])
-    lastname = parts[-1]
-    return (firstname, lastname)
+def parse_name(full_name):
+    parts = (full_name or "").strip().rsplit(" ", 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return (full_name or "").strip(), ""
 
 
-def map_status(status_str: str) -> tuple[str, str]:
-    """Map the spreadsheet status to (db_status, presentation_type)."""
-    if not isinstance(status_str, str):
-        return (ABSTRACT_STATUS, "either")
-    lower = status_str.strip().lower()
-    if "oral" in lower:
-        return ("accepted", "oral")
-    if "poster" in lower:
-        return ("accepted", "poster")
-    return (ABSTRACT_STATUS, "either")
+def parse_author_name(raw):
+    name = str(raw).strip()
+    if "|" in name:
+        name = name.split("|")[0].strip()
+    return parse_name(name)
 
 
-def get_or_create_user(db: Session, email: str, firstname: str, lastname: str) -> User | None:
-    """Find existing user by email, or create a new one. Returns the User."""
-    if not email or not isinstance(email, str):
-        return None
-    email = email.strip().lower()
-    if not email:
-        return None
-
-    existing = db.query(User).filter(User.email == email).first()
-    if existing:
-        return existing
-
-    # Generate a placeholder phone from email
-    phone = f"pending_{email.split('@')[0]}"
-
-    # Avoid phone collisions
-    if db.query(User).filter(User.phone == phone).first():
-        phone = f"pending_{email.split('@')[0]}_import"
-
-    user = User(
-        firstname=firstname or "Unknown",
-        lastname=lastname or "",
-        email=email,
-        phone=phone,
-        hashed_password="!",
-        verified=False,
-    )
-    db.add(user)
-    db.flush()
-
-    # Assign "User" role so they can eventually log in
-    user_role = db.query(Role).filter(Role.role == "User").first()
-    if user_role:
-        db.add(UserRole(user_id=user.id, role_id=user_role.id))
-        db.flush()
-
-    print(f"  [+] Created user account: {firstname} {lastname} <{email}> (id={user.id})")
-    return user
+def parse_presenter_name(raw):
+    name = str(raw).strip()
+    return parse_name(name)
 
 
-def import_abstracts():
-    print("\n── Import Abstracts from ODS ──────────────────────────────────")
+imported = 0
+skipped = 0
+errors = 0
 
-    if not os.path.exists(ODS_FILE):
-        print(f"  ✗  File not found: {ODS_FILE}")
-        sys.exit(1)
+for _, row in df.iterrows():
+    title = str(row.get("Title") or "").strip()
+    if not title:
+        skipped += 1
+        continue
+    if title in existing_titles:
+        skipped += 1
+        continue
 
-    print(f"  Reading: {ODS_FILE}")
-    df = pd.read_excel(ODS_FILE, engine="odf")
-    print(f"  Found {len(df)} rows in spreadsheet")
+    abstract_text = str(row.get("Description") or "").strip()
+    track = str(row.get("Topic") or "").strip()
+    keywords = str(row.get("Keywords") or "").strip()
+    status_raw = str(row.get("Status") or "").strip()
+    presentation_type = "oral" if "oral" in status_raw.lower() else "poster"
+    status = "accepted"
+    word_count = len(abstract_text.split()) if abstract_text else 0
 
-    # Show column names for debugging
-    print(f"  Columns: {list(df.columns)}")
-
-    db = SessionLocal()
-    imported = 0
-    skipped = 0
-    errors = 0
-    accounts_created = 0
+    presenter_email = str(row.get("Presenter Email") or "").strip().lower()
+    submitter_id = user_by_email.get(presenter_email, 1)
 
     try:
-        for idx, row in df.iterrows():
-            try:
-                # ── Extract fields from the spreadsheet ────────────────────────
-                title = str(row.get("Title", "")).strip()
-                description = str(row.get("Description", "")).strip()
-                topic = str(row.get("Topic", "")).strip()
-                keywords = str(row.get("Keywords", "")).strip()
-                status_raw = str(row.get("Status", ""))
+        cursor.execute(
+            """INSERT INTO abstract
+               (event_id, submitted_by, title, abstract_text, keywords, track,
+                presentation_type, status, word_count, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+            (EVENT_ID, submitter_id, title, abstract_text, keywords, track,
+             presentation_type, status, word_count),
+        )
+        abstract_id = cursor.lastrowid
 
-                author_name_raw = str(row.get("Author Name", "")).strip()
-                author_affiliation = str(row.get("Author Affiliation", "")).strip()
-                presenter_name_raw = str(row.get("Presenter Name", "")).strip()
-                presenter_email = str(row.get("Presenter Email", "")).strip()
+        authors = []
+        first_author_raw = row.get("Author Name")
+        if pd.notna(first_author_raw):
+            fn, ln = parse_author_name(first_author_raw)
+            authors.append({
+                "firstname": fn, "lastname": ln,
+                "email": presenter_email if presenter_email else None,
+                "affiliation": str(row.get("Author Affiliation") or "").strip() or None,
+                "country": None, "is_presenting": True,
+            })
 
-                if not title or title == "nan":
-                    print(f"  [{idx}] Skipping row — no title")
-                    skipped += 1
-                    continue
+        presenter_name_raw = row.get("Presenter Name")
+        if pd.notna(presenter_name_raw):
+            pfn, pln = parse_presenter_name(presenter_name_raw)
+            if not authors or (authors[0]["firstname"].lower(), authors[0]["lastname"].lower()) != (pfn.lower(), pln.lower()):
+                authors.append({
+                    "firstname": pfn, "lastname": pln,
+                    "email": presenter_email if presenter_email else None,
+                    "affiliation": str(row.get("Author Affiliation") or "").strip() or None,
+                    "country": None, "is_presenting": True,
+                })
 
-                # ── Check for duplicate (idempotent) ──────────────────────────
-                existing = db.query(Abstract).filter(
-                    Abstract.title == title,
-                    Abstract.event_id == EVENT_ID,
-                    Abstract.deleted_at == None,
-                ).first()
-                if existing:
-                    print(f"  [{idx}] Skipping (already exists): {title[:60]}…")
-                    skipped += 1
-                    continue
-
-                # ── Map status ────────────────────────────────────────────────
-                status_val, presentation_type = map_status(status_raw)
-
-                # ── Word count ────────────────────────────────────────────────
-                word_count = len(description.split()) if description else 0
-
-                # ── Parse presenter name ──────────────────────────────────────
-                pres_firstname, pres_lastname = parse_name(
-                    presenter_name_raw if presenter_name_raw and presenter_name_raw != "nan"
-                    else author_name_raw
-                )
-
-                # ── Resolve presenter user account ────────────────────────────
-                submitted_by = ADMIN_USER_ID
-                if presenter_email and presenter_email != "nan":
-                    user = get_or_create_user(
-                        db, presenter_email, pres_firstname, pres_lastname
-                    )
-                    if user:
-                        submitted_by = user.id
-                        accounts_created += 1
-
-                # ── Create the abstract record ────────────────────────────────
-                abstract = Abstract(
-                    event_id=EVENT_ID,
-                    submitted_by=submitted_by,
-                    title=title,
-                    abstract_text=description,
-                    keywords=keywords if keywords and keywords != "nan" else None,
-                    track=topic if topic and topic != "nan" else None,
-                    presentation_type=presentation_type,
-                    status=status_val,
-                    word_count=word_count,
-                )
-                db.add(abstract)
-                db.flush()
-
-                # ── Create author records ─────────────────────────────────────
-                author_order = 0
-
-                # 1) First author from "Author Name"
-                if author_name_raw and author_name_raw != "nan":
-                    a_first, a_last = parse_name(author_name_raw)
-                    db.add(AbstractAuthor(
-                        abstract_id=abstract.id,
-                        firstname=a_first or "Unknown",
-                        lastname=a_last or "",
-                        email=None,
-                        affiliation=author_affiliation if author_affiliation and author_affiliation != "nan" else None,
-                        country=None,
-                        is_presenting=False,
-                        author_order=author_order,
-                    ))
-                    author_order += 1
-
-                # 2) Presenting author (if different from first author)
-                if presenter_name_raw and presenter_name_raw != "nan":
-                    p_first, p_last = parse_name(presenter_name_raw)
-                    # Only add if different from first author
-                    if f"{p_first} {p_last}".strip().lower() != f"{a_first if author_name_raw and author_name_raw != 'nan' else ''} {a_last if author_name_raw and author_name_raw != 'nan' else ''}".strip().lower():
-                        db.add(AbstractAuthor(
-                            abstract_id=abstract.id,
-                            firstname=p_first or "Unknown",
-                            lastname=p_last or "",
-                            email=presenter_email if presenter_email and presenter_email != "nan" else None,
-                            affiliation=author_affiliation if author_affiliation and author_affiliation != "nan" else None,
-                            country=None,
-                            is_presenting=True,
-                            author_order=author_order,
-                        ))
-                        author_order += 1
-                    else:
-                        # Same person — mark the first author as presenting
-                        # We need to update the just-added author
-                        first_author = db.query(AbstractAuthor).filter(
-                            AbstractAuthor.abstract_id == abstract.id,
-                            AbstractAuthor.author_order == 0,
-                        ).first()
-                        if first_author:
-                            first_author.is_presenting = True
-                            first_author.email = presenter_email if presenter_email and presenter_email != "nan" else None
-                else:
-                    # No presenter specified — mark first author as presenting
-                    first_author = db.query(AbstractAuthor).filter(
-                        AbstractAuthor.abstract_id == abstract.id,
-                        AbstractAuthor.author_order == 0,
-                    ).first()
-                    if first_author:
-                        first_author.is_presenting = True
-
-                # 3) Additional authors from Author Email_1 through Author Email_8
-                for i in range(1, 9):
-                    col = f"Author Email_{i}"
-                    extra_email = str(row.get(col, "")).strip()
-                    if extra_email and extra_email != "nan" and extra_email != "None":
-                        db.add(AbstractAuthor(
-                            abstract_id=abstract.id,
-                            firstname="Author",
-                            lastname=f"{i}",
-                            email=extra_email,
-                            affiliation=None,
-                            country=None,
-                            is_presenting=False,
-                            author_order=author_order,
-                        ))
-                        author_order += 1
-
-                imported += 1
-                print(f"  [{idx}] Imported: {title[:70]}…")
-
-            except Exception as e:
-                db.rollback()
-                errors += 1
-                print(f"  [{idx}] ERROR: {e}")
+        for i in range(1, 9):
+            col = f"Author Email_{i}"
+            if col not in row.index:
                 continue
+            em = str(row.get(col) or "").strip()
+            if not em or em.lower() == "nan":
+                continue
+            em_lower = em.lower()
+            if any(a.get("email") == em_lower for a in authors):
+                continue
+            authors.append({
+                "firstname": em.split("@")[0].replace(".", " ").title(),
+                "lastname": "", "email": em_lower,
+                "affiliation": None, "country": None, "is_presenting": False,
+            })
 
-        # ── Commit all imports ────────────────────────────────────────────────
-        db.commit()
-        print(f"""
-── Summary ──────────────────────────────────────────────
-  Imported:      {imported}
-  Skipped:       {skipped}
-  Errors:        {errors}
-  User accounts created: {accounts_created}
-──────────────────────────────────────────────────────────
-""")
+        for order, au in enumerate(authors):
+            cursor.execute(
+                """INSERT INTO abstract_author
+                   (abstract_id, firstname, lastname, email, affiliation, country,
+                    is_presenting, author_order, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+                (abstract_id, au["firstname"], au["lastname"], au["email"],
+                 au["affiliation"], au["country"], au["is_presenting"], order),
+            )
+
+        conn.commit()
+        existing_titles.add(title)
+        imported += 1
+        if imported % 20 == 0:
+            print(f"  Imported {imported} abstracts...")
+
     except Exception as e:
-        db.rollback()
-        print(f"\n  ✗  Fatal error: {e}")
-        raise
-    finally:
-        db.close()
+        conn.rollback()
+        errors += 1
+        print(f"  ERROR importing '{title[:50]}': {e}")
 
+cursor.close()
+conn.close()
 
-if __name__ == "__main__":
-    import_abstracts()
+print(f"\nDone! Imported: {imported}, Skipped: {skipped}, Errors: {errors}")
