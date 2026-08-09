@@ -206,6 +206,9 @@ def abstract_stats(
     if event_id:
         all_pres_q = all_pres_q.filter(Abstract.event_id == event_id)
 
+    # Also select event_id so the registration check is event-specific
+    all_pres_q = all_pres_q.add_columns(Abstract.event_id.label("ev_id"))
+
     registered_count = 0
     paid_count = 0
     seen_reg: set = set()
@@ -216,7 +219,10 @@ def abstract_stats(
         seen_reg.add(email)
         user = db.query(User).filter(User.email == email).first()
         if user:
-            reg = db.query(Registration).filter(Registration.user_id == user.id).first()
+            reg = db.query(Registration).filter(
+                Registration.user_id == user.id,
+                Registration.event_id == row.ev_id,
+            ).first()
             if reg:
                 registered_count += 1
                 if reg.paid:
@@ -291,7 +297,7 @@ def list_abstracts(
     if presenter_registered in ("yes", "no") or presenter_paid in ("yes", "no"):
         # Gather all presenting author emails for accepted abstracts in scope
         pres_q = (
-            db.query(AbstractAuthor.email, AbstractAuthor.abstract_id)
+            db.query(AbstractAuthor.email, AbstractAuthor.abstract_id, Abstract.event_id.label("ev_id"))
             .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
             .filter(
                 Abstract.deleted_at == None,
@@ -304,7 +310,7 @@ def list_abstracts(
         if event_id:
             pres_q = pres_q.filter(Abstract.event_id == event_id)
 
-        # Build email → abstract_id map and evaluate registration per email
+        # Build email → status map using event-specific registration check
         matched_abstract_ids = set()
         seen_emails: dict = {}
         for row in pres_q.all():
@@ -316,6 +322,7 @@ def list_abstracts(
                 if user:
                     reg = db.query(Registration).filter(
                         Registration.user_id == user.id,
+                        Registration.event_id == row.ev_id,
                     ).first()
                     if reg:
                         has_registered = True
@@ -733,6 +740,7 @@ def presenter_registration_status(
                 has_registered = True
                 has_paid = bool(reg.paid)
         status_map[email] = {
+            "user_id": user.id if user else None,
             "has_account": has_account,
             "has_registered": has_registered,
             "has_paid": has_paid,

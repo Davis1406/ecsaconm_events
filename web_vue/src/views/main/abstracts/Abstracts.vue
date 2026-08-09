@@ -47,271 +47,231 @@
     <!-- ══════════════════════════════════════════════════════════════════════ -->
     <!-- TAB 1 · Accepted Abstracts                                           -->
     <!-- ══════════════════════════════════════════════════════════════════════ -->
-    <div v-if="activeTab === 'abstracts'" class="flex flex-col gap-4">
+    <div v-if="activeTab === 'abstracts'" class="flex flex-col gap-5">
 
-      <!-- ── Stat cards row 1: abstract counts ──────────────────────────── -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <!-- ── Stat grid ───────────────────────────────────────────────────── -->
+      <div class="grid grid-cols-4 sm:grid-cols-8 gap-2">
 
-        <button @click="setAbstractFilter('all')"
-          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'all' ? 'border-pink-500 bg-pink-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold" :style="abstractsFilter === 'all' ? 'color:rgb(254,80,103)' : 'color:#1f2937'">{{ stats.total ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</span>
-        </button>
-
-        <button @click="setAbstractFilter('oral')"
-          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'oral' ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'oral' ? 'text-blue-600' : 'text-gray-800'">{{ stats.oral ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Oral</span>
-        </button>
-
-        <button @click="setAbstractFilter('poster')"
-          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'poster' ? 'border-purple-500 bg-purple-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'poster' ? 'text-purple-600' : 'text-gray-800'">{{ stats.poster ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Poster</span>
-        </button>
-
-        <button @click="setAbstractFilter('presenters')"
-          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'presenters' ? 'border-green-500 bg-green-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'presenters' ? 'text-green-600' : 'text-gray-800'">{{ stats.unique_presenters ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">Unique Presenters</span>
-        </button>
-
-        <button @click="setAbstractFilter('multi')"
-          class="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'multi' ? 'border-orange-500 bg-orange-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-2xl font-extrabold" :class="abstractsFilter === 'multi' ? 'text-orange-500' : 'text-gray-800'">{{ stats.multi_presenters ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">2+ Abstracts</span>
-        </button>
-
-      </div>
-
-      <!-- ── Stat cards row 2: registration / payment ─────────────────────── -->
-      <div class="grid grid-cols-3 gap-3">
-
-        <button @click="setAbstractFilter('registered')"
-          class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'registered' ? 'border-teal-500 bg-teal-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-xl font-extrabold" :class="abstractsFilter === 'registered' ? 'text-teal-600' : 'text-gray-800'">{{ stats.registered ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">✓ Registered</span>
-        </button>
-
-        <button @click="setAbstractFilter('not_registered')"
-          class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'not_registered' ? 'border-red-400 bg-red-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-xl font-extrabold" :class="abstractsFilter === 'not_registered' ? 'text-red-500' : 'text-gray-800'">{{ stats.not_registered ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">✗ Not Registered</span>
-        </button>
-
-        <button @click="setAbstractFilter('paid')"
-          class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl shadow-sm border-2 transition"
-          :class="abstractsFilter === 'paid' ? 'border-emerald-500 bg-emerald-50' : 'border-transparent bg-white hover:border-gray-200'">
-          <span class="text-xl font-extrabold" :class="abstractsFilter === 'paid' ? 'text-emerald-600' : 'text-gray-800'">{{ stats.paid ?? '—' }}</span>
-          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide text-center leading-tight">💳 Paid</span>
+        <!-- Abstract type counts -->
+        <button v-for="card in statCards" :key="card.key"
+          @click="setAbstractFilter(card.key)"
+          class="group flex flex-col items-start p-4 bg-white rounded-xl border transition-all duration-150 col-span-2"
+          :class="abstractsFilter === card.key
+            ? 'border-gray-300 shadow-sm'
+            : 'border-gray-100 hover:border-gray-200 hover:shadow-sm'">
+          <span class="text-2xl font-bold tracking-tight transition-colors"
+            :style="abstractsFilter === card.key ? `color: ${card.color}` : 'color: #111827'">
+            {{ stats[card.stat] ?? '—' }}
+          </span>
+          <span class="text-xs font-medium text-gray-400 mt-0.5 leading-tight">{{ card.label }}</span>
+          <!-- Active indicator -->
+          <div class="h-0.5 w-5 mt-2 rounded-full transition-all duration-150"
+            :style="abstractsFilter === card.key ? `background:${card.color}` : 'background:transparent'"></div>
         </button>
 
       </div>
 
       <!-- ── Main card ─────────────────────────────────────────────────────── -->
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
 
-      <!-- Toolbar -->
-      <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-        <h2 class="text-sm font-bold text-gray-700 flex-1 flex items-center gap-2">
-          Accepted Abstracts
-          <span v-if="abstractsTotal" class="text-xs font-normal text-gray-400">({{ abstractsTotal }})</span>
-          <span v-if="abstractsFilter !== 'all'" class="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
-            :class="{
-              'bg-blue-100 text-blue-700': abstractsFilter === 'oral',
-              'bg-purple-100 text-purple-700': abstractsFilter === 'poster',
-              'bg-green-100 text-green-700': abstractsFilter === 'presenters',
-              'bg-orange-100 text-orange-700': abstractsFilter === 'multi',
-              'bg-teal-100 text-teal-700': abstractsFilter === 'registered',
-              'bg-red-100 text-red-600': abstractsFilter === 'not_registered',
-              'bg-emerald-100 text-emerald-700': abstractsFilter === 'paid',
-            }">
-            {{ { oral:'Oral only', poster:'Poster only', presenters:'All (by presenter)', multi:'2+ abstracts', registered:'Registered', not_registered:'Not Registered', paid:'Paid' }[abstractsFilter] }}
-            <button @click="setAbstractFilter('all')" class="hover:opacity-70">✕</button>
-          </span>
-        </h2>
-        <!-- Page size picker -->
-        <select v-model.number="abstractsPageSize" @change="abstractsPage = 1; loadAbstracts()"
-          class="px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 focus:outline-none">
-          <option :value="25">25 / page</option>
-          <option :value="50">50 / page</option>
-          <option :value="100">100 / page</option>
-        </select>
-        <search-component @search="handleAbstractSearch" />
-        <button @click="activeTab = 'reminders'"
-          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
-          style="background-color: rgb(254,80,103);">
-          <BellAlertIcon class="w-4 h-4" />
-          Send Reminders
-        </button>
-        <button @click="showImport = !showImport"
-          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
-          style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
-          <ArrowUpTrayIcon class="w-4 h-4" />
-          Import
-        </button>
-      </div>
-
-      <!-- Import panel (collapsed by default) -->
-      <div v-if="showImport" class="px-5 py-5 border-b border-gray-100 bg-gray-50 space-y-4">
-        <h3 class="font-semibold text-gray-700">Import Abstracts from File</h3>
-        <p class="text-sm text-gray-500">Upload an ODS or XLSX file exported from your abstract management system.</p>
-        <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
-          <div class="flex-1">
-            <label class="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">File (.xlsx or .ods)</label>
-            <input type="file" accept=".xlsx,.ods,.xls" @change="onImportFileSelected" ref="importFileInput"
-              class="block w-full text-sm text-gray-700 border border-gray-200 rounded-xl px-3 py-2
-                     file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0
-                     file:text-xs file:font-semibold file:text-white cursor-pointer" />
-          </div>
-          <div class="flex gap-2">
-            <button @click="previewImport" :disabled="!importFile || importLoading"
-              class="px-5 py-2 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-50"
-              style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
-              {{ importLoading ? 'Checking…' : 'Preview' }}
-            </button>
-            <button v-if="importPreview" @click="runImport" :disabled="importLoading"
-              class="px-5 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-              style="background-color: rgb(254,80,103);">
-              {{ importLoading ? 'Importing…' : 'Import' }}
+        <!-- Toolbar -->
+        <div class="flex flex-wrap items-center gap-2 px-5 py-3.5 border-b border-gray-100">
+          <!-- Active filter pill -->
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <span class="text-sm font-semibold text-gray-700">Abstracts</span>
+            <span v-if="abstractsTotal" class="text-xs text-gray-400">({{ abstractsTotal }})</span>
+            <button v-if="abstractsFilter !== 'all'" @click="setAbstractFilter('all')"
+              class="inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+              {{ statCards.find(c => c.key === abstractsFilter)?.label ?? abstractsFilter }}
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
           </div>
+          <!-- Controls -->
+          <select v-model.number="abstractsPageSize" @change="abstractsPage = 1; loadAbstracts()"
+            class="px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 focus:outline-none bg-white">
+            <option :value="25">25 / page</option>
+            <option :value="50">50 / page</option>
+            <option :value="100">100 / page</option>
+          </select>
+          <search-component @search="handleAbstractSearch" />
+          <button @click="activeTab = 'reminders'"
+            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+            style="background-color: rgb(254,80,103);">
+            <BellAlertIcon class="w-3.5 h-3.5" />
+            Reminders
+          </button>
+          <button @click="showImport = !showImport"
+            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition"
+            style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+            <ArrowUpTrayIcon class="w-3.5 h-3.5" />
+            Import
+          </button>
         </div>
-        <!-- Preview stats -->
-        <div v-if="importPreview" class="flex flex-wrap gap-2 text-xs font-semibold">
-          <span class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700">{{ importPreview.to_import }} to import</span>
-          <span class="px-3 py-1.5 rounded-full bg-gray-100 text-gray-500">{{ importPreview.duplicates }} duplicates</span>
-          <span class="px-3 py-1.5 rounded-full bg-green-100 text-green-700">{{ importPreview.with_accounts }} have accounts</span>
-          <span class="px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-700">{{ importPreview.without_accounts }} no account</span>
-        </div>
-        <div v-if="importResult" class="p-3 rounded-xl text-sm bg-green-50 border border-green-200 text-green-800">
-          ✓ Imported {{ importResult.imported }} abstracts · {{ importResult.skipped_duplicates }} duplicates skipped
-        </div>
-      </div>
 
-      <!-- Abstract list table -->
-      <SpinnerComponent v-if="abstractsLoading" />
-      <div v-else>
-        <!-- Table header with sortable columns -->
-        <div class="hidden sm:flex bg-mercury-500 px-5 py-2 uppercase text-xs font-bold text-gray-500 select-none">
-          <div class="w-8 flex-shrink-0 text-center">#</div>
-          <div class="flex-1 pl-3 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
-            @click="setSort('title')">
-            Title
-            <span class="text-gray-300">
-              <svg v-if="abstractsSort.field === 'title'" class="w-3 h-3" :class="abstractsSort.dir === 'asc' ? 'text-pink-500' : 'text-pink-500'" fill="currentColor" viewBox="0 0 20 20">
-                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
-                <path v-else d="M10 17l7-7H3l7 7z"/>
-              </svg>
-              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
-            </span>
+        <!-- Import panel -->
+        <div v-if="showImport" class="px-5 py-5 border-b border-gray-100 bg-gray-50 space-y-4">
+          <h3 class="font-semibold text-gray-700 text-sm">Import Abstracts from File</h3>
+          <p class="text-xs text-gray-500">Upload an ODS or XLSX file from your abstract management system.</p>
+          <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+            <div class="flex-1">
+              <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">File (.xlsx or .ods)</label>
+              <input type="file" accept=".xlsx,.ods,.xls" @change="onImportFileSelected" ref="importFileInput"
+                class="block w-full text-sm text-gray-700 border border-gray-200 rounded-lg px-3 py-2
+                       file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0
+                       file:text-xs file:font-semibold file:text-white cursor-pointer" />
+            </div>
+            <div class="flex gap-2">
+              <button @click="previewImport" :disabled="!importFile || importLoading"
+                class="px-4 py-2 rounded-lg text-xs font-semibold border transition disabled:opacity-50"
+                style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+                {{ importLoading ? 'Checking…' : 'Preview' }}
+              </button>
+              <button v-if="importPreview" @click="runImport" :disabled="importLoading"
+                class="px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                style="background-color: rgb(254,80,103);">
+                {{ importLoading ? 'Importing…' : 'Import' }}
+              </button>
+            </div>
           </div>
-          <div class="w-3/12 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
-            @click="setSort('presenter')">
-            Presenter
-            <span>
-              <svg v-if="abstractsSort.field === 'presenter'" class="w-3 h-3 text-pink-500" fill="currentColor" viewBox="0 0 20 20">
-                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
-                <path v-else d="M10 17l7-7H3l7 7z"/>
-              </svg>
-              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
-            </span>
+          <div v-if="importPreview" class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{{ importPreview.to_import }} to import</span>
+            <span class="px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">{{ importPreview.duplicates }} duplicates</span>
+            <span class="px-2.5 py-1 rounded-full bg-green-50 text-green-600 border border-green-100">{{ importPreview.with_accounts }} have accounts</span>
+            <span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-100">{{ importPreview.without_accounts }} no account</span>
           </div>
-          <div class="w-2/12 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
-            @click="setSort('type')">
-            Type
-            <span>
-              <svg v-if="abstractsSort.field === 'type'" class="w-3 h-3 text-pink-500" fill="currentColor" viewBox="0 0 20 20">
-                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
-                <path v-else d="M10 17l7-7H3l7 7z"/>
-              </svg>
-              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
-            </span>
-          </div>
-          <div class="w-2/12 cursor-pointer flex items-center gap-1 hover:text-gray-700 transition"
-            @click="setSort('created_at')">
-            Date
-            <span>
-              <svg v-if="abstractsSort.field === 'created_at'" class="w-3 h-3 text-pink-500" fill="currentColor" viewBox="0 0 20 20">
-                <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/>
-                <path v-else d="M10 17l7-7H3l7 7z"/>
-              </svg>
-              <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
-            </span>
+          <div v-if="importResult" class="p-3 rounded-lg text-sm bg-green-50 border border-green-200 text-green-700">
+            ✓ Imported {{ importResult.imported }} abstracts · {{ importResult.skipped_duplicates }} duplicates skipped
           </div>
         </div>
 
-        <div v-if="abstracts.length === 0" class="px-5 py-10 text-center text-sm text-gray-400 italic">No abstracts found.</div>
-        <div v-for="(a, idx) in sortedAbstracts" :key="a.id"
-          class="flex sm:flex-row flex-col px-5 py-3 text-sm items-start sm:items-center border-t border-gray-100 cursor-pointer hover:bg-gray-50 transition group"
-          @click="$router.push({ name: 'Abstract', params: { id: a.id } })">
-          <!-- Row number -->
-          <div class="hidden sm:flex w-8 flex-shrink-0 justify-center text-xs text-gray-300 group-hover:text-gray-400 font-mono tabular-nums">
-            {{ (abstractsPage - 1) * abstractsPageSize + idx + 1 }}
-          </div>
-          <!-- Title -->
-          <div class="flex-1 sm:pl-3 font-medium text-gray-800 leading-snug pr-3">
-            {{ a.title }}
-          </div>
-          <!-- Presenter -->
-          <div class="sm:w-3/12 w-full text-xs text-gray-600 pr-2 mt-1 sm:mt-0">
-            <span class="sm:hidden text-gray-400 mr-1">Presenter:</span>
-            <span class="font-medium">{{ presenterName(a) }}</span>
-            <!-- Registration / payment badge -->
-            <template v-if="presenterEmail(a) && presenterStatus(a)">
-              <span v-if="presenterStatus(a).has_paid"
-                class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 whitespace-nowrap">
-                💳 Paid
+        <!-- Table header -->
+        <SpinnerComponent v-if="abstractsLoading" />
+        <div v-else>
+          <div class="hidden sm:grid grid-cols-12 px-5 py-2.5 border-b border-gray-100 select-none">
+            <div class="col-span-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">#</div>
+            <div class="col-span-5 text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-600 flex items-center gap-1 transition"
+              @click="setSort('title')">
+              Title
+              <span class="inline-flex">
+                <svg v-if="abstractsSort.field === 'title'" class="w-3 h-3" style="color:rgb(254,80,103)" fill="currentColor" viewBox="0 0 20 20">
+                  <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/><path v-else d="M10 17l7-7H3l7 7z"/>
+                </svg>
+                <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
               </span>
-              <span v-else-if="presenterStatus(a).has_registered"
-                class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-700 whitespace-nowrap">
-                ✓ Registered
+            </div>
+            <div class="col-span-3 text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-600 flex items-center gap-1 transition"
+              @click="setSort('presenter')">
+              Presenter
+              <span class="inline-flex">
+                <svg v-if="abstractsSort.field === 'presenter'" class="w-3 h-3" style="color:rgb(254,80,103)" fill="currentColor" viewBox="0 0 20 20">
+                  <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/><path v-else d="M10 17l7-7H3l7 7z"/>
+                </svg>
+                <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
               </span>
-              <span v-else
-                class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 whitespace-nowrap">
-                ✗ Not Registered
+            </div>
+            <div class="col-span-2 text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-600 flex items-center gap-1 transition"
+              @click="setSort('type')">
+              Type
+              <span class="inline-flex">
+                <svg v-if="abstractsSort.field === 'type'" class="w-3 h-3" style="color:rgb(254,80,103)" fill="currentColor" viewBox="0 0 20 20">
+                  <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/><path v-else d="M10 17l7-7H3l7 7z"/>
+                </svg>
+                <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
               </span>
-            </template>
-            <div v-if="presenterEmail(a)" class="text-gray-400 truncate mt-0.5">{{ presenterEmail(a) }}</div>
+            </div>
+            <div class="col-span-1 text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-600 flex items-center gap-1 transition"
+              @click="setSort('created_at')">
+              Date
+              <span class="inline-flex">
+                <svg v-if="abstractsSort.field === 'created_at'" class="w-3 h-3" style="color:rgb(254,80,103)" fill="currentColor" viewBox="0 0 20 20">
+                  <path v-if="abstractsSort.dir === 'asc'" d="M10 3l7 7H3l7-7z"/><path v-else d="M10 17l7-7H3l7 7z"/>
+                </svg>
+                <svg v-else class="w-3 h-3 opacity-30" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3l7 7H3l7-7zM10 17l7-7H3l7 7z"/></svg>
+              </span>
+            </div>
           </div>
-          <!-- Type badge -->
-          <div class="sm:w-2/12 w-full mt-1 sm:mt-0">
-            <span v-if="a.presentation_type === 'oral'"
-              class="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700 capitalize">
-              {{ a.presentation_type }}
-            </span>
-            <span v-else-if="a.presentation_type === 'poster'"
-              class="text-xs px-2 py-0.5 rounded-full font-semibold bg-purple-100 text-purple-700 capitalize">
-              {{ a.presentation_type }}
-            </span>
-            <span v-else class="text-xs text-gray-400">—</span>
-          </div>
-          <!-- Date -->
-          <div class="sm:w-2/12 w-full text-xs text-gray-400 mt-1 sm:mt-0">{{ formatDate(a.created_at) }}</div>
-          <!-- Edit icon -->
-          <div class="sm:w-8 flex-shrink-0 flex justify-end">
-            <button @click.stop="openEditModal(a)" title="Edit abstract"
-              class="p-1.5 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition opacity-0 group-hover:opacity-100">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-              </svg>
-            </button>
+
+          <div v-if="abstracts.length === 0" class="px-5 py-12 text-center text-sm text-gray-400">No abstracts found.</div>
+
+          <div v-for="(a, idx) in sortedAbstracts" :key="a.id"
+            class="group grid sm:grid-cols-12 grid-cols-1 px-5 py-3.5 border-b border-gray-50 last:border-b-0
+                   cursor-pointer hover:bg-gray-50/70 transition-colors duration-100 items-center"
+            @click="$router.push({ name: 'Abstract', params: { id: a.id } })">
+
+            <!-- # -->
+            <div class="hidden sm:flex col-span-1 text-xs text-gray-300 font-mono tabular-nums group-hover:text-gray-400">
+              {{ (abstractsPage - 1) * abstractsPageSize + idx + 1 }}
+            </div>
+
+            <!-- Title -->
+            <div class="col-span-5 sm:pr-4">
+              <p class="text-sm font-medium text-gray-800 leading-snug line-clamp-2">{{ a.title }}</p>
+            </div>
+
+            <!-- Presenter -->
+            <div class="col-span-3 sm:pr-3 mt-1.5 sm:mt-0">
+              <!-- Name: clickable to profile if account exists -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button v-if="presenterStatus(a)?.user_id"
+                  @click.stop="$router.push({ name: 'User', params: { id: presenterStatus(a).user_id } })"
+                  class="text-xs font-semibold text-gray-700 hover:underline hover:text-blue-600 transition text-left">
+                  {{ presenterName(a) }}
+                </button>
+                <span v-else class="text-xs font-semibold text-gray-600">{{ presenterName(a) }}</span>
+                <!-- Compact status dot -->
+                <span v-if="presenterEmail(a) && presenterStatus(a)" class="flex items-center gap-0.5">
+                  <span v-if="presenterStatus(a).has_paid"
+                    class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" title="Paid"></span>
+                  <span v-else-if="presenterStatus(a).has_registered"
+                    class="inline-block w-1.5 h-1.5 rounded-full bg-sky-400" title="Registered"></span>
+                  <span v-else
+                    class="inline-block w-1.5 h-1.5 rounded-full bg-rose-400" title="Not registered"></span>
+                </span>
+              </div>
+              <p v-if="presenterEmail(a)" class="text-xs text-gray-400 truncate mt-0.5">{{ presenterEmail(a) }}</p>
+              <!-- Status label (only when status status map is loaded) -->
+              <p v-if="presenterEmail(a) && presenterStatus(a)" class="text-[10px] font-medium mt-0.5"
+                :class="{
+                  'text-emerald-600': presenterStatus(a).has_paid,
+                  'text-sky-500': !presenterStatus(a).has_paid && presenterStatus(a).has_registered,
+                  'text-rose-500': !presenterStatus(a).has_registered,
+                }">
+                {{ presenterStatus(a).has_paid ? 'Paid' : presenterStatus(a).has_registered ? 'Registered' : 'Not registered' }}
+              </p>
+            </div>
+
+            <!-- Type -->
+            <div class="col-span-2 mt-1.5 sm:mt-0">
+              <span v-if="a.presentation_type === 'oral'"
+                class="inline-block text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-600 border border-blue-100 capitalize">
+                Oral
+              </span>
+              <span v-else-if="a.presentation_type === 'poster'"
+                class="inline-block text-xs px-2 py-0.5 rounded-full font-medium bg-violet-50 text-violet-600 border border-violet-100 capitalize">
+                Poster
+              </span>
+              <span v-else class="text-xs text-gray-300">—</span>
+            </div>
+
+            <!-- Date + edit -->
+            <div class="col-span-1 flex items-center justify-between mt-1.5 sm:mt-0">
+              <span class="text-xs text-gray-400">{{ formatDate(a.created_at) }}</span>
+              <button @click.stop="openEditModal(a)" title="Edit"
+                class="ml-2 p-1 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition opacity-0 group-hover:opacity-100 flex-shrink-0">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+              </button>
+            </div>
+
           </div>
         </div>
-      </div>
 
-      <!-- Pagination -->
-      <div class="px-5 py-3 border-t border-gray-100">
-        <pagination-component :currentPage="abstractsPage" :totalPages="abstractsTotalPages" @page-change="handleAbstractPage" />
-      </div>
+        <!-- Pagination -->
+        <div class="px-5 py-3 border-t border-gray-100">
+          <pagination-component :currentPage="abstractsPage" :totalPages="abstractsTotalPages" @page-change="handleAbstractPage" />
+        </div>
 
       </div><!-- /main card -->
     </div><!-- /tab 1 -->
@@ -802,6 +762,20 @@ export default {
   computed: {
     abstractsTotalPages() { return Math.max(1, Math.ceil(this.abstractsTotal / this.abstractsPageSize)) },
     uploadsTotalPages()   { return Math.max(1, Math.ceil(this.uploadsTotal / this.uploadsPageSize)) },
+
+    statCards() {
+      return [
+        { key: 'all',          stat: 'total',             label: 'Total',            color: 'rgb(254,80,103)' },
+        { key: 'oral',         stat: 'oral',              label: 'Oral',             color: 'rgb(37,99,235)' },
+        { key: 'poster',       stat: 'poster',            label: 'Poster',           color: 'rgb(124,58,237)' },
+        { key: 'presenters',   stat: 'unique_presenters', label: 'Unique Presenters',color: 'rgb(5,150,105)' },
+        { key: 'multi',        stat: 'multi_presenters',  label: '2+ Abstracts',     color: 'rgb(234,88,12)' },
+        { key: 'registered',   stat: 'registered',        label: 'Registered',       color: 'rgb(13,148,136)' },
+        { key: 'not_registered', stat: 'not_registered',  label: 'Not Registered',   color: 'rgb(220,38,38)' },
+        { key: 'paid',         stat: 'paid',              label: 'Paid',             color: 'rgb(16,185,129)' },
+      ]
+    },
+
     // Client-side sort for presenter (server sorts by title/type/date)
     sortedAbstracts() {
       if (this.abstractsSort.field !== 'presenter') return this.abstracts
