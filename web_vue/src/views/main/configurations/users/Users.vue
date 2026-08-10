@@ -67,6 +67,13 @@
           </div>
           <!-- Actions -->
           <div class="col-span-1 flex justify-end gap-1.5">
+            <button v-if="canImpersonate && user.id !== authStore.loginUser?.id"
+              @click="impersonateUser(user)"
+              :disabled="impersonatingId === user.id"
+              class="p-1.5 rounded-lg text-gray-400 hover:bg-pink-50 hover:text-pink-600 transition disabled:opacity-50"
+              title="Log in as this user">
+              <ArrowRightOnRectangleIcon class="w-4 h-4" />
+            </button>
             <router-link v-if="permissions.includes('VIEW_USER')"
               :to="{ name: 'User', params: { id: user.id } }"
               class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition"
@@ -103,10 +110,10 @@
 
 <script>
 import HeaderView from '@/includes/Header.vue'
-import { EyeIcon, PencilSquareIcon, TrashIcon } from '@heroicons/vue/24/solid'
+import { EyeIcon, PencilSquareIcon, TrashIcon, ArrowRightOnRectangleIcon } from '@heroicons/vue/24/solid'
 import PaginationComponent from '@/components/PaginationComponent.vue'
 import SearchComponent from '@/components/SearchComponent.vue'
-import { fetchData, deleteItem } from '@/services/apiService'
+import { fetchData, deleteItem, createItem, setAuthToken } from '@/services/apiService'
 import SpinnerComponent from '@/components/Spinner.vue'
 import DeleteConfirmationModal from '@/components/DeleteConfirmationModal.vue'
 import { useAuthStore } from '@/store/authStore'
@@ -114,7 +121,7 @@ import { useAuthStore } from '@/store/authStore'
 export default {
   name: 'UsersView',
   components: {
-    EyeIcon, PencilSquareIcon, TrashIcon,
+    EyeIcon, PencilSquareIcon, TrashIcon, ArrowRightOnRectangleIcon,
     PaginationComponent, SearchComponent, HeaderView, SpinnerComponent, DeleteConfirmationModal,
   },
   data() {
@@ -127,13 +134,19 @@ export default {
       totalPages: 1,
       pageSize: 20,
       searchPhrase: '',
+      impersonatingId: null,
     }
   },
   setup() {
     const authStore = useAuthStore()
     const raw = authStore.permissions || []
     const permissions = raw.map(p => typeof p === 'string' ? p : p.permission_code)
-    return { permissions }
+    return { permissions, authStore }
+  },
+  computed: {
+    canImpersonate() {
+      return this.permissions.includes('ADMIN_DASHBOARD') && !this.authStore.isImpersonating
+    },
   },
   mounted() {
     this.getUsers()
@@ -171,6 +184,22 @@ export default {
         this.showDeleteModal = false
       } finally {
         this.isLoading = false
+      }
+    },
+    async impersonateUser(user) {
+      this.impersonatingId = user.id
+      try {
+        const response = await createItem(`auth/impersonate/${user.id}`, {})
+        this.authStore.startImpersonation(response)
+        setAuthToken()
+        const targetIsAdmin = (response.permissions || []).some(
+          p => (typeof p === 'string' ? p : p.permission_code) === 'ADMIN_DASHBOARD'
+        )
+        this.$router.push({ name: targetIsAdmin ? 'Dashboard' : 'MyDashboard' })
+      } catch (error) {
+        console.error('Error impersonating user:', error)
+      } finally {
+        this.impersonatingId = null
       }
     },
     showDeleteConfirmation(id) {

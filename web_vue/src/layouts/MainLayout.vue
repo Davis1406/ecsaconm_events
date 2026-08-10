@@ -36,8 +36,9 @@
 
     <!-- ── Main column ────────────────────────────────────────────────────── -->
     <div class="flex flex-col flex-1 min-w-0 h-screen overflow-hidden bg-surface">
+      <ImpersonationBanner />
       <!-- scrollable canvas — header is sticky inside this -->
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto px-4 md:px-6 py-4">
         <router-view />
       </div>
     </div>
@@ -47,9 +48,10 @@
 
 <script>
 import SidebarView from '@/includes/Sidebar.vue'
+import ImpersonationBanner from '@/components/ImpersonationBanner.vue'
 
 export default {
   name: 'MainLayout',
-  components: { SidebarView },
+  components: { SidebarView, ImpersonationBanner },
 }
 </script>

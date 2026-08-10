@@ -1,5 +1,9 @@
 <template>
-  <div class="flex flex-col sm:flex-row min-h-screen bg-gray-50">
+  <div class="flex flex-col min-h-screen bg-gray-50">
+
+    <ImpersonationBanner />
+
+    <div class="flex flex-col sm:flex-row flex-1">
 
     <!-- Mobile top bar -->
     <div class="sm:hidden flex items-center justify-between px-4 py-3 bg-white shadow-sm">
@@ -111,6 +115,7 @@
       <router-view></router-view>
     </main>
 
+    </div>
   </div>
 </template>
 
@@ -119,13 +124,14 @@ import axios from 'axios'
 import { HomeIcon, CalendarDaysIcon, UserIcon } from '@heroicons/vue/24/outline'
 import { useAuthStore } from '@/store/authStore'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import ImpersonationBanner from '@/components/ImpersonationBanner.vue'
 
 const API_URL = import.meta.env.VITE_API_URL
 
 export default {
   name: 'MyAccountLayout',
   components: {
-    HomeIcon, CalendarDaysIcon, UserIcon, ThemeToggle,
+    HomeIcon, CalendarDaysIcon, UserIcon, ThemeToggle, ImpersonationBanner,
   },
   data() {
     return {
