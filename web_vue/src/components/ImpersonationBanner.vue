@@ -27,7 +27,6 @@
 
 <script>
 import { useAuthStore } from '@/store/authStore'
-import { setAuthToken } from '@/services/apiService'
 
 export default {
   name: 'ImpersonationBanner',
@@ -42,7 +41,11 @@ export default {
     },
   },
   methods: {
-    stopImpersonating() {
+    async stopImpersonating() {
+      // Lazy-import: a static import of apiService here would execute its
+      // module-scope setAuthToken() before pinia is installed (layouts are
+      // eagerly imported by the router), crashing the app at boot.
+      const { setAuthToken } = await import('@/services/apiService')
       this.authStore.stopImpersonation()
       setAuthToken()
       this.$router.push({ name: 'Dashboard' })
