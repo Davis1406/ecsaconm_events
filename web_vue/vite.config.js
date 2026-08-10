@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5174,
     host: true,
   },
-  resolve: {
+resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }

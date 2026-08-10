@@ -1,39 +1,45 @@
 <template>
-  <div class="flex h-screen overflow-hidden bg-gray-50 font-roboto">
+  <div class="flex h-screen overflow-hidden bg-surface font-sans antialiased">
 
-    <!-- Sidebar — fixed height, internally scrollable -->
-    <aside class="w-56 flex-shrink-0 bg-white shadow-sm h-screen flex flex-col hidden sm:flex">
-
-      <!-- Logo -->
-      <div class="flex items-center justify-center py-6 border-b border-gray-100 flex-shrink-0">
-        <router-link :to="{ name: 'Dashboard' }">
-          <img src="@/assets/images/logo.png" class="h-16 w-16 object-contain" alt="ECSACONM" />
+    <!-- ── Sidebar ────────────────────────────────────────────────────────── -->
+    <aside class="hidden md:flex flex-col w-[260px] flex-shrink-0 h-full bg-surface-container-lowest border-r border-outline-variant z-10">
+      <!-- Brand -->
+      <div class="flex items-center gap-3 px-5 py-5 flex-shrink-0">
+        <router-link :to="{ name: 'Dashboard' }" class="flex items-center gap-3 group">
+          <div class="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0"
+            style="background-color: rgb(254,80,103);">
+            <img src="@/assets/images/logo.png" class="w-9 h-9 object-contain rounded-lg" alt="" />
+          </div>
+          <div>
+            <p class="text-sm font-bold text-on-surface leading-tight">ECSACONM</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">Admin Console</p>
+          </div>
         </router-link>
       </div>
 
-      <!-- Nav — scrollable if many items -->
-      <div class="flex-1 overflow-y-auto py-3 px-2">
+      <!-- Nav -->
+      <div class="flex-1 overflow-y-auto px-3 pb-3">
         <SidebarView />
       </div>
 
-      <!-- Bottom user info -->
-      <div class="border-t border-gray-100 p-3 space-y-2 flex-shrink-0">
+      <!-- Bottom links -->
+      <div class="px-3 pb-4 pt-3 border-t border-surface-container-high flex-shrink-0 space-y-0.5">
         <router-link :to="{ name: 'Home' }"
-          class="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 transition">
-          <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-on-surface-variant hover:bg-surface-container transition-colors">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
           </svg>
-          <span>Back to Site</span>
+          Back to Site
         </router-link>
       </div>
     </aside>
 
-    <!-- Main area — scrolls independently of the sidebar -->
-    <div class="flex flex-col flex-1 min-w-0 h-screen overflow-y-auto">
-      <div class="flex-1 p-6 max-w-7xl w-full mx-auto">
+    <!-- ── Main column ────────────────────────────────────────────────────── -->
+    <div class="flex flex-col flex-1 min-w-0 h-screen overflow-hidden bg-surface">
+      <!-- scrollable canvas — header is sticky inside this -->
+      <div class="flex-1 overflow-y-auto">
         <router-view />
       </div>
-      <FooterView />
     </div>
 
   </div>
@@ -41,10 +47,9 @@
 
 <script>
 import SidebarView from '@/includes/Sidebar.vue'
-import FooterView from '@/includes/Footer.vue'
 
 export default {
   name: 'MainLayout',
-  components: { SidebarView, FooterView },
+  components: { SidebarView },
 }
 </script>
