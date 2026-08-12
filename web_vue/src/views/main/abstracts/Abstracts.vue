@@ -427,6 +427,11 @@
           <div class="sm:w-3/12 w-full text-xs text-gray-500">{{ tpl.description || '—' }}</div>
           <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ formatSize(tpl.file_size) }}</div>
           <div class="sm:w-2/12 w-full flex gap-2">
+            <button v-if="isPreviewable(tpl.original_name)" @click="openTemplatePreview(tpl)"
+              class="px-3 py-1 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
+              style="background-color: rgb(254,80,103);">
+              Preview
+            </button>
             <a :href="`${apiUrl}/presentation_templates/${tpl.id}/download`" target="_blank"
               class="px-3 py-1 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
               style="background-color: rgb(0,150,180);">
@@ -754,6 +759,39 @@
     </div>
   </Teleport>
 
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- Template Preview Modal                                                -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <Teleport to="body">
+    <div v-if="templatePreview.open"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      @click.self="closeTemplatePreview">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeTemplatePreview"></div>
+
+      <div class="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="height: 85vh;">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <h2 class="font-semibold text-gray-800 text-base truncate pr-4">{{ templatePreview.name }}</h2>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <a v-if="templatePreview.id" :href="`${apiUrl}/presentation_templates/${templatePreview.id}/download`" target="_blank"
+              class="px-3 py-1.5 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
+              style="background-color: rgb(0,150,180);">
+              Download
+            </a>
+            <button @click="closeTemplatePreview" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex-1 bg-gray-50">
+          <iframe v-if="templatePreview.src" :src="templatePreview.src" class="w-full h-full" style="border:none;"></iframe>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
 </template>
 
 <script>
@@ -810,6 +848,7 @@ export default {
       showTemplateUpload: false,
       selectedTemplateFile: null, newTemplateDescription: '',
       templateUploading: false,
+      templatePreview: { open: false, id: null, name: '', src: '' },
 
       // ── Tab 3: Reminders ──────────────────────────────────────────────────
       presenters: [], remindersLoading: false,
@@ -1138,6 +1177,25 @@ export default {
         this.loadTemplates()
       } catch (e) { this.errorMsg = e.response?.data?.detail || 'Upload failed.' }
       finally { this.templateUploading = false }
+    },
+
+    // File types the modal can actually render (native PDF, or Office viewer for ppt/doc)
+    isPreviewable(name) {
+      const ext = (name || '').split('.').pop().toLowerCase()
+      return ['pdf', 'ppt', 'pptx', 'doc', 'docx'].includes(ext)
+    },
+
+    openTemplatePreview(tpl) {
+      const ext = (tpl.original_name || '').split('.').pop().toLowerCase()
+      const fileUrl = `${this.apiUrl}/presentation_templates/${tpl.id}/preview`
+      const src = ext === 'pdf'
+        ? fileUrl
+        : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
+      this.templatePreview = { open: true, id: tpl.id, name: tpl.original_name, src }
+    },
+
+    closeTemplatePreview() {
+      this.templatePreview = { open: false, id: null, name: '', src: '' }
     },
 
     async deleteTemplate(id) {

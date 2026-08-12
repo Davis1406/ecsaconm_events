@@ -23,9 +23,33 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_EXTENSIONS = {".ppt", ".pptx", ".doc", ".docx", ".pdf", ".zip"}
 MAX_SIZE_MB = 50
 
+PREVIEW_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
 
 def _ext(filename: str) -> str:
     return os.path.splitext(filename)[-1].lower()
+
+
+def _get_template_or_404(template_id: int, db: Session) -> PresentationTemplate:
+    tpl = (
+        db.query(PresentationTemplate)
+        .filter(
+            PresentationTemplate.id == template_id,
+            PresentationTemplate.deleted_at == None,
+        )
+        .first()
+    )
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not os.path.exists(tpl.filename):
+        raise HTTPException(status_code=404, detail="File not found on server")
+    return tpl
 
 
 # ── List ──────────────────────────────────────────────────────────────────────
@@ -100,24 +124,31 @@ def download_template(
     template_id: int,
     db: Session = Depends(get_db),
 ):
-    tpl = (
-        db.query(PresentationTemplate)
-        .filter(
-            PresentationTemplate.id == template_id,
-            PresentationTemplate.deleted_at == None,
-        )
-        .first()
-    )
-    if not tpl:
-        raise HTTPException(status_code=404, detail="Template not found")
-    if not os.path.exists(tpl.filename):
-        raise HTTPException(status_code=404, detail="File not found on server")
-
+    tpl = _get_template_or_404(template_id, db)
     return FileResponse(
         path=tpl.filename,
         filename=tpl.original_name,
         media_type="application/octet-stream",
     )
+
+
+# ── Preview ───────────────────────────────────────────────────────────────────
+# Served without Content-Disposition: attachment so it can be rendered inline
+# (PDF directly in an <iframe>; Office formats via an external embed viewer
+# that fetches this URL — it must stay unauthenticated/public for that to work).
+
+@router.get("/{template_id}/preview")
+def preview_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+):
+    tpl = _get_template_or_404(template_id, db)
+    ext = _ext(tpl.original_name)
+    media_type = PREVIEW_MEDIA_TYPES.get(ext)
+    if not media_type:
+        raise HTTPException(status_code=415, detail="Preview not supported for this file type")
+
+    return FileResponse(path=tpl.filename, media_type=media_type)
 
 
 # ── Delete (soft, admin only) ─────────────────────────────────────────────────
