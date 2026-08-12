@@ -413,33 +413,31 @@
       <SpinnerComponent v-if="templatesLoading" />
       <div v-else>
         <div class="flex bg-mercury-500 px-5 py-2 uppercase text-xs font-bold text-gray-500">
-          <div class="w-5/12">File Name</div>
+          <div class="w-4/12">File Name</div>
           <div class="w-3/12">Description</div>
           <div class="w-2/12">Size</div>
-          <div class="w-2/12">Actions</div>
+          <div class="w-3/12 text-right">Actions</div>
         </div>
         <div v-if="templates.length === 0" class="px-5 py-10 text-center text-sm text-gray-400 italic">No templates uploaded yet.</div>
         <div v-for="tpl in templates" :key="tpl.id"
-          class="flex sm:flex-row flex-col px-5 py-3 text-sm items-center border-t border-gray-100">
-          <div class="sm:w-5/12 w-full font-medium text-gray-800">
+          class="flex sm:flex-row flex-col px-5 py-3 text-sm sm:items-center border-t border-gray-100">
+          <div class="sm:w-4/12 w-full font-medium text-gray-800 truncate pr-3">
             <span class="mr-2">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}
           </div>
-          <div class="sm:w-3/12 w-full text-xs text-gray-500">{{ tpl.description || '—' }}</div>
+          <div class="sm:w-3/12 w-full text-xs text-gray-500 truncate pr-3">{{ tpl.description || '—' }}</div>
           <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ formatSize(tpl.file_size) }}</div>
-          <div class="sm:w-2/12 w-full flex gap-2">
-            <button v-if="isPreviewable(tpl.original_name)" @click="openTemplatePreview(tpl)"
-              class="px-3 py-1 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
-              style="background-color: rgb(254,80,103);">
-              Preview
+          <div class="sm:w-3/12 w-full flex items-center gap-1.5 justify-start sm:justify-end mt-2 sm:mt-0">
+            <button v-if="isPreviewable(tpl.original_name)" @click="openTemplatePreview(tpl)" title="Preview"
+              class="action-btn" style="color: rgb(254,80,103);">
+              <EyeIcon class="w-4 h-4" />
             </button>
-            <a :href="`${apiUrl}/presentation_templates/${tpl.id}/download`" target="_blank"
-              class="px-3 py-1 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
-              style="background-color: rgb(0,150,180);">
-              Download
+            <a :href="`${apiUrl}/presentation_templates/${tpl.id}/download`" target="_blank" title="Download"
+              class="action-btn" style="color: rgb(0,150,180);">
+              <ArrowDownTrayIcon class="w-4 h-4" />
             </a>
-            <button @click="deleteTemplate(tpl.id)"
-              class="px-3 py-1 text-xs rounded-full font-semibold text-white bg-red-500 hover:bg-red-400 transition">
-              Delete
+            <button @click="deleteTemplate(tpl.id)" title="Delete"
+              class="action-btn text-red-500 hover:bg-red-50">
+              <TrashIcon class="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -803,7 +801,7 @@ import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 import axios from 'axios'
 import {
-  DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon,
+  DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
 } from '@heroicons/vue/24/outline'
 import { PresentationChartBarIcon, BellAlertIcon } from '@heroicons/vue/24/solid'
 
@@ -814,7 +812,7 @@ export default {
   name: 'AbstractsView',
   components: {
     HeaderView, SpinnerComponent, PaginationComponent, SearchComponent,
-    DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon,
+    DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
     PresentationChartBarIcon, BellAlertIcon,
   },
 
@@ -1313,6 +1311,9 @@ export default {
 </script>
 
 <style scoped>
+.action-btn {
+  @apply flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors flex-shrink-0;
+}
 .stat-card {
   @apply relative flex flex-col justify-center overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-lowest p-5 text-left transition-all duration-150;
 }
