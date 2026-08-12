@@ -743,6 +743,8 @@ class PresentationTemplate(Base):
     original_name = Column(String(500), nullable=False)    # original filename shown to users
     description = Column(String(500), nullable=True)
     file_size = Column(Integer, nullable=True)             # bytes
+    # Which presenters this template is for — 'either' shows it to both oral and poster presenters.
+    presentation_type = Column(Enum(PresentationType), nullable=False, server_default="either")
     uploaded_by = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     deleted_at = Column(TIMESTAMP(timezone=True), nullable=True)

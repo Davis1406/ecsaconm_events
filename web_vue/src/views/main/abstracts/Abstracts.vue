@@ -388,13 +388,22 @@
       <!-- Upload panel -->
       <div v-if="showTemplateUpload" class="px-5 py-5 border-b border-gray-100 bg-gray-50 space-y-4">
         <p class="text-sm text-gray-500">Upload a PowerPoint, Word or PDF template. Accepted: <strong>.ppt .pptx .doc .docx .pdf .zip</strong>. Max 50 MB.</p>
-        <div class="grid sm:grid-cols-2 gap-4">
+        <div class="grid sm:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">File</label>
             <input type="file" accept=".ppt,.pptx,.doc,.docx,.pdf,.zip" @change="onTemplateFileSelected" ref="templateFileInput"
               class="block w-full text-sm border border-gray-200 rounded-xl px-3 py-2
                      file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0
                      file:text-xs file:font-semibold file:text-white cursor-pointer" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">For presenters</label>
+            <select v-model="newTemplateType"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none bg-white">
+              <option value="either">Both (Oral &amp; Poster)</option>
+              <option value="oral">Oral only</option>
+              <option value="poster">Poster only</option>
+            </select>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Description (optional)</label>
@@ -421,8 +430,12 @@
         <div v-if="templates.length === 0" class="px-5 py-10 text-center text-sm text-gray-400 italic">No templates uploaded yet.</div>
         <div v-for="tpl in templates" :key="tpl.id"
           class="flex sm:flex-row flex-col px-5 py-3 text-sm sm:items-center border-t border-gray-100">
-          <div class="sm:w-4/12 w-full font-medium text-gray-800 truncate pr-3">
-            <span class="mr-2">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}
+          <div class="sm:w-4/12 w-full font-medium text-gray-800 pr-3">
+            <div class="truncate"><span class="mr-2">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}</div>
+            <span class="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide"
+              :class="templateTypeBadgeClass(tpl.presentation_type)">
+              {{ templateTypeLabel(tpl.presentation_type) }}
+            </span>
           </div>
           <div class="sm:w-3/12 w-full text-xs text-gray-500 truncate pr-3">{{ tpl.description || '—' }}</div>
           <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ formatSize(tpl.file_size) }}</div>
@@ -844,7 +857,7 @@ export default {
       // ── Tab 2: Templates ──────────────────────────────────────────────────
       templates: [], templatesLoading: true,
       showTemplateUpload: false,
-      selectedTemplateFile: null, newTemplateDescription: '',
+      selectedTemplateFile: null, newTemplateDescription: '', newTemplateType: 'either',
       templateUploading: false,
       templatePreview: { open: false, id: null, name: '', src: '' },
 
@@ -1164,12 +1177,13 @@ export default {
       const form = new FormData()
       form.append('file', this.selectedTemplateFile)
       form.append('description', this.newTemplateDescription)
+      form.append('presentation_type', this.newTemplateType)
       try {
         await axios.post(`${this.apiUrl}/presentation_templates`, form, {
           headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'multipart/form-data' },
         })
         this.successMsg = 'Template uploaded successfully.'
-        this.selectedTemplateFile = null; this.newTemplateDescription = ''
+        this.selectedTemplateFile = null; this.newTemplateDescription = ''; this.newTemplateType = 'either'
         if (this.$refs.templateFileInput) this.$refs.templateFileInput.value = ''
         this.showTemplateUpload = false
         this.loadTemplates()
@@ -1305,6 +1319,15 @@ export default {
     fileIcon(name) {
       const ext = (name || '').split('.').pop().toLowerCase()
       return { pptx: '📊', ppt: '📊', docx: '📄', doc: '📄', pdf: '📕', zip: '🗜️' }[ext] || '📎'
+    },
+    templateTypeLabel(t) {
+      return { oral: 'Oral only', poster: 'Poster only', either: 'Oral & Poster' }[t] || 'Oral & Poster'
+    },
+    templateTypeBadgeClass(t) {
+      return {
+        oral: 'bg-secondary-container/40 text-cp-secondary',
+        poster: 'bg-tertiary-container/40 text-cp-tertiary',
+      }[t] || 'bg-gray-100 text-gray-500'
     },
   },
 }
