@@ -628,10 +628,13 @@ def my_presenter_status(
     """
     uid = current_user["user_id"]
 
-    # Check: has any accepted abstract where user is the presenting author
-    is_presenting = (
-        db.query(AbstractAuthor)
-        .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+    # Presentation type(s) of the accepted abstract(s) where this user is the
+    # presenting author — matched by author email, not submitted_by, since
+    # imported abstracts are attributed to the importing admin, not the
+    # presenter. This is also what template visibility is filtered against.
+    type_rows = (
+        db.query(Abstract.presentation_type)
+        .join(AbstractAuthor, AbstractAuthor.abstract_id == Abstract.id)
         .join(User, User.email == AbstractAuthor.email)
         .filter(
             User.id == uid,
@@ -639,9 +642,11 @@ def my_presenter_status(
             Abstract.deleted_at == None,
             AbstractAuthor.is_presenting == True,
         )
-        .first()
-        is not None
+        .distinct()
+        .all()
     )
+    presentation_types = [r[0].value for r in type_rows if r[0]]
+    is_presenting = len(presentation_types) > 0
 
     # Check: has any paid registration for any event
     has_paid = (
@@ -655,6 +660,7 @@ def my_presenter_status(
         "is_presenting": is_presenting,
         "has_paid": has_paid,
         "is_paid_presenter": is_presenting and has_paid,
+        "presentation_types": presentation_types,
     }
 
 
