@@ -432,10 +432,13 @@
           class="flex sm:flex-row flex-col px-5 py-3 text-sm sm:items-center border-t border-gray-100">
           <div class="sm:w-4/12 w-full font-medium text-gray-800 pr-3">
             <div class="truncate"><span class="mr-2">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}</div>
-            <span class="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide"
+            <select :value="tpl.presentation_type" @change="updateTemplateType(tpl, $event.target.value)"
+              class="mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border-0 cursor-pointer"
               :class="templateTypeBadgeClass(tpl.presentation_type)">
-              {{ templateTypeLabel(tpl.presentation_type) }}
-            </span>
+              <option value="either">Oral &amp; Poster</option>
+              <option value="oral">Oral only</option>
+              <option value="poster">Poster only</option>
+            </select>
           </div>
           <div class="sm:w-3/12 w-full text-xs text-gray-500 truncate pr-3">{{ tpl.description || '—' }}</div>
           <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ formatSize(tpl.file_size) }}</div>
@@ -1320,14 +1323,26 @@ export default {
       const ext = (name || '').split('.').pop().toLowerCase()
       return { pptx: '📊', ppt: '📊', docx: '📄', doc: '📄', pdf: '📕', zip: '🗜️' }[ext] || '📎'
     },
-    templateTypeLabel(t) {
-      return { oral: 'Oral only', poster: 'Poster only', either: 'Oral & Poster' }[t] || 'Oral & Poster'
-    },
     templateTypeBadgeClass(t) {
       return {
         oral: 'bg-secondary-container/40 text-cp-secondary',
         poster: 'bg-tertiary-container/40 text-cp-tertiary',
       }[t] || 'bg-gray-100 text-gray-500'
+    },
+
+    async updateTemplateType(tpl, newType) {
+      const prev = tpl.presentation_type
+      tpl.presentation_type = newType // optimistic
+      try {
+        const form = new FormData()
+        form.append('presentation_type', newType)
+        await axios.patch(`${this.apiUrl}/presentation_templates/${tpl.id}`, form, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+      } catch (e) {
+        tpl.presentation_type = prev
+        this.errorMsg = e.response?.data?.detail || 'Failed to update template type.'
+      }
     },
   },
 }

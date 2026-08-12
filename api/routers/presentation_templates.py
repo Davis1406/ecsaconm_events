@@ -162,6 +162,50 @@ def preview_template(
     return FileResponse(path=tpl.filename, media_type=media_type)
 
 
+# ── Update metadata (admin only) ────────────────────────────────────────────────
+# Re-tag an existing template's audience (oral/poster/either) or description
+# without having to delete and re-upload the file.
+
+@router.patch("/{template_id}")
+def update_template(
+    template_id: int,
+    presentation_type: str = Form(None),
+    description: str = Form(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tpl = (
+        db.query(PresentationTemplate)
+        .filter(
+            PresentationTemplate.id == template_id,
+            PresentationTemplate.deleted_at == None,
+        )
+        .first()
+    )
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if presentation_type is not None:
+        try:
+            tpl.presentation_type = PresentationType(presentation_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"presentation_type must be one of: {', '.join(t.value for t in PresentationType)}",
+            )
+    if description is not None:
+        tpl.description = description or None
+
+    db.commit()
+    db.refresh(tpl)
+    return {
+        "id": tpl.id,
+        "original_name": tpl.original_name,
+        "description": tpl.description,
+        "presentation_type": tpl.presentation_type.value,
+    }
+
+
 # ── Delete (soft, admin only) ─────────────────────────────────────────────────
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
