@@ -108,21 +108,74 @@
       </div>
     </div>
 
-    <!-- Presentation templates callout — only for paid presenters -->
-    <div v-if="isPaidPresenter"
-      class="bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-      <div class="flex-1">
+    <!-- Presentation templates — only shown to paid, registered presenters -->
+    <div v-if="isPaidPresenter" class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="px-6 py-5 border-b border-gray-100">
         <h3 class="font-semibold text-gray-800 mb-1">Presentation Templates</h3>
         <p class="text-sm text-gray-500">
-          Download the official ECSACONM presentation template to ensure your slides meet conference requirements.
+          Official ECSACONM templates to help you prepare your slides — preview or download below.
         </p>
       </div>
-      <router-link :to="{ name: 'PresentationTemplates' }"
-        class="flex-shrink-0 px-5 py-2 rounded-full text-sm font-semibold text-white transition hover:opacity-90"
-        style="background-color: rgb(0,150,180);">
-        View Templates →
-      </router-link>
+
+      <div v-if="templatesLoading" class="px-6 py-8 text-center text-sm text-gray-400">Loading…</div>
+      <div v-else-if="templates.length === 0" class="px-6 py-8 text-center text-sm text-gray-400 italic">
+        No templates uploaded yet.
+      </div>
+      <div v-else class="divide-y divide-gray-100">
+        <div v-for="tpl in templates" :key="tpl.id"
+          class="flex items-center justify-between gap-3 px-6 py-3.5">
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-gray-800 truncate">
+              <span class="mr-1.5">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}
+            </p>
+            <p v-if="tpl.description" class="text-xs text-gray-400 truncate mt-0.5">{{ tpl.description }}</p>
+          </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <button v-if="isPreviewable(tpl.original_name)" @click="openTemplatePreview(tpl)" title="Preview"
+              class="tpl-action-btn" style="color: rgb(254,80,103);">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            </button>
+            <a :href="`${apiUrl}/presentation_templates/${tpl.id}/download`" target="_blank" title="Download"
+              class="tpl-action-btn" style="color: rgb(0,150,180);">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- Template preview modal -->
+    <Teleport to="body">
+      <div v-if="templatePreview.open" class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        @click.self="closeTemplatePreview">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeTemplatePreview"></div>
+        <div class="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="height: 85vh;">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <h2 class="font-semibold text-gray-800 text-base truncate pr-4">{{ templatePreview.name }}</h2>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <a v-if="templatePreview.id" :href="`${apiUrl}/presentation_templates/${templatePreview.id}/download`" target="_blank"
+                class="px-3 py-1.5 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
+                style="background-color: rgb(0,150,180);">
+                Download
+              </a>
+              <button @click="closeTemplatePreview" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 bg-gray-50">
+            <iframe v-if="templatePreview.src" :src="templatePreview.src" class="w-full h-full" style="border:none;"></iframe>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </div>
 </template>
@@ -140,6 +193,9 @@ export default {
             abstracts: [],
             isPaidPresenter: false,
             apiUrl: import.meta.env.VITE_API_URL,
+            templates: [],
+            templatesLoading: false,
+            templatePreview: { open: false, id: null, name: '', src: '' },
         };
     },
     mounted() {
@@ -160,10 +216,48 @@ export default {
                     { headers: { Authorization: `Bearer ${this.token}` } }
                 );
                 this.isPaidPresenter = res.data.is_paid_presenter === true;
+                if (this.isPaidPresenter) this.loadTemplates();
             } catch (e) {
                 console.warn("Could not check presenter status:", e);
                 this.isPaidPresenter = false;
             }
+        },
+
+        async loadTemplates() {
+            this.templatesLoading = true;
+            try {
+                const res = await axios.get(`${this.apiUrl}/presentation_templates`, {
+                    headers: { Authorization: `Bearer ${this.token}` },
+                });
+                this.templates = res.data || [];
+            } catch (e) {
+                console.error("Could not load templates:", e);
+            } finally {
+                this.templatesLoading = false;
+            }
+        },
+
+        isPreviewable(name) {
+            const ext = (name || '').split('.').pop().toLowerCase();
+            return ['pdf', 'ppt', 'pptx', 'doc', 'docx'].includes(ext);
+        },
+
+        openTemplatePreview(tpl) {
+            const ext = (tpl.original_name || '').split('.').pop().toLowerCase();
+            const fileUrl = `${this.apiUrl}/presentation_templates/${tpl.id}/preview`;
+            const src = ext === 'pdf'
+                ? fileUrl
+                : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
+            this.templatePreview = { open: true, id: tpl.id, name: tpl.original_name, src };
+        },
+
+        closeTemplatePreview() {
+            this.templatePreview = { open: false, id: null, name: '', src: '' };
+        },
+
+        fileIcon(name) {
+            const ext = (name || '').split('.').pop().toLowerCase();
+            return { pptx: '📊', ppt: '📊', docx: '📄', doc: '📄', pdf: '📕', zip: '🗜️' }[ext] || '📎';
         },
 
         async getMyAbstracts() {
@@ -242,3 +336,9 @@ export default {
     }
 }
 </script>
+
+<style scoped>
+.tpl-action-btn {
+  @apply flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors flex-shrink-0;
+}
+</style>
