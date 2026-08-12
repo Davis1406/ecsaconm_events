@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from dependencies.auth_dependency import get_current_user
-from models.models import PresentationTemplate, User
+from models.models import PresentationTemplate, PresentationType, User
 
 router = APIRouter()
 
@@ -68,6 +68,7 @@ def list_templates(db: Session = Depends(get_db)):
             "original_name": r.original_name,
             "description": r.description,
             "file_size": r.file_size,
+            "presentation_type": r.presentation_type.value if r.presentation_type else "either",
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "uploader": (
                 f"{r.uploader.firstname} {r.uploader.lastname}"
@@ -84,6 +85,7 @@ def list_templates(db: Session = Depends(get_db)):
 async def upload_template(
     file: UploadFile = File(...),
     description: str = Form(""),
+    presentation_type: str = Form("either"),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -92,6 +94,14 @@ async def upload_template(
         raise HTTPException(
             status_code=400,
             detail=f"File type not allowed. Accepted: {', '.join(ALLOWED_EXTENSIONS)}",
+        )
+
+    try:
+        ptype = PresentationType(presentation_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"presentation_type must be one of: {', '.join(t.value for t in PresentationType)}",
         )
 
     content = await file.read()
@@ -108,6 +118,7 @@ async def upload_template(
         original_name=file.filename or stored_name,
         description=description or None,
         file_size=len(content),
+        presentation_type=ptype,
         uploaded_by=current_user["user_id"],
     )
     db.add(tpl)

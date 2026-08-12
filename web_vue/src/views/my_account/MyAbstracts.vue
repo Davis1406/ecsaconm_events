@@ -118,11 +118,11 @@
       </div>
 
       <div v-if="templatesLoading" class="px-6 py-8 text-center text-sm text-gray-400">Loading…</div>
-      <div v-else-if="templates.length === 0" class="px-6 py-8 text-center text-sm text-gray-400 italic">
-        No templates uploaded yet.
+      <div v-else-if="visibleTemplates.length === 0" class="px-6 py-8 text-center text-sm text-gray-400 italic">
+        No templates for your presentation type yet.
       </div>
       <div v-else class="divide-y divide-gray-100">
-        <div v-for="tpl in templates" :key="tpl.id" class="px-6 py-4">
+        <div v-for="tpl in visibleTemplates" :key="tpl.id" class="px-6 py-4">
           <div class="flex items-center justify-between gap-3 mb-3">
             <div class="min-w-0">
               <p class="text-sm font-medium text-gray-800 truncate">
@@ -176,6 +176,22 @@ export default {
         const user = authStore.loginUser;
         const token = authStore.accessToken;
         return { user, token };
+    },
+    computed: {
+        // The presentation type(s) the presenter actually needs a template for,
+        // based on their own accepted abstract(s) — not every uploaded template.
+        myPresentationTypes() {
+            const accepted = this.abstracts.filter(a => (a.status || '').toLowerCase() === 'accepted');
+            if (accepted.some(a => a.presentation_type === 'either')) {
+                return new Set(['oral', 'poster', 'either']);
+            }
+            return new Set(accepted.map(a => a.presentation_type).filter(Boolean));
+        },
+        visibleTemplates() {
+            return this.templates.filter(t =>
+                !t.presentation_type || t.presentation_type === 'either' || this.myPresentationTypes.has(t.presentation_type)
+            );
+        },
     },
     methods: {
         async checkPresenterStatus() {
