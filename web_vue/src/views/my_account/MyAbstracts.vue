@@ -165,6 +165,7 @@ export default {
             apiUrl: import.meta.env.VITE_API_URL,
             templates: [],
             templatesLoading: false,
+            myPresentationTypeList: [],
         };
     },
     mounted() {
@@ -179,13 +180,14 @@ export default {
     },
     computed: {
         // The presentation type(s) the presenter actually needs a template for,
-        // based on their own accepted abstract(s) — not every uploaded template.
+        // sourced from my-presenter-status (matched by author email) rather than
+        // the my-submissions list, which is keyed by submitted_by — imported
+        // abstracts are attributed to the importing admin, not the presenter.
         myPresentationTypes() {
-            const accepted = this.abstracts.filter(a => (a.status || '').toLowerCase() === 'accepted');
-            if (accepted.some(a => a.presentation_type === 'either')) {
+            if (this.myPresentationTypeList.includes('either')) {
                 return new Set(['oral', 'poster', 'either']);
             }
-            return new Set(accepted.map(a => a.presentation_type).filter(Boolean));
+            return new Set(this.myPresentationTypeList);
         },
         visibleTemplates() {
             return this.templates.filter(t =>
@@ -201,6 +203,7 @@ export default {
                     { headers: { Authorization: `Bearer ${this.token}` } }
                 );
                 this.isPaidPresenter = res.data.is_paid_presenter === true;
+                this.myPresentationTypeList = res.data.presentation_types || [];
                 if (this.isPaidPresenter) this.loadTemplates();
             } catch (e) {
                 console.warn("Could not check presenter status:", e);
