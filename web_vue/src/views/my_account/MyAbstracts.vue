@@ -113,7 +113,7 @@
       <div class="px-6 py-5 border-b border-gray-100">
         <h3 class="font-semibold text-gray-800 mb-1">Presentation Templates</h3>
         <p class="text-sm text-gray-500">
-          Official ECSACONM templates to help you prepare your slides — preview or download below.
+          Official ECSACONM templates to help you prepare your slides.
         </p>
       </div>
 
@@ -122,60 +122,30 @@
         No templates uploaded yet.
       </div>
       <div v-else class="divide-y divide-gray-100">
-        <div v-for="tpl in templates" :key="tpl.id"
-          class="flex items-center justify-between gap-3 px-6 py-3.5">
-          <div class="min-w-0">
-            <p class="text-sm font-medium text-gray-800 truncate">
-              <span class="mr-1.5">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}
-            </p>
-            <p v-if="tpl.description" class="text-xs text-gray-400 truncate mt-0.5">{{ tpl.description }}</p>
-          </div>
-          <div class="flex items-center gap-1.5 flex-shrink-0">
-            <button v-if="isPreviewable(tpl.original_name)" @click="openTemplatePreview(tpl)" title="Preview"
-              class="tpl-action-btn" style="color: rgb(254,80,103);">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
-            </button>
+        <div v-for="tpl in templates" :key="tpl.id" class="px-6 py-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-800 truncate">
+                <span class="mr-1.5">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}
+              </p>
+              <p v-if="tpl.description" class="text-xs text-gray-400 truncate mt-0.5">{{ tpl.description }}</p>
+            </div>
             <a :href="`${apiUrl}/presentation_templates/${tpl.id}/download`" target="_blank" title="Download"
-              class="tpl-action-btn" style="color: rgb(0,150,180);">
+              class="tpl-action-btn flex-shrink-0" style="color: rgb(0,150,180);">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
               </svg>
             </a>
           </div>
+
+          <!-- Preview shown by default, no click required -->
+          <div v-if="isPreviewable(tpl.original_name)" style="height: 60vh;" class="rounded-xl border border-gray-100 overflow-hidden bg-gray-50">
+            <iframe :src="templateSrc(tpl)" class="w-full h-full" style="border:none;"></iframe>
+          </div>
+          <p v-else class="text-xs text-gray-400 italic">Preview not available for this file type — use Download.</p>
         </div>
       </div>
     </div>
-
-    <!-- Template preview modal -->
-    <Teleport to="body">
-      <div v-if="templatePreview.open" class="fixed inset-0 z-50 flex items-center justify-center p-4"
-        @click.self="closeTemplatePreview">
-        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeTemplatePreview"></div>
-        <div class="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="height: 85vh;">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-            <h2 class="font-semibold text-gray-800 text-base truncate pr-4">{{ templatePreview.name }}</h2>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <a v-if="templatePreview.id" :href="`${apiUrl}/presentation_templates/${templatePreview.id}/download`" target="_blank"
-                class="px-3 py-1.5 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
-                style="background-color: rgb(0,150,180);">
-                Download
-              </a>
-              <button @click="closeTemplatePreview" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="flex-1 bg-gray-50">
-            <iframe v-if="templatePreview.src" :src="templatePreview.src" class="w-full h-full" style="border:none;"></iframe>
-          </div>
-        </div>
-      </div>
-    </Teleport>
 
   </div>
 </template>
@@ -195,7 +165,6 @@ export default {
             apiUrl: import.meta.env.VITE_API_URL,
             templates: [],
             templatesLoading: false,
-            templatePreview: { open: false, id: null, name: '', src: '' },
         };
     },
     mounted() {
@@ -242,17 +211,12 @@ export default {
             return ['pdf', 'ppt', 'pptx', 'doc', 'docx'].includes(ext);
         },
 
-        openTemplatePreview(tpl) {
+        templateSrc(tpl) {
             const ext = (tpl.original_name || '').split('.').pop().toLowerCase();
             const fileUrl = `${this.apiUrl}/presentation_templates/${tpl.id}/preview`;
-            const src = ext === 'pdf'
+            return ext === 'pdf'
                 ? fileUrl
                 : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
-            this.templatePreview = { open: true, id: tpl.id, name: tpl.original_name, src };
-        },
-
-        closeTemplatePreview() {
-            this.templatePreview = { open: false, id: null, name: '', src: '' };
         },
 
         fileIcon(name) {
