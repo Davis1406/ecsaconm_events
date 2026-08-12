@@ -74,6 +74,15 @@
           <span>My Events</span>
         </router-link>
 
+        <router-link :to="{ name: 'MyAbstracts' }"
+          class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition"
+          :class="$route.name === 'MyAbstracts' ? 'text-white' : 'text-gray-600 hover:bg-gray-100'"
+          :style="$route.name === 'MyAbstracts' ? 'background-color: rgb(254,80,103);' : ''"
+          @click="sidebarOpen = false">
+          <DocumentTextIcon class="h-5 w-5 flex-shrink-0" />
+          <span>My Abstracts</span>
+        </router-link>
+
         <router-link :to="{ name: 'MyAccountProfile' }"
           class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition"
           :class="$route.name === 'MyAccountProfile' ? 'text-white' : 'text-gray-600 hover:bg-gray-100'"
@@ -121,7 +130,7 @@
 
 <script>
 import axios from 'axios'
-import { HomeIcon, CalendarDaysIcon, UserIcon } from '@heroicons/vue/24/outline'
+import { HomeIcon, CalendarDaysIcon, UserIcon, DocumentTextIcon } from '@heroicons/vue/24/outline'
 import { useAuthStore } from '@/store/authStore'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import ImpersonationBanner from '@/components/ImpersonationBanner.vue'
@@ -131,7 +140,7 @@ const API_URL = import.meta.env.VITE_API_URL
 export default {
   name: 'MyAccountLayout',
   components: {
-    HomeIcon, CalendarDaysIcon, UserIcon, ThemeToggle, ImpersonationBanner,
+    HomeIcon, CalendarDaysIcon, UserIcon, DocumentTextIcon, ThemeToggle, ImpersonationBanner,
   },
   data() {
     return {
