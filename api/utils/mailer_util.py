@@ -24,6 +24,20 @@ templates = Jinja2Templates(directory="templates")
 # "https://events.ecsaconm.org/api" in production or "http://localhost:8001" locally.
 API_BASE_URL = os.getenv("BASE_URL", "http://localhost:8001")
 
+# Every outgoing email is CC'd here so there's a visible record of what the
+# system has sent, independent of the SMTP account's own (unpopulated, since
+# sends go out over raw SMTP rather than through a client that IMAP-appends
+# to Sent) mailbox. Override via ADMIN_CC_EMAIL in .env if needed.
+ADMIN_CC_EMAIL = os.getenv("ADMIN_CC_EMAIL", "admission@cosecsa.org")
+
+
+def _cc_recipients(recipient_email):
+    """Recipients list for the SMTP envelope: the addressee plus the admin
+    CC, deduped so we don't double-send when they happen to be the same."""
+    if recipient_email.strip().lower() == ADMIN_CC_EMAIL.strip().lower():
+        return [recipient_email]
+    return [recipient_email, ADMIN_CC_EMAIL]
+
 # --- PASSWORD UTILS ---
 
 
@@ -135,6 +149,7 @@ def send_email(recipient_email, subject, email_body, email_type="general",
         message = MIMEMultipart("alternative")
         message["From"] = f"{from_name} <{from_email}>"
         message["To"] = recipient_email
+        message["Cc"] = ADMIN_CC_EMAIL
         message["Subject"] = subject
         message["Date"] = formatdate(localtime=True)
         message["Message-ID"] = make_msgid(domain="ecsaconm.org")
@@ -142,15 +157,16 @@ def send_email(recipient_email, subject, email_body, email_type="general",
         message["X-Mailer"] = "ECSACONM Events Portal"
         message.attach(MIMEText(final_body, "html", "utf-8"))
 
+        envelope_to = _cc_recipients(recipient_email)
         if smtp_port == 465:
             with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
                 server.login(smtp_username, smtp_password)
-                server.sendmail(smtp_username, recipient_email, message.as_string())
+                server.sendmail(smtp_username, envelope_to, message.as_string())
         else:
             with smtplib.SMTP(smtp_host, smtp_port) as server:
                 server.starttls()
                 server.login(smtp_username, smtp_password)
-                server.sendmail(smtp_username, recipient_email, message.as_string())
+                server.sendmail(smtp_username, envelope_to, message.as_string())
 
         logger.info("Email sent successfully to %s", recipient_email)
         _update_email_log(log_id, "sent")
@@ -235,6 +251,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
                 message = MIMEMultipart("alternative")
                 message["From"] = f"{from_name} <{from_email}>"
                 message["To"] = recipient_email
+                message["Cc"] = ADMIN_CC_EMAIL
                 message["Subject"] = subject
                 message["Date"] = formatdate(localtime=True)
                 message["Message-ID"] = make_msgid(domain="ecsaconm.org")
@@ -242,7 +259,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
                 message["X-Mailer"] = "ECSACONM Events Portal"
                 message.attach(MIMEText(final_body, "html", "utf-8"))
 
-                server.sendmail(smtp_username, recipient_email, message.as_string())
+                server.sendmail(smtp_username, _cc_recipients(recipient_email), message.as_string())
                 logger.info("Email sent successfully to %s", recipient_email)
                 _update_email_log(log_id, "sent")
                 sent_count += 1
@@ -300,6 +317,7 @@ def send_email_with_attachment(recipient_email, subject, email_body, attachment_
         msg["Subject"] = subject
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain="ecsaconm.org")
+        msg["Cc"] = ADMIN_CC_EMAIL
         msg["Reply-To"] = reply_to_email or f"{from_name} <{from_email}>"
         msg["X-Mailer"] = "ECSACONM Events Portal"
         msg.attach(MIMEText(final_body, "html", "utf-8"))
@@ -310,15 +328,16 @@ def send_email_with_attachment(recipient_email, subject, email_body, attachment_
         part.add_header("Content-Disposition", f'attachment; filename="{attachment_filename}"')
         msg.attach(part)
 
+        envelope_to = _cc_recipients(recipient_email)
         if smtp_port == 465:
             with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
                 server.login(smtp_username, smtp_password)
-                server.sendmail(smtp_username, recipient_email, msg.as_string())
+                server.sendmail(smtp_username, envelope_to, msg.as_string())
         else:
             with smtplib.SMTP(smtp_host, smtp_port) as server:
                 server.starttls()
                 server.login(smtp_username, smtp_password)
-                server.sendmail(smtp_username, recipient_email, msg.as_string())
+                server.sendmail(smtp_username, envelope_to, msg.as_string())
 
         logger.info("Email with attachment sent to %s", recipient_email)
         _update_email_log(log_id, "sent")
