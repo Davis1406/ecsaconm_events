@@ -313,14 +313,17 @@ def list_abstracts(
             AbstractAuthor.email.in_(db.query(multi_emails.c.email)),
         )
     # Filter / deduplicate by presenter registration / payment status.
-    # All of these operate per unique presenter (person), deduplicated by email —
-    # only one abstract is kept per matching email so the total shown in the
-    # table matches the stat-card counts.
+    # All of these operate per unique presenter (person), deduplicated by email.
+    # The total returned is the count of matching PEOPLE (emails), not abstracts,
+    # so it matches the stat-card counts.  One abstract per email is shown in the
+    # table; when two co-presenters share the same abstract, the table may show
+    # the same abstract once for both, but the total reflects the true people count.
     needs_presenter_filter = (
         presenter_dedup == "yes" or
         presenter_registered in ("yes", "no") or
         presenter_paid in ("yes", "no")
     )
+    presenter_people_total = None  # set when presenter filtering is active
     if needs_presenter_filter:
         pres_q = (
             db.query(
@@ -349,6 +352,7 @@ def list_abstracts(
 
         user_cache2: dict = {}  # email → User
         matched_abstract_ids = set()
+        people_count = 0
         for email, rows in email_rows.items():
             if email not in user_cache2:
                 user_cache2[email] = db.query(User).filter(User.email == email).first()
@@ -377,13 +381,15 @@ def list_abstracts(
                 (presenter_paid == "no" and not has_paid)
             )
             if reg_ok and paid_ok:
+                people_count += 1
                 # Keep one abstract per email — the latest by created_at
                 best = max(rows, key=lambda r: r.created_at or datetime.min)
                 matched_abstract_ids.add(best.abstract_id)
 
         q = q.filter(Abstract.id.in_(matched_abstract_ids))
+        presenter_people_total = people_count
 
-    total = q.count()
+    total = presenter_people_total if presenter_people_total is not None else q.count()
     # Sort
     _sort_map = {
         "title":        Abstract.title,
