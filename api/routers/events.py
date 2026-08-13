@@ -428,6 +428,8 @@ async def send_receipt(
         html_body,
         pdf_bytes,
         filename,
+        "payment_receipt",
+        user["user_id"],
     )
 
     return {"status": "sent", "receipt_no": receipt_no, "email": participant.email}
@@ -478,18 +480,25 @@ async def get_event(
         # "unpaid" → logged in but no paid registration for this event
         # "paid"   → has a paid registration OR has admin/secretariat permission
         user_access = "none"
+        # Whether this caller is allowed to see the full participant roster
+        # (names, emails, phones, payment info). Anonymous/expired-token callers
+        # (this endpoint is also used by the public registration/payment pages,
+        # so auth here is intentionally optional) never get participant PII —
+        # only users holding ADMIN_DASHBOARD or VIEW_EVENT do.
+        can_view_participants = False
         if current_user:
             uid = current_user["user_id"]
-            # Check for admin permission (ADMIN_DASHBOARD) → always full access
             from models.models import UserRole, RolePermission, Permission as Perm
-            is_admin = db.query(UserRole).join(
-                RolePermission, UserRole.role_id == RolePermission.role_id
-            ).join(
-                Perm, RolePermission.permission_id == Perm.id
-            ).filter(
-                UserRole.user_id == uid,
-                Perm.permission_code == "ADMIN_DASHBOARD",
-            ).first()
+            granted_codes = {
+                row[0]
+                for row in db.query(Perm.permission_code)
+                .join(RolePermission, Perm.id == RolePermission.permission_id)
+                .join(UserRole, RolePermission.role_id == UserRole.role_id)
+                .filter(UserRole.user_id == uid)
+                .all()
+            }
+            is_admin = "ADMIN_DASHBOARD" in granted_codes
+            can_view_participants = is_admin or "VIEW_EVENT" in granted_codes
 
             if is_admin:
                 user_access = "paid"
@@ -503,6 +512,15 @@ async def get_event(
                     user_access = "paid"
                 else:
                     user_access = "unpaid"
+
+        def visible(item_access_level):
+            level = item_access_level or "public"
+            if level == "public":
+                return True
+            if level == "registered":
+                return user_access != "none"
+            # "admin" (or anything else unrecognised) — staff only
+            return can_view_participants
 
         return {
             "event": {
@@ -585,6 +603,7 @@ async def get_event(
                     ),
                 }
                 for r in registrations
+                if can_view_participants
             ],
             "documents": [
                 {
@@ -597,6 +616,7 @@ async def get_event(
                     "access_level": d.access_level,
                 }
                 for d in documents
+                if visible(d.access_level)
             ],
             "links": [
                 {
@@ -606,6 +626,7 @@ async def get_event(
                     "access_level": l.access_level or "public",
                 }
                 for l in links
+                if visible(l.access_level)
             ],
         }
     else:
