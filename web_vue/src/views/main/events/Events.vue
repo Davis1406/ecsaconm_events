@@ -16,14 +16,16 @@
             <div v-else class="rounded-md border-2 border-white-600 shadow-sm text-abbey-500">
                 <div class="">
                     <div class="flex bg-mercury-500 p-3 pt-2 pb-2 rounded-t-sm uppercase text-xs font-bold">
-                        <div class="w-6/12 p-1">Event Title</div>
+                        <div class="w-1/12 p-1">#</div>
+                        <div class="w-5/12 p-1">Event Title</div>
                         <div class="w-2/12 p-1">Date</div>
                         <div class="w-2/12 p-1">Status</div>
                         <div class="w-2/12 p-1 text-end">Action</div>
                     </div>
                     <div class="flex sm:flex-row flex-col p-3 pt-2 pb-2 text-sm items-center border-t-2 border-mercury-500"
-                        v-for="(event) in events" :key="event.id">
-                        <div class="sm:w-6/12 w-full p-1 sm:font-light font-bold">{{ event.event }}</div>
+                        v-for="(event, index) in events" :key="event.id">
+                        <div class="sm:w-1/12 w-full p-1 text-gray-400">{{ (currentPage - 1) * pageSize + index + 1 }}</div>
+                        <div class="sm:w-5/12 w-full p-1 sm:font-light font-bold">{{ event.event }}</div>
                         <div class="sm:w-2/12 w-full p-1">{{ formatDate(event.start_date) }}</div>
                         <div class="sm:w-2/12 w-full p-1">{{ formartStatus(event.start_date) }}</div>
                         <div class="flex sm:w-2/12 w-full p-1 sm:justify-end justify-start">

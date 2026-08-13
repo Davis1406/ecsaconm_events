@@ -179,7 +179,8 @@
 
       <!-- Table header -->
       <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
-        <div class="col-span-4">Participant</div>
+        <div class="col-span-1">#</div>
+        <div class="col-span-3">Participant</div>
         <div class="col-span-2">Institution</div>
         <div class="col-span-2">Country</div>
         <div class="col-span-1 text-center">Paid</div>
@@ -201,8 +202,11 @@
         class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3 border-b border-gray-50 hover:bg-gray-50 transition text-sm"
         :class="index % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-white/[0.04]'">
 
+        <!-- Row number -->
+        <div class="col-span-1 text-gray-400 text-xs">{{ (localPage - 1) * localPageSize + index + 1 }}</div>
+
         <!-- Name — clickable link to participant profile -->
-        <div class="col-span-4">
+        <div class="col-span-3">
           <div class="flex items-center gap-2 flex-wrap">
             <router-link
               v-if="participant.user_id"
@@ -307,11 +311,12 @@
             <label class="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Type</label>
             <select v-model="docUpload.doc_type"
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none bg-white">
-              <option value="abstract">Abstract Book</option>
-              <option value="timetable">Timetable / Programme</option>
-              <option value="poster">Poster</option>
-              <option value="presentation">Presentation</option>
-              <option value="other">Other</option>
+              <option value="ProgrammeBooklet">Programme Booklet</option>
+              <option value="Presentation">Presentation</option>
+              <option value="Photo">Photo</option>
+              <option value="Advert">Advert</option>
+              <option value="Guidelines">Guidelines</option>
+              <option value="Other">Other</option>
             </select>
           </div>
           <div>
@@ -759,7 +764,7 @@ export default {
       // Documents
       documents: [],
       docFile: null,
-      docUpload: { file_name: '', doc_type: 'abstract', access_level: 'public' },
+      docUpload: { file_name: '', doc_type: 'Other', access_level: 'public' },
       docUploading: false,
       docSuccess: '',
       docError: '',
@@ -1036,7 +1041,7 @@ export default {
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         await api.post('/events/upload_document/', form);
         this.docFile = null;
-        this.docUpload = { file_name: '', doc_type: 'abstract', access_level: 'public' };
+        this.docUpload = { file_name: '', doc_type: 'Other', access_level: 'public' };
         this.$refs.docFileInput && (this.$refs.docFileInput.value = '');
         this.docSuccess = 'Document uploaded successfully.';
         setTimeout(() => { this.docSuccess = ''; }, 3500);

@@ -21,9 +21,10 @@
       </div>
 
       <div v-else class="divide-y divide-gray-50">
-        <div v-for="t in templates" :key="t.template_key"
+        <div v-for="(t, index) in templates" :key="t.template_key"
           class="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition">
           <div class="flex items-start gap-4">
+            <span class="text-xs text-gray-300 font-mono w-5 flex-shrink-0 pt-3 text-right">{{ index + 1 }}</span>
             <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
               style="background-color: rgba(254,80,103,0.1);">
               <svg class="h-5 w-5" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
