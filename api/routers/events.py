@@ -171,13 +171,9 @@ async def get_events(
     request: Request,
     db: Session = Depends(get_db),
     skip: int = Query(default=0, ge=0),
-    limit: int = 10,
+    limit: int = Query(default=20, le=100),
     search: str = "",
-    dependency: Dependency = Depends(get_dependency),
 ):
-    client_ip = dependency.request_ip(request)
-    dependency.log_activity(1, "VIEW_EVENTS", "None", client_ip, "Get all events")
-
     search_filter = or_(
         Event.event.ilike(f"%{search}%"),
         Event.theme.ilike(f"%{search}%"),
@@ -185,15 +181,33 @@ async def get_events(
     )
 
     filters = [Event.deleted_at.is_(None)]
-    if search_filter is not None:
+    if search:
         filters.insert(0, search_filter)
 
-    events_query = db.query(Event).options(joinedload(Event.org_unit)).filter(*filters)
+    events_query = db.query(Event).filter(*filters)
 
     total_count = events_query.count()
-    events = events_query.offset(skip).limit(limit).all()
+    events = (
+        events_query
+        .order_by(Event.start_date.desc())
+        .offset(skip)
+        .limit(limit)
+        .with_entities(
+            Event.id,
+            Event.event,
+            Event.start_date,
+            Event.end_date,
+            Event.location,
+            Event.banner_image,
+            Event.theme,
+            Event.organizers,
+            Event.org_unit_id,
+            Event.country_id,
+        )
+        .all()
+    )
 
-    pages = math.ceil(total_count / limit)
+    pages = math.ceil(total_count / limit) if limit else 1
     return {
         "pages": pages,
         "total": total_count,
@@ -202,20 +216,12 @@ async def get_events(
                 "id": e.id,
                 "event": e.event,
                 "theme": e.theme,
-                "description": e.description,
                 "start_date": e.start_date,
                 "end_date": e.end_date,
                 "location": e.location,
                 "banner_image": e.banner_image,
                 "organizers": e.organizers,
                 "org_unit_id": e.org_unit_id,
-                "org_unit": {
-                    "id": e.org_unit.id,
-                    "name": e.org_unit.name,
-                    "primary_color": e.org_unit.primary_color or "#0095B6",
-                    "secondary_color": e.org_unit.secondary_color or "#F7941D",
-                    "logo": e.org_unit.logo,
-                } if e.org_unit else None,
                 "country_id": e.country_id,
             }
             for e in events
