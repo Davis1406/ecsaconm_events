@@ -906,8 +906,8 @@ export default {
         this.participants = response.data || response.participants || [];
         this.attendance = response.attendance || [];
         this.totalPages = response.pages || 1;
-        this.documents = response.event?.documents || [];
-        this.links = response.event?.links || [];
+        this.documents = response.documents || [];
+        this.links = response.links || [];
       } catch (error) {
         console.error("Error fetching event:", error);
       } finally {
