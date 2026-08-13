@@ -1096,19 +1096,46 @@ async def upload_banner(
     db: Session = Depends(get_db),
 ):
     try:
-        ext = os.path.splitext(file.filename)[1]
-        unique_name = f"{event_id}_{uuid.uuid4().hex[:8]}{ext}"
-        file_path = os.path.join(EVENT_BANNER_DIR, unique_name)
-        with open(file_path, "wb+") as f:
-            f.write(await file.read())
-
         event = db.query(Event).filter(Event.id == event_id).first()
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
+
+        raw = await file.read()
+        # Downscale + recompress banners (max 1920px wide, progressive JPEG ~82)
+        # so multi-MB uploads don't slow down the public pages.
+        try:
+            from PIL import Image
+            img = Image.open(BytesIO(raw))
+            if img.width > 1920:
+                img = img.resize((1920, int(img.height * 1920 / img.width)), Image.LANCZOS)
+            file_path = os.path.join(
+                EVENT_BANNER_DIR, f"{event_id}_{uuid.uuid4().hex[:8]}.jpg"
+            )
+            img.convert("RGB").save(
+                file_path, "JPEG", quality=82, optimize=True, progressive=True
+            )
+        except Exception:
+            # Not a parseable image — keep the original file as-is
+            ext = os.path.splitext(file.filename)[1]
+            file_path = os.path.join(
+                EVENT_BANNER_DIR, f"{event_id}_{uuid.uuid4().hex[:8]}{ext}"
+            )
+            with open(file_path, "wb+") as f:
+                f.write(raw)
+
+        # Remove the previous banner file so orphans don't pile up
+        old_path = event.banner_image
         event.banner_image = file_path
         db.commit()
+        if old_path and old_path != file_path and os.path.isfile(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
 
         return JSONResponse(content={"status": "success", "banner_image": file_path})
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
