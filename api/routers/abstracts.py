@@ -262,6 +262,7 @@ def list_abstracts(
     sort_dir: str = Query("desc"),         # asc | desc
     presenter_registered: str = Query(None),  # "yes" | "no"
     presenter_paid: str = Query(None),        # "yes" | "no"
+    presenter_dedup: str = Query(None),       # "yes" — one abstract per unique presenter
 ):
     auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
     from sqlalchemy import or_
@@ -311,39 +312,24 @@ def list_abstracts(
             AbstractAuthor.is_presenting == True,
             AbstractAuthor.email.in_(db.query(multi_emails.c.email)),
         )
-    # Filter by presenter registration / payment status
-    if presenter_registered in ("yes", "no") or presenter_paid in ("yes", "no"):
-        from sqlalchemy import func as _func
-
-        # Subquery: for each abstract, the lowest author_order among is_presenting authors
-        # (matches what the frontend shows — authors.find(au => au.is_presenting))
-        primary_order_sq = (
-            db.query(
-                AbstractAuthor.abstract_id.label("abs_id"),
-                _func.min(AbstractAuthor.author_order).label("min_ord"),
-            )
-            .filter(
-                AbstractAuthor.is_presenting == True,
-                AbstractAuthor.email != None,
-                AbstractAuthor.email != "",
-            )
-            .group_by(AbstractAuthor.abstract_id)
-            .subquery()
-        )
-
-        # One row per abstract — the primary presenter only
+    # Filter / deduplicate by presenter registration / payment status.
+    # All of these operate per unique presenter (person), deduplicated by email —
+    # only one abstract is kept per matching email so the total shown in the
+    # table matches the stat-card counts.
+    needs_presenter_filter = (
+        presenter_dedup == "yes" or
+        presenter_registered in ("yes", "no") or
+        presenter_paid in ("yes", "no")
+    )
+    if needs_presenter_filter:
         pres_q = (
             db.query(
                 AbstractAuthor.email,
                 AbstractAuthor.abstract_id,
                 Abstract.event_id.label("ev_id"),
+                Abstract.created_at,
             )
             .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
-            .join(
-                primary_order_sq,
-                (AbstractAuthor.abstract_id == primary_order_sq.c.abs_id) &
-                (AbstractAuthor.author_order == primary_order_sq.c.min_ord),
-            )
             .filter(
                 Abstract.deleted_at == None,
                 Abstract.status == "accepted",
@@ -355,25 +341,31 @@ def list_abstracts(
         if event_id:
             pres_q = pres_q.filter(Abstract.event_id == event_id)
 
-        # Check registration for each abstract's primary presenter
-        matched_abstract_ids = set()
-        user_cache2: dict = {}  # email → User
+        # Group rows by presenter email
+        email_rows: dict = {}
         for row in pres_q.all():
             email = row.email.strip().lower()
-            ev = row.ev_id
+            email_rows.setdefault(email, []).append(row)
+
+        user_cache2: dict = {}  # email → User
+        matched_abstract_ids = set()
+        for email, rows in email_rows.items():
             if email not in user_cache2:
                 user_cache2[email] = db.query(User).filter(User.email == email).first()
             user = user_cache2[email]
+
             has_registered = False
             has_paid = False
             if user:
-                reg = db.query(Registration).filter(
+                ev_ids = {r.ev_id for r in rows}
+                regs = db.query(Registration).filter(
                     Registration.user_id == user.id,
-                    Registration.event_id == ev,
-                ).first()
-                if reg:
+                    Registration.event_id.in_(list(ev_ids)),
+                ).all()
+                if regs:
                     has_registered = True
-                    has_paid = bool(reg.paid)
+                    has_paid = any(r.paid for r in regs)
+
             reg_ok = (
                 presenter_registered is None or
                 (presenter_registered == "yes" and has_registered) or
@@ -385,7 +377,9 @@ def list_abstracts(
                 (presenter_paid == "no" and not has_paid)
             )
             if reg_ok and paid_ok:
-                matched_abstract_ids.add(row.abstract_id)
+                # Keep one abstract per email — the latest by created_at
+                best = max(rows, key=lambda r: r.created_at or datetime.min)
+                matched_abstract_ids.add(best.abstract_id)
 
         q = q.filter(Abstract.id.in_(matched_abstract_ids))
 

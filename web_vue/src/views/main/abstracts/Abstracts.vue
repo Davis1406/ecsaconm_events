@@ -1002,6 +1002,7 @@ export default {
         if (this.abstractsFilter === 'oral')           params.presentation_type = 'oral'
         if (this.abstractsFilter === 'poster')         params.presentation_type = 'poster'
         if (this.abstractsFilter === 'multi')          params.presenter_email = 'multi'
+        if (this.abstractsFilter === 'presenters')     params.presenter_dedup = 'yes'
         if (this.abstractsFilter === 'registered')     params.presenter_registered = 'yes'
         if (this.abstractsFilter === 'not_registered') params.presenter_registered = 'no'
         if (this.abstractsFilter === 'paid')           params.presenter_paid = 'yes'
