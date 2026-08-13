@@ -87,6 +87,29 @@ def _create_email_log(recipient_email, subject, email_type, sent_by_user_id,
         return None
 
 
+def _reset_email_log_for_resend(log_id):
+    """Reset an existing (failed) EmailLog row to 'pending' ahead of a resend
+    attempt, so a successful resend updates that same row in place instead of
+    leaving a stale 'failed' entry sitting alongside a new 'sent' one."""
+    try:
+        from core.database import SessionLocal
+        from models.models import EmailLog
+        db = SessionLocal()
+        try:
+            record = db.query(EmailLog).filter(EmailLog.id == log_id).first()
+            if record:
+                record.status = "pending"
+                record.error_message = None
+                record.sent_at = datetime.utcnow()
+                record.opened_at = None
+                record.opened_count = 0
+                db.commit()
+        finally:
+            db.close()
+    except Exception as log_err:
+        logger.error("Failed to reset email log %s for resend: %s", log_id, log_err)
+
+
 def _update_email_log(log_id, status, error_message=None):
     """Update the status of an existing email log entry after the send attempt."""
     if not log_id:
@@ -253,8 +276,13 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
             sent_by_user_id = job.get("sent_by_user_id")
             reply_to_email = job.get("reply_to_email")
 
-            log_id = _create_email_log(recipient_email, subject, email_type,
-                                        sent_by_user_id, reply_to_email, email_body)
+            existing_log_id = job.get("existing_log_id")
+            if existing_log_id:
+                _reset_email_log_for_resend(existing_log_id)
+                log_id = existing_log_id
+            else:
+                log_id = _create_email_log(recipient_email, subject, email_type,
+                                            sent_by_user_id, reply_to_email, email_body)
             final_body = _inject_tracking_pixel(email_body, log_id)
 
             message = MIMEMultipart("alternative")

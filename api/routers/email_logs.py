@@ -141,6 +141,10 @@ def resend_failed_email_logs(
             "email_type": log.email_type,
             "sent_by_user_id": current_user["user_id"],
             "reply_to_email": log.reply_to_email,
+            # Reuse this same log row on resend instead of inserting a new
+            # one, so a successful resend replaces the "failed" entry rather
+            # than leaving it behind next to a duplicate "sent" one.
+            "existing_log_id": log.id,
         }
         for log in failed_logs
         if log.body  # older rows from before body storage was added have nothing to resend
