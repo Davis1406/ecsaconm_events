@@ -184,14 +184,10 @@ async def get_events(
     if search:
         filters.insert(0, search_filter)
 
-    events_query = db.query(Event).filter(*filters)
-
-    total_count = events_query.count()
-    events = (
-        events_query
+    all_events = (
+        db.query(Event)
+        .filter(*filters)
         .order_by(Event.start_date.desc())
-        .offset(skip)
-        .limit(limit)
         .with_entities(
             Event.id,
             Event.event,
@@ -206,6 +202,9 @@ async def get_events(
         )
         .all()
     )
+
+    total_count = len(all_events)
+    events = all_events[skip : skip + limit] if limit else all_events
 
     pages = math.ceil(total_count / limit) if limit else 1
     return {
