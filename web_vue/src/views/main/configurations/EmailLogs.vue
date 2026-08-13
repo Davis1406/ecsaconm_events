@@ -11,10 +11,17 @@
             {{ total }} email{{ total !== 1 ? 's' : '' }} sent
           </p>
         </div>
-        <button v-if="failedCount" @click="confirmClearFailed"
-          class="text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition">
-          Clear failed logs ({{ failedCount }})
-        </button>
+        <div v-if="failedCount" class="flex items-center gap-2">
+          <button @click="confirmResendFailed" :disabled="resending"
+            class="text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ resending ? 'Queuing…' : `Resend failed (${failedCount})` }}
+          </button>
+          <button @click="confirmClearFailed"
+            class="text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition">
+            Clear failed logs ({{ failedCount }})
+          </button>
+        </div>
       </div>
     </div>
 
@@ -331,6 +338,7 @@ export default {
       detailError: false,
       stats: null,
       statsLoading: true,
+      resending: false,
     }
   },
   computed: {
@@ -435,6 +443,23 @@ export default {
         if (this.selectedLog?.id === id) this.closeDetail()
       } catch (e) {
         console.error('Failed to delete log', e)
+      }
+    },
+    async confirmResendFailed() {
+      const count = this.failedCount
+      if (!count || !confirm(`Resend all ${count} failed email(s) now?`)) return
+      this.resending = true
+      try {
+        const res = await axios.post(`${API_URL}/email-logs/failed/resend`, {}, { headers: this.authHeaders() })
+        alert(res.data?.message || `Resending ${count} failed email(s).`)
+        // Sends run in the background; refresh logs/stats shortly after so
+        // new sent/failed entries show up once they land.
+        setTimeout(() => { this.fetchLogs(); this.fetchStats() }, 4000)
+      } catch (e) {
+        console.error('Failed to resend failed logs', e)
+        alert('Failed to queue resend. Please try again.')
+      } finally {
+        this.resending = false
       }
     },
     async confirmClearFailed() {

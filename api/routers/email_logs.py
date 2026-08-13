@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -112,6 +112,51 @@ def clear_failed_email_logs(
     deleted = db.query(EmailLog).filter(EmailLog.status == "failed").delete(synchronize_session=False)
     db.commit()
     return {"detail": f"Deleted {deleted} failed log(s).", "deleted": deleted}
+
+
+# ── Bulk resend: failed only ────────────────────────────────────────────────
+@router.post("/failed/resend")
+def resend_failed_email_logs(
+    current_user: user_dependency,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    body: dict = None,
+):
+    """Retry sending every currently-failed email log (or a selected subset
+    via `log_ids` in the body), reusing its originally stored subject/body."""
+    auth_dependency.secure_access("VIEW_USER", current_user["user_id"])
+
+    log_ids = (body or {}).get("log_ids")
+    q = db.query(EmailLog).filter(EmailLog.status == "failed")
+    if log_ids:
+        q = q.filter(EmailLog.id.in_(log_ids))
+    failed_logs = q.all()
+
+    jobs = [
+        {
+            "recipient_email": log.recipient_email,
+            "subject": log.subject,
+            "email_body": log.body,
+            "email_type": log.email_type,
+            "sent_by_user_id": current_user["user_id"],
+            "reply_to_email": log.reply_to_email,
+        }
+        for log in failed_logs
+        if log.body  # older rows from before body storage was added have nothing to resend
+    ]
+    skipped = len(failed_logs) - len(jobs)
+
+    import utils.mailer_util as mailer_util
+    if jobs:
+        background_tasks.add_task(mailer_util.send_bulk_emails, jobs)
+
+    return {
+        "queued": len(jobs),
+        "skipped_no_body": skipped,
+        "message": f"Resending {len(jobs)} failed email(s)."
+                    + (f" {skipped} skipped (no stored content)." if skipped else ""),
+    }
 
 
 # ── Delete ───────────────────────────────────────────────────────────────────

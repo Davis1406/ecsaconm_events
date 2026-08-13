@@ -212,13 +212,17 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
         logger.error("SMTP_PORT must be an integer.")
         return {"sent": 0, "failed": len(jobs)}
 
-    try:
+    def _open_connection():
         if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
+            conn = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
         else:
-            server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
-            server.starttls()
-        server.login(smtp_username, smtp_password)
+            conn = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+            conn.starttls()
+        conn.login(smtp_username, smtp_password)
+        return conn
+
+    try:
+        server = _open_connection()
     except Exception as e:
         logger.error("Failed to establish SMTP connection for bulk send: %s", str(e))
         for job in jobs:
@@ -233,6 +237,12 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
     from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
     sent_count = 0
     failed_count = 0
+    msgs_on_connection = 0
+    # Mail servers commonly cap how many messages one SMTP session may send
+    # (Exim/cPanel default is often ~25-100) and reply "421 too many
+    # messages in this connection", tearing the socket down. Rotate to a
+    # fresh, re-authenticated connection before that happens.
+    max_msgs_per_connection = int(os.getenv("SMTP_MAX_MSGS_PER_CONNECTION", "20"))
 
     try:
         for i, job in enumerate(jobs):
@@ -247,22 +257,50 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
                                         sent_by_user_id, reply_to_email, email_body)
             final_body = _inject_tracking_pixel(email_body, log_id)
 
-            try:
-                message = MIMEMultipart("alternative")
-                message["From"] = f"{from_name} <{from_email}>"
-                message["To"] = recipient_email
-                message["Cc"] = ADMIN_CC_EMAIL
-                message["Subject"] = subject
-                message["Date"] = formatdate(localtime=True)
-                message["Message-ID"] = make_msgid(domain="ecsaconm.org")
-                message["Reply-To"] = reply_to_email or f"{from_name} <{from_email}>"
-                message["X-Mailer"] = "ECSACONM Events Portal"
-                message.attach(MIMEText(final_body, "html", "utf-8"))
+            message = MIMEMultipart("alternative")
+            message["From"] = f"{from_name} <{from_email}>"
+            message["To"] = recipient_email
+            message["Cc"] = ADMIN_CC_EMAIL
+            message["Subject"] = subject
+            message["Date"] = formatdate(localtime=True)
+            message["Message-ID"] = make_msgid(domain="ecsaconm.org")
+            message["Reply-To"] = reply_to_email or f"{from_name} <{from_email}>"
+            message["X-Mailer"] = "ECSACONM Events Portal"
+            message.attach(MIMEText(final_body, "html", "utf-8"))
+            envelope_to = _cc_recipients(recipient_email)
 
-                server.sendmail(smtp_username, _cc_recipients(recipient_email), message.as_string())
+            if msgs_on_connection >= max_msgs_per_connection:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+                server = _open_connection()
+                msgs_on_connection = 0
+
+            try:
+                server.sendmail(smtp_username, envelope_to, message.as_string())
+                msgs_on_connection += 1
                 logger.info("Email sent successfully to %s", recipient_email)
                 _update_email_log(log_id, "sent")
                 sent_count += 1
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
+                # The server dropped/refused the connection mid-batch (the
+                # same per-connection cap, or a transient network blip) —
+                # reconnect once and retry this one message before giving up.
+                logger.warning("SMTP connection dropped sending to %s (%s) - reconnecting and retrying once",
+                                recipient_email, e)
+                try:
+                    server = _open_connection()
+                    msgs_on_connection = 0
+                    server.sendmail(smtp_username, envelope_to, message.as_string())
+                    msgs_on_connection += 1
+                    logger.info("Email sent successfully to %s (after reconnect)", recipient_email)
+                    _update_email_log(log_id, "sent")
+                    sent_count += 1
+                except Exception as e2:
+                    logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
+                    _update_email_log(log_id, "failed", str(e2))
+                    failed_count += 1
             except Exception as e:
                 logger.error("Failed to send email to %s: %s", recipient_email, str(e))
                 _update_email_log(log_id, "failed", str(e))
