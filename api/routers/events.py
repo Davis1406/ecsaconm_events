@@ -196,6 +196,7 @@ async def get_events(
     pages = math.ceil(total_count / limit)
     return {
         "pages": pages,
+        "total": total_count,
         "data": [
             {
                 "id": e.id,

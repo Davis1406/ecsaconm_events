@@ -21,6 +21,10 @@
         </div>
       </div>
 
+      <p v-if="!isLoading" class="text-xs text-gray-400">
+        {{ total }} registration{{ total !== 1 ? 's' : '' }}
+      </p>
+
       <!-- Spinner -->
       <SpinnerComponent v-if="isLoading" />
 
@@ -476,6 +480,7 @@ export default {
     return {
       headerTitle: 'Registrations',
       registrations: [],
+      total: 0,
       events: [],
       isLoading: true,
       verifyingId: null,
@@ -563,6 +568,7 @@ export default {
         if (this.selectedEventId) params.event_id = this.selectedEventId
         const response = await fetchDataWithParams('registrations', params)
         this.registrations = response.data || response || []
+        this.total = response.total || 0
         this.totalPages = response.pages || 1
       } catch (error) {
         console.error('Error fetching registrations:', error)

@@ -89,6 +89,7 @@ async def get_users(
     pages = math.ceil(total_count / limit)
     return {
         "pages": pages,
+        "total": total_count,
         "data": [
             {
                 "id": u.id,

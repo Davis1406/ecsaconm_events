@@ -167,6 +167,16 @@
       <div v-if="errorMsg" class="mx-5 mt-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{{ errorMsg }}</div>
       <div v-if="successMsg" class="mx-5 mt-4 p-3 rounded-xl text-sm text-green-700 bg-green-50 border border-green-200">{{ successMsg }}</div>
 
+      <!-- Filters -->
+      <div class="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-gray-100">
+        <button v-for="f in filterOptions" :key="f.key" @click="filterPreset = f.key"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition"
+          :class="filterPreset === f.key ? 'text-white border-transparent' : 'text-gray-600 border-gray-200 hover:border-gray-300'"
+          :style="filterPreset === f.key ? 'background-color: rgb(254,80,103);' : ''">
+          {{ f.label }} <span :class="filterPreset === f.key ? 'opacity-80' : 'text-gray-400'">({{ filterCounts[f.key] }})</span>
+        </button>
+      </div>
+
       <!-- Table header -->
       <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
         <div class="col-span-4">Participant</div>
@@ -178,16 +188,16 @@
       </div>
 
       <!-- Empty state -->
-      <div v-if="participants.length === 0" class="py-16 text-center">
+      <div v-if="filteredParticipants.length === 0" class="py-16 text-center">
         <div class="h-14 w-14 rounded-full flex items-center justify-center mx-auto mb-4"
           style="background-color: rgba(254,80,103,0.1);">
           <UserGroupIcon class="w-7 h-7" style="color: rgb(254,80,103);" />
         </div>
-        <p class="text-gray-400 text-sm">No participants yet.</p>
+        <p class="text-gray-400 text-sm">No participants match this filter.</p>
       </div>
 
       <!-- Rows -->
-      <div v-for="(participant, index) in participants" :key="participant.id"
+      <div v-for="(participant, index) in pagedParticipants" :key="participant.id"
         class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3 border-b border-gray-50 hover:bg-gray-50 transition text-sm"
         :class="index % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-white/[0.04]'">
 
@@ -271,7 +281,7 @@
       </div>
 
       <div class="px-5 pb-2">
-        <pagination-component :currentPage="currentPage" :totalPages="totalPages" @page-change="handlePageChange" />
+        <pagination-component :currentPage="localPage" :totalPages="localTotalPages" @page-change="handleLocalPageChange" />
       </div>
     </div>
 
@@ -767,10 +777,25 @@ export default {
       importSuccess: '',
       importError: '',
       importPreviewCount: 0,
+      // Participant filters (client-side, over the already-fetched list) + pagination
+      filterPreset: 'all',
+      filterOptions: [
+        { key: 'all', label: 'All' },
+        { key: 'presenters', label: 'Abstract Presenters' },
+        { key: 'paid', label: 'Paid' },
+        { key: 'unpaid', label: 'Unpaid' },
+        { key: 'proof_pending', label: 'Proof Submitted, Not Paid' },
+      ],
+      localPage: 1,
+      localPageSize: 20,
     };
   },
   mounted() {
     this.getEvent();
+  },
+  watch: {
+    filterPreset() { this.localPage = 1; },
+    searchPhrase() { this.localPage = 1; },
   },
   setup() {
     const authStore = useAuthStore();
@@ -781,6 +806,33 @@ export default {
   computed: {
     paidCount() {
       return this.participants.filter(p => this.paidStatus(p.paid || p.event_payment)).length;
+    },
+    filterCounts() {
+      const paidOf = p => this.paidStatus(p.paid || p.event_payment);
+      return {
+        all: this.participants.length,
+        presenters: this.participants.filter(p => p.is_abstract_presenter).length,
+        paid: this.participants.filter(paidOf).length,
+        unpaid: this.participants.filter(p => !paidOf(p)).length,
+        proof_pending: this.participants.filter(p => p.payment_proof && !paidOf(p)).length,
+      };
+    },
+    filteredParticipants() {
+      const paidOf = p => this.paidStatus(p.paid || p.event_payment);
+      switch (this.filterPreset) {
+        case 'presenters': return this.participants.filter(p => p.is_abstract_presenter);
+        case 'paid': return this.participants.filter(paidOf);
+        case 'unpaid': return this.participants.filter(p => !paidOf(p));
+        case 'proof_pending': return this.participants.filter(p => p.payment_proof && !paidOf(p));
+        default: return this.participants;
+      }
+    },
+    localTotalPages() {
+      return Math.max(1, Math.ceil(this.filteredParticipants.length / this.localPageSize));
+    },
+    pagedParticipants() {
+      const start = (this.localPage - 1) * this.localPageSize;
+      return this.filteredParticipants.slice(start, start + this.localPageSize);
     },
     bannerUrl() {
       if (!this.event.banner_image) return '';
@@ -860,6 +912,9 @@ export default {
     async handlePageChange(newPage) {
       this.currentPage = newPage;
       this.getEvent();
+    },
+    handleLocalPageChange(newPage) {
+      this.localPage = newPage;
     },
     paidStatus(status) { return status === true; },
     registrationStatus(status) { return status === true; },

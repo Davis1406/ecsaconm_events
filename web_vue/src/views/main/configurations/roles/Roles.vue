@@ -8,6 +8,9 @@
                     class="mt-2 px-4 py-2 text-white-200 bg-bondi-blue-500 hover:bg-bondi-blue-400 rounded-2xl">
                     Add Role</router-link>
             </div>
+            <p v-if="!isLoading" class="text-xs text-gray-400">
+                {{ total }} role{{ total !== 1 ? 's' : '' }}
+            </p>
             <SpinnerComponent v-if="isLoading" />
             <div v-else class="rounded-2xl border border-white-600 shadow-sm p-4 text-abbey-500">
                 <div class="flex sm:flex-row flex-col bg-shuttle-gray-300 p-2 text-sm font-bold">
@@ -67,6 +70,7 @@ export default {
         return {
             headerTitle: "Roles",
             roles: {},
+            total: 0,
             isLoading: true,
             showDeleteModal: false,
             deletePersonnelId: null,
@@ -90,6 +94,7 @@ export default {
             try {
                 const response = await fetchData("roles", (this.currentPage - 1) * this.pageSize, this.pageSize, this.searchPhrase);
                 this.roles = response.data;
+                this.total = response.total || 0;
                 this.totalPages = response.pages;
                 this.isLoading = false;
             } catch (error) {
