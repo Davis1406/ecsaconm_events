@@ -7,7 +7,9 @@
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <div>
           <h2 class="text-base font-bold text-gray-800">Email Templates</h2>
-          <p class="text-sm text-gray-400 mt-0.5">Manage the email messages sent to users</p>
+          <p v-if="!isLoading" class="text-sm text-gray-400 mt-0.5">
+            {{ templates.length }} template{{ templates.length !== 1 ? 's' : '' }}
+          </p>
         </div>
       </div>
 

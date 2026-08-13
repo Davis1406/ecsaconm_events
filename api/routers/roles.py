@@ -66,7 +66,7 @@ async def get_roles(
     roles = roles_query.offset(skip).limit(limit).all()
 
     pages = math.ceil(total_count / limit)
-    return {"pages": pages, "data": roles}
+    return {"pages": pages, "data": roles, "total": total_count}
 
 
 @router.post("/")

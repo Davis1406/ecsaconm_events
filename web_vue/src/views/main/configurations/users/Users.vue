@@ -17,6 +17,10 @@
         </router-link>
       </div>
 
+      <p v-if="!isLoading" class="text-xs text-gray-400">
+        {{ total }} user{{ total !== 1 ? 's' : '' }}
+      </p>
+
       <SpinnerComponent v-if="isLoading" />
 
       <div v-else class="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -127,6 +131,7 @@ export default {
   data() {
     return {
       users: [],
+      total: 0,
       isLoading: true,
       showDeleteModal: false,
       deleteUserId: null,
@@ -157,6 +162,7 @@ export default {
       try {
         const response = await fetchData('users', (this.currentPage - 1) * this.pageSize, this.pageSize, this.searchPhrase)
         this.users = response.data || []
+        this.total = response.total || 0
         this.totalPages = response.pages || 1
       } catch (error) {
         console.error('Error fetching users:', error)

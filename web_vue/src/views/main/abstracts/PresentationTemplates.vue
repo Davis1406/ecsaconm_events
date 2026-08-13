@@ -50,6 +50,9 @@
 
     <!-- Template list -->
     <div class="rounded-2xl border border-gray-100 shadow-sm bg-white overflow-hidden">
+      <div class="px-4 pt-3 pb-1 text-xs text-gray-400">
+        {{ templates.length }} template{{ templates.length !== 1 ? 's' : '' }}
+      </div>
       <div class="flex bg-mercury-500 p-3 pt-2 pb-2 rounded-t-sm uppercase text-xs font-bold">
         <div class="w-5/12 p-1">File Name</div>
         <div class="w-3/12 p-1">Description</div>

@@ -9,6 +9,9 @@
                     style="background-color: rgb(254,80,103);">
                     Add Event</router-link>
             </div>
+            <p v-if="!isLoading" class="text-xs text-gray-400">
+                {{ total }} event{{ total !== 1 ? 's' : '' }}
+            </p>
             <SpinnerComponent v-if="isLoading" />
             <div v-else class="rounded-md border-2 border-white-600 shadow-sm text-abbey-500">
                 <div class="">
@@ -60,6 +63,7 @@ export default {
         return {
             headerTitle: "Events",
             events: {},
+            total: 0,
             isLoading: true,
             showDeleteModal: false,
             deleteEventId: null,
@@ -83,6 +87,7 @@ export default {
             try {
                 const response = await fetchData("events", (this.currentPage - 1) * this.pageSize, this.pageSize, this.searchPhrase);
                 this.events = response.data;
+                this.total = response.total || 0;
                 this.totalPages = response.pages;
                 this.isLoading = false;
             } catch (error) {
