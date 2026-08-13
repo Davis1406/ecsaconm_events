@@ -189,7 +189,7 @@
       <!-- Rows -->
       <div v-for="(participant, index) in participants" :key="participant.id"
         class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3 border-b border-gray-50 hover:bg-gray-50 transition text-sm"
-        :class="index % 2 === 0 ? '' : 'bg-gray-50/50'">
+        :class="index % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-white/[0.04]'">
 
         <!-- Name — clickable link to participant profile -->
         <div class="col-span-4">
