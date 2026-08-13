@@ -108,7 +108,10 @@
             <!-- Dropdown -->
             <transition name="pop">
               <div v-if="openMenuId === (reg.id || reg.registration_id)"
-                class="absolute right-0 top-8 z-30 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 text-sm"
+                :class="[
+                  'absolute right-0 z-30 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 text-sm',
+                  isLastRow(idx) ? 'bottom-8' : 'top-8',
+                ]"
                 @click.stop>
                 <!-- View proof -->
                 <button v-if="reg.payment_proof"
@@ -163,7 +166,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                   </svg>
-                  Delete Registration
+                  Delete
                 </button>
               </div>
             </transition>
@@ -677,6 +680,9 @@ export default {
     },
     toggleMenu(id) {
       this.openMenuId = this.openMenuId === id ? null : id
+    },
+    isLastRow(idx) {
+      return idx === this.registrations.length - 1
     },
     closeMenu() {
       this.openMenuId = null
