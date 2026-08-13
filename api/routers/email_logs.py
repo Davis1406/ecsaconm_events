@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from core.database import get_db
@@ -61,6 +62,56 @@ def list_email_logs(
         "total": total,
         "data": [_serialize(log) for log in logs],
     }
+
+
+# ── Stats (report) ──────────────────────────────────────────────────────────
+@router.get("/stats/summary")
+def get_email_log_stats(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """Aggregate counts for the Sent Emails report: by type, by status, and
+    opened vs not-opened among successfully sent emails."""
+    auth_dependency.secure_access("VIEW_USER", current_user["user_id"])
+
+    by_type = (
+        db.query(EmailLog.email_type, func.count(EmailLog.id))
+        .group_by(EmailLog.email_type)
+        .all()
+    )
+    by_status = (
+        db.query(EmailLog.status, func.count(EmailLog.id))
+        .group_by(EmailLog.status)
+        .all()
+    )
+    sent_total = db.query(func.count(EmailLog.id)).filter(EmailLog.status == "sent").scalar() or 0
+    opened = db.query(func.count(EmailLog.id)).filter(
+        EmailLog.status == "sent", EmailLog.opened_count > 0
+    ).scalar() or 0
+
+    return {
+        "by_type": [{"email_type": t or "general", "count": c} for t, c in by_type],
+        "by_status": [{"status": s, "count": c} for s, c in by_status],
+        "opened": {
+            "opened": opened,
+            "not_opened": sent_total - opened,
+            "sent_total": sent_total,
+        },
+    }
+
+
+# ── Bulk delete: failed only ────────────────────────────────────────────────
+@router.delete("/failed/all")
+def clear_failed_email_logs(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    auth_dependency.secure_access("VIEW_USER", current_user["user_id"])
+    deleted = db.query(EmailLog).filter(EmailLog.status == "failed").delete(synchronize_session=False)
+    db.commit()
+    return {"detail": f"Deleted {deleted} failed log(s).", "deleted": deleted}
 
 
 # ── Delete ───────────────────────────────────────────────────────────────────

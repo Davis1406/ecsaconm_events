@@ -11,12 +11,79 @@
             {{ total }} email{{ total !== 1 ? 's' : '' }} sent
           </p>
         </div>
-        <button v-if="logs.length" @click="confirmClearAll"
+        <button v-if="failedCount" @click="confirmClearFailed"
           class="text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition">
-          Clear all logs
+          Clear failed logs ({{ failedCount }})
         </button>
       </div>
+    </div>
 
+    <!-- Report -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="text-sm font-bold text-gray-700">Email Report</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Breakdown across all logged emails</p>
+      </div>
+      <div v-if="statsLoading" class="flex justify-center py-10">
+        <svg class="animate-spin h-6 w-6" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+        </svg>
+      </div>
+      <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6 p-5">
+        <!-- By status -->
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">By Status</h3>
+          <div v-if="!statusBars.length" class="text-xs text-gray-400 italic">No data yet.</div>
+          <div v-for="row in statusBars" :key="row.key" class="mb-3 last:mb-0">
+            <div class="flex justify-between text-xs mb-1">
+              <span class="font-semibold text-gray-700 capitalize">{{ row.key }}</span>
+              <span class="text-gray-500">{{ row.count }} ({{ row.pct }}%)</span>
+            </div>
+            <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div class="h-full rounded-full transition-all" :class="statusBarClass(row.key)" :style="{ width: row.barWidth + '%' }" />
+            </div>
+          </div>
+        </div>
+
+        <!-- By type -->
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">By Type</h3>
+          <div v-if="!typeBars.length" class="text-xs text-gray-400 italic">No data yet.</div>
+          <div v-for="row in typeBars" :key="row.key" class="mb-3 last:mb-0">
+            <div class="flex justify-between text-xs mb-1">
+              <span class="font-semibold text-gray-700">{{ typeLabel(row.key) }}</span>
+              <span class="text-gray-500">{{ row.count }} ({{ row.pct }}%)</span>
+            </div>
+            <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div class="h-full rounded-full transition-all" :class="typeBarClass(row.key)" :style="{ width: row.barWidth + '%' }" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Opened vs not opened -->
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Opened (of Sent)</h3>
+          <div v-if="!openedStats || openedStats.sent_total === 0" class="text-xs text-gray-400 italic">No sent emails yet.</div>
+          <template v-else>
+            <div class="flex items-baseline gap-2 mb-2">
+              <span class="text-2xl font-bold" style="color: rgb(254,80,103);">{{ openedStats.openedPct }}%</span>
+              <span class="text-xs text-gray-500">opened at least once</span>
+            </div>
+            <div class="h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
+              <div class="h-full" style="background-color: rgb(254,80,103);" :style="{ width: openedStats.openedPct + '%' }" />
+            </div>
+            <div class="flex justify-between text-xs text-gray-500 mt-2">
+              <span><span class="font-semibold text-gray-700">{{ openedStats.opened }}</span> opened</span>
+              <span><span class="font-semibold text-gray-700">{{ openedStats.not_opened }}</span> not opened</span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sent Emails table -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
       <!-- Filters -->
       <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
         <input v-model="search" type="text" placeholder="Search recipient or subject..."
@@ -201,6 +268,7 @@ const TYPE_LABELS = {
   reviewer_assignment: 'Reviewer Assignment',
   registration_reminder: 'Registration Reminder',
   payment_receipt: 'Payment Receipt',
+  test: 'Test',
 }
 
 const TYPE_CLASSES = {
@@ -215,6 +283,29 @@ const TYPE_CLASSES = {
   reviewer_assignment: 'bg-teal-100 text-teal-700',
   registration_reminder: 'bg-orange-100 text-orange-700',
   payment_receipt: 'bg-green-100 text-green-700',
+  test: 'bg-pink-100 text-pink-700',
+}
+
+// Solid fill classes for report bars — same hue family as the badges above.
+const TYPE_BAR_CLASSES = {
+  general: 'bg-gray-400',
+  new_account: 'bg-purple-500',
+  password_reset_request: 'bg-yellow-500',
+  password_reset: 'bg-yellow-500',
+  account_verification: 'bg-blue-500',
+  account_verification_request: 'bg-blue-500',
+  organisation_verification_request: 'bg-indigo-500',
+  organisation_approval_status: 'bg-indigo-500',
+  reviewer_assignment: 'bg-teal-500',
+  registration_reminder: 'bg-orange-500',
+  payment_receipt: 'bg-green-500',
+  test: 'bg-pink-500',
+}
+
+const STATUS_BAR_CLASSES = {
+  sent: 'bg-green-500',
+  failed: 'bg-red-500',
+  pending: 'bg-yellow-500',
 }
 
 export default {
@@ -238,12 +329,49 @@ export default {
       detailLog: null,
       detailLoading: false,
       detailError: false,
+      stats: null,
+      statsLoading: true,
     }
   },
   computed: {
     typeOptions() {
       const present = new Set(this.logs.map(l => l.email_type))
       return Object.keys(TYPE_LABELS).filter(k => present.has(k))
+    },
+    failedCount() {
+      return this.logs.filter(l => l.status === 'failed').length
+    },
+    statusBars() {
+      if (!this.stats?.by_status?.length) return []
+      const rows = [...this.stats.by_status].sort((a, b) => b.count - a.count)
+      const total = rows.reduce((s, r) => s + r.count, 0)
+      const max = Math.max(...rows.map(r => r.count), 1)
+      return rows.map(r => ({
+        key: r.status,
+        count: r.count,
+        pct: total ? Math.round((r.count / total) * 100) : 0,
+        barWidth: Math.round((r.count / max) * 100),
+      }))
+    },
+    typeBars() {
+      if (!this.stats?.by_type?.length) return []
+      const rows = [...this.stats.by_type].sort((a, b) => b.count - a.count)
+      const total = rows.reduce((s, r) => s + r.count, 0)
+      const max = Math.max(...rows.map(r => r.count), 1)
+      return rows.map(r => ({
+        key: r.email_type,
+        count: r.count,
+        pct: total ? Math.round((r.count / total) * 100) : 0,
+        barWidth: Math.round((r.count / max) * 100),
+      }))
+    },
+    openedStats() {
+      const o = this.stats?.opened
+      if (!o) return null
+      return {
+        ...o,
+        openedPct: o.sent_total ? Math.round((o.opened / o.sent_total) * 100) : 0,
+      }
     },
     filtered() {
       const q = this.search.toLowerCase().trim()
@@ -269,6 +397,7 @@ export default {
   },
   mounted() {
     this.fetchLogs()
+    this.fetchStats()
   },
   methods: {
     authHeaders() {
@@ -286,6 +415,17 @@ export default {
         this.isLoading = false
       }
     },
+    async fetchStats() {
+      this.statsLoading = true
+      try {
+        const res = await axios.get(`${API_URL}/email-logs/stats/summary`, { headers: this.authHeaders() })
+        this.stats = res.data
+      } catch (e) {
+        console.error('Failed to load email stats', e)
+      } finally {
+        this.statsLoading = false
+      }
+    },
     async deleteLog(id) {
       if (!confirm('Delete this log entry?')) return
       try {
@@ -297,15 +437,19 @@ export default {
         console.error('Failed to delete log', e)
       }
     },
-    async confirmClearAll() {
-      if (!confirm(`Delete all ${this.logs.length} log entries? This cannot be undone.`)) return
-      const ids = [...this.logs.map(l => l.id)]
-      for (const id of ids) {
-        try { await axios.delete(`${API_URL}/email-logs/${id}`, { headers: this.authHeaders() }) } catch (_) { /* continue */ }
+    async confirmClearFailed() {
+      const count = this.failedCount
+      if (!count || !confirm(`Delete all ${count} failed log entr${count === 1 ? 'y' : 'ies'}? This cannot be undone.`)) return
+      try {
+        const res = await axios.delete(`${API_URL}/email-logs/failed/all`, { headers: this.authHeaders() })
+        const deleted = res.data?.deleted ?? count
+        this.logs = this.logs.filter(l => l.status !== 'failed')
+        this.total = Math.max(0, this.total - deleted)
+        this.closeDetail()
+        this.fetchStats()
+      } catch (e) {
+        console.error('Failed to clear failed logs', e)
       }
-      this.logs = []
-      this.total = 0
-      this.closeDetail()
     },
     async openDetail(log) {
       this.selectedLog = log
@@ -342,6 +486,8 @@ export default {
     },
     typeLabel(t) { return TYPE_LABELS[t] || t },
     typeClass(t) { return TYPE_CLASSES[t] || 'bg-gray-100 text-gray-600' },
+    typeBarClass(t) { return TYPE_BAR_CLASSES[t] || 'bg-gray-400' },
+    statusBarClass(s) { return STATUS_BAR_CLASSES[s] || 'bg-gray-400' },
     statusClass(s) {
       return {
         sent: 'bg-green-100 text-green-700',
