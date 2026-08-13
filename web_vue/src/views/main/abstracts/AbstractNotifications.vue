@@ -73,12 +73,17 @@
 <script>
 import HeaderView from '@/includes/Header.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
-import { fetchData } from '@/services/apiService'
+import axios from 'axios'
+import { useAuthStore } from '@/store/authStore'
 
 export default {
     name: 'AbstractNotificationsView',
     components: {
         HeaderView, SpinnerComponent
+    },
+    setup() {
+        const authStore = useAuthStore()
+        return { accessToken: authStore.accessToken }
     },
     data() {
         return {
@@ -86,7 +91,8 @@ export default {
             presenters: [],
             isLoading: true,
             sendStatus: '',
-            eventId: 1
+            eventId: 1,
+            apiUrl: import.meta.env.VITE_API_URL,
         }
     },
     mounted() {
@@ -97,8 +103,11 @@ export default {
             this.isLoading = true
             this.sendStatus = ''
             try {
-                const response = await fetchData(`abstracts/registration-reminder-preview?event_id=${this.eventId}`)
-                this.presenters = response || []
+                const res = await axios.get(`${this.apiUrl}/abstracts/registration-reminder-preview`, {
+                    params: { event_id: this.eventId },
+                    headers: { Authorization: `Bearer ${this.accessToken}` },
+                })
+                this.presenters = res.data || []
             } catch (error) {
                 console.error('Error loading preview:', error)
             } finally {
@@ -109,8 +118,11 @@ export default {
             this.isLoading = true
             this.sendStatus = 'Sending...'
             try {
-                const response = await fetchData(`abstracts/send-registration-reminders?event_id=${this.eventId}`, 'POST')
-                this.sendStatus = `Sent to ${response.sent || 0} presenters`
+                const res = await axios.post(`${this.apiUrl}/abstracts/send-registration-reminders`, {}, {
+                    params: { event_id: this.eventId },
+                    headers: { Authorization: `Bearer ${this.accessToken}` },
+                })
+                this.sendStatus = `Sent to ${res.data.sent || res.data.reminders_sent || 0} presenters`
                 setTimeout(() => { this.sendStatus = '' }, 3000)
             } catch (error) {
                 console.error('Error sending reminders:', error)
