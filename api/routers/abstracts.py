@@ -12,7 +12,7 @@ from openpyxl.utils import get_column_letter
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role, Registration, Event, AbstractStatus
+from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role, Registration, Event, AbstractStatus, EmailLog
 from datetime import datetime, timezone
 from sqlalchemy import text as _sql_text
 from schemas.events_space import (
@@ -837,6 +837,22 @@ def registration_reminder_preview(
 
     presenters = q.all()
 
+    # Batch-load all reminder email logs for these presenters in one query
+    all_emails = {pa.email.strip().lower() for pa in presenters}
+    reminder_logs = {}
+    if all_emails:
+        log_rows = (
+            db.query(EmailLog)
+            .filter(
+                EmailLog.email_type == "registration_reminder",
+                EmailLog.recipient_email.in_(list(all_emails)),
+            )
+            .all()
+        )
+        for log in log_rows:
+            key = log.recipient_email.strip().lower()
+            reminder_logs.setdefault(key, []).append(log.sent_at)
+
     # Deduplicate by email (a presenter may have multiple abstracts)
     seen_emails = set()
     results = []
@@ -855,6 +871,11 @@ def registration_reminder_preview(
                 Registration.event_id == (event_id or pa.abstract.event_id),
             ).first() is not None
 
+        log_times = reminder_logs.get(email, [])
+        reminder_sent = len(log_times) > 0
+        last_reminder_at = max(log_times) if log_times else None
+        reminder_count = len(log_times)
+
         results.append({
             "firstname": pa.firstname,
             "lastname": pa.lastname,
@@ -863,6 +884,9 @@ def registration_reminder_preview(
             "abstract_id": pa.abstract_id,
             "has_account": has_account,
             "has_registered": has_registration,
+            "reminder_sent": reminder_sent,
+            "reminder_count": reminder_count,
+            "last_reminder_at": last_reminder_at.isoformat() if last_reminder_at else None,
         })
 
     # Only return those who haven't registered
@@ -873,12 +897,23 @@ def registration_reminder_preview(
 @router.post("/send-registration-reminders")
 def send_registration_reminders(
     current_user: user_dependency,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     auth_dependency: Auth = Depends(get_auth_dep),
-    event_id: int = Query(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    body: dict = None,
 ):
+    """
+    Send registration reminder emails to unregistered presenters.
+
+    Accept an optional `event_id` query param via the body, and an optional
+    `selected_emails` list — when provided, only those presenters receive a
+    reminder; when omitted, all unregistered presenters are emailed.
+    """
     auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    event_id = (body or {}).get("event_id")
+    selected_emails = (body or {}).get("selected_emails")  # list[str] | None
+    selected_set = {e.strip().lower() for e in selected_emails} if selected_emails else None
 
     q = db.query(AbstractAuthor).join(
         Abstract, AbstractAuthor.abstract_id == Abstract.id
@@ -904,40 +939,85 @@ def send_registration_reminders(
             continue
         seen_emails.add(email)
 
+        # If a subset was selected, skip anyone not in the selection
+        if selected_set is not None and email not in selected_set:
+            continue
+
         user = db.query(User).filter(User.email == email).first()
-        if user:
+        has_account = user is not None
+
+        target_event_id = event_id or pa.abstract.event_id
+        has_registration = False
+        if has_account:
             has_registration = db.query(Registration).filter(
                 Registration.user_id == user.id,
-                Registration.event_id == (event_id or pa.abstract.event_id),
+                Registration.event_id == target_event_id,
             ).first() is not None
-            if has_registration:
-                continue
+
+        if has_registration:
+            continue
 
         recipients.append({
             "firstname": pa.firstname,
             "lastname": pa.lastname,
             "email": email,
             "abstract_title": pa.abstract.title,
-            "has_account": user is not None,
+            "has_account": has_account,
+            "event_name": pa.abstract.event.event if pa.abstract and pa.abstract.event else "ECSACONM Event",
         })
 
-    event = db.query(Event).filter(Event.id == event_id).first() if event_id else None
-    event_name = event.event if event else "the conference"
+    sent_by_user_id = current_user["user_id"]
 
     import utils.mailer_util as mailer_util
+    from models.models import EmailTemplate as EmailTemplateModel
+    from jinja2 import Template as Jinja2Template
+
+    # Load template once
+    db_tpl = db.query(EmailTemplateModel).filter_by(template_key="registration_reminder").first()
+
+    reminders_sent = 0
     for r in recipients:
-        mailer_util.registration_reminder_email(
-            recipient_email=r["email"],
-            firstname=r["firstname"],
-            lastname=r["lastname"],
+        firstname = r["firstname"] or "Presenter"
+        event_name = r["event_name"]
+
+        if r["has_account"]:
+            subject = f"Reminder: Register for {event_name}"
+        else:
+            subject = f"Action Required: Create Account & Register for {event_name}"
+
+        render_vars = dict(
+            subject=subject,
+            firstname=firstname,
             event_name=event_name,
+            abstract_title=r["abstract_title"],
             has_account=r["has_account"],
-            background_tasks=background_tasks,
+            year=mailer_util.YEAR,
         )
+        try:
+            if db_tpl and db_tpl.body_html:
+                email_body = Jinja2Template(db_tpl.body_html).render(**render_vars)
+            else:
+                file_tpl = mailer_util.templates.get_template("registration_reminder_template.html")
+                email_body = file_tpl.render(**render_vars)
+        except Exception:
+            email_body = (
+                f"<p>Dear {firstname},</p>"
+                f"<p>Your abstract has been accepted for <strong>{event_name}</strong>. "
+                f"Please complete your registration.</p>"
+                f"<p>ECSACONM Events Team</p>"
+            )
+
+        mailer_util.send_email_backgroundable(
+            r["email"], subject, email_body, background_tasks,
+            email_type="registration_reminder",
+            sent_by_user_id=sent_by_user_id,
+        )
+        reminders_sent += 1
 
     return {
-        "sent": len(recipients),
-        "message": f"Registration reminders queued for {len(recipients)} presenter(s).",
+        "sent": reminders_sent,
+        "message": f"Registration reminders queued for {reminders_sent} presenter(s).",
+        "reminders_sent": reminders_sent,
     }
 
 
@@ -1236,106 +1316,6 @@ def _map_ptype(status_str: str) -> str:
 def _count_authors(row: dict) -> int:
     names = str(row.get("Author Name") or "")
     return max(1, len([n for n in names.split("|") if n.strip()]))
-
-
-@router.post("/send-registration-reminders")
-def send_registration_reminders(
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    body: dict = None,
-):
-    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
-
-    event_id = (body or {}).get("event_id")
-
-    q = db.query(AbstractAuthor).join(
-        Abstract, AbstractAuthor.abstract_id == Abstract.id
-    ).options(
-        joinedload(AbstractAuthor.abstract).joinedload(Abstract.event),
-    ).filter(
-        AbstractAuthor.is_presenting == True,
-        AbstractAuthor.email != None,
-        AbstractAuthor.email != "",
-        Abstract.status == "accepted",
-        Abstract.deleted_at == None,
-    )
-    if event_id:
-        q = q.filter(Abstract.event_id == event_id)
-
-    presenters = q.all()
-
-    seen_emails = set()
-    reminders_sent = 0
-    skipped_registered = 0
-
-    for pa in presenters:
-        email = pa.email.strip().lower()
-        if email in seen_emails:
-            continue
-        seen_emails.add(email)
-
-        user = db.query(User).filter(User.email == email).first()
-        has_account = user is not None
-
-        target_event_id = event_id or pa.abstract.event_id
-        has_registration = False
-        if has_account:
-            has_registration = db.query(Registration).filter(
-                Registration.user_id == user.id,
-                Registration.event_id == target_event_id,
-            ).first() is not None
-
-        if has_registration:
-            skipped_registered += 1
-            continue
-
-        # Send the reminder email
-        event_name = pa.abstract.event.event if pa.abstract and pa.abstract.event else "ECSACONM Event"
-        firstname = pa.firstname or "Presenter"
-
-        import utils.mailer_util as mailer_util
-        from models.models import EmailTemplate as EmailTemplateModel
-        from jinja2 import Template as Jinja2Template
-
-        if has_account:
-            subject = f"Reminder: Register for {event_name}"
-        else:
-            subject = f"Action Required: Create Account & Register for {event_name}"
-
-        # Load template from DB first, fall back to file
-        db_tpl = db.query(EmailTemplateModel).filter_by(template_key="registration_reminder").first()
-        render_vars = dict(
-            subject=subject,
-            firstname=firstname,
-            event_name=event_name,
-            abstract_title=pa.abstract.title,
-            has_account=has_account,
-            year=mailer_util.YEAR,
-        )
-        try:
-            if db_tpl and db_tpl.body_html:
-                email_body = Jinja2Template(db_tpl.body_html).render(**render_vars)
-            else:
-                file_tpl = mailer_util.templates.get_template("registration_reminder_template.html")
-                email_body = file_tpl.render(**render_vars)
-        except Exception:
-            email_body = (
-                f"<p>Dear {firstname},</p>"
-                f"<p>Your abstract has been accepted for <strong>{event_name}</strong>. "
-                f"Please complete your registration.</p>"
-                f"<p>ECSACONM Events Team</p>"
-            )
-
-        mailer_util.send_email_backgroundable(email, subject, email_body, background_tasks)
-        reminders_sent += 1
-
-    return {
-        "message": f"Reminders sent: {reminders_sent}, skipped (already registered): {skipped_registered}",
-        "reminders_sent": reminders_sent,
-        "skipped_registered": skipped_registered,
-    }
 
 
 @router.get("/{abstract_id}")
