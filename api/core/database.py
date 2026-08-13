@@ -9,7 +9,7 @@ load_dotenv()
 
 Base = declarative_base()
 
-db_url = f"mysql+mysqlconnector://{os.getenv('MYSQL_USER')}:{quote_plus(os.getenv('MYSQL_PASSWORD'))}@{os.getenv('MYSQL_HOSTNAME')}/{os.getenv('MYSQL_DB')}?charset=utf8mb4"
+db_url = f"mysql+pymysql://{os.getenv('MYSQL_USER')}:{quote_plus(os.getenv('MYSQL_PASSWORD'))}@{os.getenv('MYSQL_HOSTNAME')}/{os.getenv('MYSQL_DB')}?charset=utf8mb4"
 engine = create_engine(
     db_url,
     pool_pre_ping=True,
