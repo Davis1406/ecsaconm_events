@@ -14,13 +14,15 @@
             <SpinnerComponent v-if="isLoading" />
             <div v-else class="rounded-2xl border border-white-600 shadow-sm p-4 text-abbey-500">
                 <div class="flex sm:flex-row flex-col bg-shuttle-gray-300 p-2 text-sm font-bold">
-                    <div class="sm:w-4/12 w-full">Organiser</div>
+                    <div class="sm:w-1/12 w-full">#</div>
+                    <div class="sm:w-3/12 w-full">Organiser</div>
                     <div class="sm:w-7/12 w-full">Description</div>
                     <div class="sm:w-1/12 w-full">Action</div>
                 </div>
                 <div class="flex sm:flex-row flex-col p-2 text-sm items-center" v-for="(organiser, index) in organisers"
                     :key="organiser.id" :class="getRowClass(index)">
-                    <div class="sm:w-4/12 w-full">{{ organiser.organiser }}</div>
+                    <div class="sm:w-1/12 w-full text-gray-400">{{ (currentPage - 1) * pageSize + index + 1 }}</div>
+                    <div class="sm:w-3/12 w-full">{{ organiser.organiser }}</div>
                     <div class="sm:w-7/12 w-full">{{ organiser.description }}</div>
                     <div class="flex space-x-2 sm:w-1/12 w-full">
                         <router-link v-if="permissions.includes('UPDATE_ROLE')"

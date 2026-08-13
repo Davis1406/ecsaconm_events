@@ -123,6 +123,7 @@
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-100">
             <tr>
+              <th class="px-5 py-3 font-bold w-12">#</th>
               <th class="px-5 py-3 font-bold">Sent At</th>
               <th class="px-5 py-3 font-bold">Recipient</th>
               <th class="px-5 py-3 font-bold">Subject</th>
@@ -134,10 +135,11 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="log in paginated" :key="log.id"
+            <tr v-for="(log, idx) in paginated" :key="log.id"
               class="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition"
               :class="log.status === 'failed' ? 'bg-red-50 hover:bg-red-100' : ''"
               @click="openDetail(log)">
+              <td class="px-5 py-3 text-gray-400 text-xs">{{ (currentPage - 1) * perPage + idx + 1 }}</td>
               <td class="px-5 py-3 whitespace-nowrap text-gray-500 text-xs">{{ fmtDate(log.sent_at) }}</td>
               <td class="px-5 py-3 font-medium text-gray-800">{{ log.recipient_email }}</td>
               <td class="px-5 py-3 max-w-xs truncate text-gray-700" :title="log.subject">{{ log.subject }}</td>

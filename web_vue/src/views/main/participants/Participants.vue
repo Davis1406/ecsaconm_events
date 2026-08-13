@@ -14,7 +14,8 @@
             <SpinnerComponent v-if="isLoading" />
             <div v-else class="rounded-2xl border border-white-600 shadow-sm p-4 text-abbey-500">
                 <div class="flex sm:flex-row flex-col bg-shuttle-gray-300 p-2 text-sm font-bold">
-                    <div class="sm:w-4/12 w-full">Participant</div>
+                    <div class="sm:w-1/12 w-full">#</div>
+                    <div class="sm:w-3/12 w-full">Participant</div>
                     <div class="sm:w-2/12 w-full">Country</div>
                     <div class="sm:w-2/12 w-full">Paid Status</div>
                     <div class="sm:w-3/12 w-full">Email</div>
@@ -22,7 +23,8 @@
                 </div>
                 <div class="flex sm:flex-row flex-col p-2 text-sm items-center"
                     v-for="(participant, index) in participants" :key="participant.id" :class="getRowClass(index)">
-                    <div class="sm:w-4/12 w-full">{{ participant.title }}
+                    <div class="sm:w-1/12 w-full text-gray-400">{{ (currentPage - 1) * pageSize + index + 1 }}</div>
+                    <div class="sm:w-3/12 w-full">{{ participant.title }}
                         <span class="uppercase">{{
                             participant.users.firstname }}</span> {{
                                 participant.users.lastname }}

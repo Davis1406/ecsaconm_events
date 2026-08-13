@@ -54,7 +54,8 @@
         {{ templates.length }} template{{ templates.length !== 1 ? 's' : '' }}
       </div>
       <div class="flex bg-mercury-500 p-3 pt-2 pb-2 rounded-t-sm uppercase text-xs font-bold">
-        <div class="w-5/12 p-1">File Name</div>
+        <div class="w-1/12 p-1">#</div>
+        <div class="w-4/12 p-1">File Name</div>
         <div class="w-3/12 p-1">Description</div>
         <div class="w-2/12 p-1">Size</div>
         <div class="w-2/12 p-1">Actions</div>
@@ -66,9 +67,10 @@
         No templates uploaded yet.
       </div>
 
-      <div v-for="tpl in templates" :key="tpl.id"
+      <div v-for="(tpl, index) in templates" :key="tpl.id"
         class="flex sm:flex-row flex-col p-3 pt-2 pb-2 text-sm items-center border-t border-mercury-500">
-        <div class="sm:w-5/12 w-full p-1 font-medium text-gray-800 truncate">
+        <div class="sm:w-1/12 w-full p-1 text-gray-400">{{ index + 1 }}</div>
+        <div class="sm:w-4/12 w-full p-1 font-medium text-gray-800 truncate">
           <span class="mr-2">{{ fileIcon(tpl.original_name) }}</span>{{ tpl.original_name }}
         </div>
         <div class="sm:w-3/12 w-full p-1 text-gray-500 text-xs">{{ tpl.description || '—' }}</div>

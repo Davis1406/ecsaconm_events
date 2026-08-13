@@ -14,7 +14,8 @@
     <div v-else class="rounded-md border-2 border-white-600 shadow-sm text-abbey-500">
       <!-- Header row -->
       <div class="flex bg-mercury-500 p-3 pt-2 pb-2 rounded-t-sm uppercase text-xs font-bold">
-        <div class="w-4/12 p-1">Abstract Title</div>
+        <div class="w-1/12 p-1">#</div>
+        <div class="w-3/12 p-1">Abstract Title</div>
         <div class="w-2/12 p-1">Presenter</div>
         <div class="w-2/12 p-1">Event</div>
         <div class="w-2/12 p-1">Uploaded</div>
@@ -25,9 +26,10 @@
         No presentations uploaded yet.
       </div>
 
-      <div v-for="row in rows" :key="row.id"
+      <div v-for="(row, index) in rows" :key="row.id"
         class="flex sm:flex-row flex-col p-3 pt-2 pb-2 text-sm items-center border-t-2 border-mercury-500 hover:bg-ghost-300">
-        <div class="sm:w-4/12 w-full p-1 font-medium">
+        <div class="sm:w-1/12 w-full p-1 text-gray-400">{{ (currentPage - 1) * pageSize + index + 1 }}</div>
+        <div class="sm:w-3/12 w-full p-1 font-medium">
           <router-link :to="{ name: 'Abstract', params: { id: row.id } }"
             class="hover:underline" style="color: rgb(0,150,180);">
             {{ row.title }}
