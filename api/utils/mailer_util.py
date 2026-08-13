@@ -1,6 +1,7 @@
 import os
 import smtplib
 import logging
+import time
 import uuid
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -156,6 +157,113 @@ def send_email(recipient_email, subject, email_body, email_type="general",
     except Exception as e:
         logger.error("Failed to send email to %s: %s", recipient_email, str(e))
         _update_email_log(log_id, "failed", str(e))
+
+
+def send_bulk_emails(jobs, delay_seconds=0.3):
+    """Send multiple emails over a single, reused SMTP connection.
+
+    `send_email()` opens (and logs into) a brand-new SMTP connection per
+    call, which is fine for one-off emails but not for bulk sends — firing
+    dozens/hundreds of near-simultaneous connections at the mail server
+    trips connection-flood protection on the receiving end (e.g. CSF
+    PORTFLOOD, Exim per-IP limits on shared/cPanel mail hosts), which then
+    refuses further connections outright.
+
+    `jobs` is a list of dicts, each with keys:
+      recipient_email, subject, email_body, email_type (optional),
+      sent_by_user_id (optional), reply_to_email (optional)
+
+    Returns {"sent": int, "failed": int}.
+    """
+    smtp_host = os.getenv("SMTP_HOST", "")
+    smtp_port = os.getenv("SMTP_PORT", "")
+    smtp_username = os.getenv("SMTP_USERNAME", "")
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+
+    if not smtp_host or not smtp_port:
+        logger.error("SMTP host and port must be set in environment variables.")
+        for job in jobs:
+            log_id = _create_email_log(
+                job["recipient_email"], job["subject"], job.get("email_type", "general"),
+                job.get("sent_by_user_id"), job.get("reply_to_email"), job["email_body"],
+            )
+            _update_email_log(log_id, "failed", "SMTP not configured")
+        return {"sent": 0, "failed": len(jobs)}
+
+    try:
+        smtp_port = int(smtp_port)
+    except ValueError:
+        logger.error("SMTP_PORT must be an integer.")
+        return {"sent": 0, "failed": len(jobs)}
+
+    try:
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+            server.starttls()
+        server.login(smtp_username, smtp_password)
+    except Exception as e:
+        logger.error("Failed to establish SMTP connection for bulk send: %s", str(e))
+        for job in jobs:
+            log_id = _create_email_log(
+                job["recipient_email"], job["subject"], job.get("email_type", "general"),
+                job.get("sent_by_user_id"), job.get("reply_to_email"), job["email_body"],
+            )
+            _update_email_log(log_id, "failed", str(e))
+        return {"sent": 0, "failed": len(jobs)}
+
+    from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
+    from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
+    sent_count = 0
+    failed_count = 0
+
+    try:
+        for i, job in enumerate(jobs):
+            recipient_email = job["recipient_email"]
+            subject = job["subject"]
+            email_body = job["email_body"]
+            email_type = job.get("email_type", "general")
+            sent_by_user_id = job.get("sent_by_user_id")
+            reply_to_email = job.get("reply_to_email")
+
+            log_id = _create_email_log(recipient_email, subject, email_type,
+                                        sent_by_user_id, reply_to_email, email_body)
+            final_body = _inject_tracking_pixel(email_body, log_id)
+
+            try:
+                message = MIMEMultipart("alternative")
+                message["From"] = f"{from_name} <{from_email}>"
+                message["To"] = recipient_email
+                message["Subject"] = subject
+                message["Date"] = formatdate(localtime=True)
+                message["Message-ID"] = make_msgid(domain="ecsaconm.org")
+                message["Reply-To"] = reply_to_email or f"{from_name} <{from_email}>"
+                message["X-Mailer"] = "ECSACONM Events Portal"
+                message.attach(MIMEText(final_body, "html", "utf-8"))
+
+                server.sendmail(smtp_username, recipient_email, message.as_string())
+                logger.info("Email sent successfully to %s", recipient_email)
+                _update_email_log(log_id, "sent")
+                sent_count += 1
+            except Exception as e:
+                logger.error("Failed to send email to %s: %s", recipient_email, str(e))
+                _update_email_log(log_id, "failed", str(e))
+                failed_count += 1
+
+            # Pace the sends so we don't hammer the mail server even on a
+            # single kept-alive connection — some providers rate-limit by
+            # messages/sec in addition to connections/sec.
+            if delay_seconds and i < len(jobs) - 1:
+                time.sleep(delay_seconds)
+    finally:
+        try:
+            server.quit()
+        except Exception:
+            pass
+
+    logger.info("Bulk email send complete: %s sent, %s failed", sent_count, failed_count)
+    return {"sent": sent_count, "failed": failed_count}
 
 
 def send_email_with_attachment(recipient_email, subject, email_body, attachment_bytes, attachment_filename,

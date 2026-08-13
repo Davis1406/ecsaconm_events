@@ -975,7 +975,7 @@ def send_registration_reminders(
     # Load template once
     db_tpl = db.query(EmailTemplateModel).filter_by(template_key="registration_reminder").first()
 
-    reminders_sent = 0
+    jobs = []
     for r in recipients:
         firstname = r["firstname"] or "Presenter"
         event_name = r["event_name"]
@@ -1007,12 +1007,23 @@ def send_registration_reminders(
                 f"<p>ECSACONM Events Team</p>"
             )
 
-        mailer_util.send_email_backgroundable(
-            r["email"], subject, email_body, background_tasks,
-            email_type="registration_reminder",
-            sent_by_user_id=sent_by_user_id,
-        )
-        reminders_sent += 1
+        jobs.append({
+            "recipient_email": r["email"],
+            "subject": subject,
+            "email_body": email_body,
+            "email_type": "registration_reminder",
+            "sent_by_user_id": sent_by_user_id,
+        })
+
+    reminders_sent = len(jobs)
+
+    # Send the whole batch over a single reused SMTP connection (one
+    # background task) rather than one connection per recipient — opening
+    # dozens/hundreds of near-simultaneous connections trips the mail
+    # server's flood protection and every send after the first few gets
+    # refused. See deployment.md for the 2026-08-13 incident this fixes.
+    if jobs:
+        background_tasks.add_task(mailer_util.send_bulk_emails, jobs)
 
     return {
         "sent": reminders_sent,
