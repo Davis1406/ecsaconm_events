@@ -98,6 +98,7 @@ async def get_users(
                 "email": u.email,
                 "phone": u.phone,
                 "role": u.user_roles[0].role.role if u.user_roles else "—",
+                "created_at": u.created_at,
             }
             for u in users
         ],
