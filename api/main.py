@@ -36,6 +36,7 @@ from routers import (
     participants,
     email_templates,
     system_settings,
+    email_logs,
 )
 
 app = FastAPI(
@@ -107,3 +108,4 @@ app.include_router(organisers.router, prefix="/organisers", tags=["Organisers"])
 app.include_router(participants.router, prefix="/participants", tags=["Participants"])
 app.include_router(email_templates.router, prefix="/email_templates", tags=["Email Templates"])
 app.include_router(system_settings.router, prefix="/system", tags=["System Settings"])
+app.include_router(email_logs.router, prefix="/email-logs", tags=["Email Logs"])

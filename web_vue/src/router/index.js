@@ -38,6 +38,8 @@ const routeComponents = {
   ContactsView: () => import("@/views/main/configurations/Contacts.vue"),
   EmailTemplatesView: () =>
     import("@/views/main/configurations/EmailTemplates.vue"),
+  EmailLogsView: () =>
+    import("@/views/main/configurations/EmailLogs.vue"),
 
   UsersView: () => import("@/views/main/configurations/users/Users.vue"),
   AddUserView: () => import("@/views/main/configurations/users/Add.vue"),
@@ -308,6 +310,12 @@ const routes = [
         path: "/email-templates",
         name: "EmailTemplates",
         component: routeComponents.EmailTemplatesView,
+      },
+
+      {
+        path: "/email-logs",
+        name: "EmailLogs",
+        component: routeComponents.EmailLogsView,
       },
 
       {

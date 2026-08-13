@@ -93,6 +93,16 @@
       </a>
     </router-link>
 
+    <router-link v-if="has('VIEW_USER')" :to="{ name: 'EmailLogs' }" v-slot="{ isActive }" custom>
+      <a @click.prevent="go('EmailLogs')"
+        class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+        </svg>
+        Sent Emails
+      </a>
+    </router-link>
+
     <router-link v-if="has('ADMIN_DASHBOARD')" :to="{ name: 'Contacts' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('Contacts')"
         class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
