@@ -283,10 +283,22 @@ def list_abstracts(
     if presentation_type:
         q = q.filter(Abstract.presentation_type == presentation_type)
     if search:
+        from sqlalchemy import exists, func as _sqlfunc
+        term = f"%{search}%"
+        presenter_match = exists().where(
+            AbstractAuthor.abstract_id == Abstract.id,
+        ).where(or_(
+            AbstractAuthor.firstname.ilike(term),
+            AbstractAuthor.lastname.ilike(term),
+            AbstractAuthor.email.ilike(term),
+            _sqlfunc.concat(AbstractAuthor.firstname, ' ', AbstractAuthor.lastname).ilike(term),
+        ))
         q = q.filter(or_(
-            Abstract.title.ilike(f"%{search}%"),
-            Abstract.keywords.ilike(f"%{search}%"),
-            Abstract.track.ilike(f"%{search}%"),
+            Abstract.title.ilike(term),
+            Abstract.keywords.ilike(term),
+            Abstract.track.ilike(term),
+            Abstract.presentation_type.ilike(term),
+            presenter_match,
         ))
     # Filter to abstracts where the presenter has 2+ accepted abstracts
     if presenter_email == "multi":
