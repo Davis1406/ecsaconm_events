@@ -57,7 +57,6 @@
 </template>
 
 <script>
-import html2pdf from "html2pdf.js";
 import QRCodeVue from 'qrcode.vue';
 import { XCircleIcon, DocumentIcon } from '@heroicons/vue/24/solid';
 import Swal from "sweetalert2";
@@ -123,6 +122,8 @@ export default {
                 pagebreak: { mode: ['css', 'legacy'] }
             };
 
+            // Lazy-load html2pdf (jspdf + html2canvas, ~700 KB) only when printing
+            const { default: html2pdf } = await import("html2pdf.js");
             await html2pdf().from(element).set(opt).save();
             this.startIndex += this.badgesPerPDF;
         }

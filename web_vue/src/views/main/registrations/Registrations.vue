@@ -24,9 +24,9 @@
       <!-- Spinner -->
       <SpinnerComponent v-if="isLoading" />
 
-      <div v-else class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div v-else class="bg-white rounded-2xl shadow-sm">
         <!-- Table header -->
-        <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+        <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100 rounded-t-2xl">
           <div class="col-span-1">#</div>
           <div class="col-span-2">Participant</div>
           <div class="col-span-2">Email</div>

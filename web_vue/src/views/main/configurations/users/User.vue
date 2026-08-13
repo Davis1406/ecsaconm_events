@@ -34,6 +34,13 @@
               style="background-color: rgb(254,80,103);">
               Edit
             </router-link>
+            <button v-if="canImpersonate"
+              @click="impersonateUser"
+              :disabled="impersonating"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium border transition hover:bg-pink-50 disabled:opacity-50"
+              style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+              {{ impersonating ? 'Switching…' : 'Log in as User' }}
+            </button>
             <button @click="resetPassword"
               class="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
               Reset Password
@@ -163,7 +170,7 @@
 <script>
 import HeaderView from '@/includes/Header.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
-import { fetchItem, createItem, fetchData, deleteItemWithBody, updateItem } from '@/services/apiService'
+import { fetchItem, createItem, fetchData, deleteItemWithBody, updateItem, setAuthToken } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -182,15 +189,21 @@ export default {
       assignedRoles: [],
       message: '',
       messageType: 'success',
+      impersonating: false,
     }
   },
   setup() {
     const authStore = useAuthStore()
     const raw = authStore.permissions || []
     const permissions = raw.map(p => typeof p === 'string' ? p : p.permission_code)
-    return { permissions }
+    return { permissions, authStore }
   },
   computed: {
+    canImpersonate() {
+      return this.permissions.includes('ADMIN_DASHBOARD')
+        && !this.authStore.isImpersonating
+        && parseInt(this.id) !== this.authStore.loginUser?.id
+    },
     initials() {
       const f = (this.user.firstname || '').charAt(0).toUpperCase()
       const l = (this.user.lastname || '').charAt(0).toUpperCase()
@@ -243,6 +256,22 @@ export default {
         this.showMessage('Role removed.', 'success')
       } catch (error) {
         this.showMessage('Failed to remove role.', 'error')
+      }
+    },
+    async impersonateUser() {
+      this.impersonating = true
+      try {
+        const response = await createItem(`auth/impersonate/${this.id}`, {})
+        this.authStore.startImpersonation(response)
+        setAuthToken()
+        const targetIsAdmin = (response.permissions || []).some(
+          p => (typeof p === 'string' ? p : p.permission_code) === 'ADMIN_DASHBOARD'
+        )
+        this.$router.push({ name: targetIsAdmin ? 'Dashboard' : 'MyDashboard' })
+      } catch (error) {
+        this.showMessage('Failed to impersonate user.', 'error')
+      } finally {
+        this.impersonating = false
       }
     },
     async resetPassword() {

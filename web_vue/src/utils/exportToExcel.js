@@ -1,8 +1,7 @@
-import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 
-export function exportToExcel(data, filename) {
+export async function exportToExcel(data, filename) {
   if (!data || !data.length) {
     Swal.fire({
       icon: "error",
@@ -12,6 +11,9 @@ export function exportToExcel(data, filename) {
     });
     return;
   }
+
+  // Lazy-load xlsx (~360 KB) only when an export is actually requested
+  const XLSX = await import("xlsx");
 
   const worksheet = XLSX.utils.json_to_sheet(data);
   const headers = Object.keys(data[0]);
