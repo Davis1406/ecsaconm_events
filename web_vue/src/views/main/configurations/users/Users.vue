@@ -28,10 +28,11 @@
         <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
           <div class="col-span-1">#</div>
           <div class="col-span-3">Name</div>
-          <div class="col-span-3">Email</div>
-          <div class="col-span-2">Phone</div>
-          <div class="col-span-2">Role</div>
-          <div class="col-span-1 text-right">Actions</div>
+          <div class="col-span-2">Email</div>
+          <div class="col-span-1">Phone</div>
+          <div class="col-span-1">Role</div>
+          <div class="col-span-2">Date Registered</div>
+          <div class="col-span-2 text-right">Actions</div>
         </div>
 
         <!-- Empty -->
@@ -57,11 +58,11 @@
             </div>
           </div>
           <!-- Email -->
-          <div class="col-span-3 text-gray-500 text-xs truncate">{{ user.email || '—' }}</div>
+          <div class="col-span-2 text-gray-500 text-xs truncate">{{ user.email || '—' }}</div>
           <!-- Phone -->
-          <div class="col-span-2 text-gray-600 text-xs">{{ user.phone || '—' }}</div>
+          <div class="col-span-1 text-gray-600 text-xs">{{ user.phone || '—' }}</div>
           <!-- Role -->
-          <div class="col-span-2 text-xs">
+          <div class="col-span-1 text-xs">
             <span v-if="user.role"
               class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
               style="background-color: rgba(254,80,103,0.1); color: rgb(254,80,103);">
@@ -69,8 +70,10 @@
             </span>
             <span v-else class="text-gray-300">—</span>
           </div>
+          <!-- Date Registered -->
+          <div class="col-span-2 text-gray-400 text-xs whitespace-nowrap">{{ formatDate(user.created_at) }}</div>
           <!-- Actions -->
-          <div class="col-span-1 flex justify-end gap-1.5">
+          <div class="col-span-2 flex justify-end gap-1.5">
             <button v-if="canImpersonate && user.id !== authStore.loginUser?.id"
               @click="impersonateUser(user)"
               :disabled="impersonatingId === user.id"
@@ -157,6 +160,10 @@ export default {
     this.getUsers()
   },
   methods: {
+    formatDate(dateString) {
+      if (!dateString) return '—'
+      return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    },
     async getUsers() {
       this.isLoading = true
       try {

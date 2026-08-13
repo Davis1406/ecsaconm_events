@@ -181,8 +181,9 @@
       <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
         <div class="col-span-1">#</div>
         <div class="col-span-3">Participant</div>
-        <div class="col-span-2">Institution</div>
-        <div class="col-span-2">Country</div>
+        <div class="col-span-1">Institution</div>
+        <div class="col-span-1">Country</div>
+        <div class="col-span-2">Date Registered</div>
         <div class="col-span-1 text-center">Paid</div>
         <div class="col-span-1 text-center">Proof</div>
         <div class="col-span-2 text-right">Actions</div>
@@ -228,10 +229,13 @@
         </div>
 
         <!-- Institution -->
-        <div class="col-span-2 text-gray-500 text-xs truncate">{{ participant.organisation || participant.institution || '—' }}</div>
+        <div class="col-span-1 text-gray-500 text-xs truncate">{{ participant.organisation || participant.institution || '—' }}</div>
 
         <!-- Country -->
-        <div class="col-span-2 text-gray-500 text-xs">{{ participant.country || '—' }}</div>
+        <div class="col-span-1 text-gray-500 text-xs">{{ participant.country || '—' }}</div>
+
+        <!-- Date Registered -->
+        <div class="col-span-2 text-gray-400 text-xs whitespace-nowrap">{{ formatDate(participant.registered_at) }}</div>
 
         <!-- Paid badge -->
         <div class="col-span-1 flex justify-center">

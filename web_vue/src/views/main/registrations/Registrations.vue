@@ -35,8 +35,8 @@
           <div class="col-span-2">Participant</div>
           <div class="col-span-2">Email</div>
           <div class="col-span-2">Event</div>
-          <div class="col-span-2">Category</div>
-          <div class="col-span-1">Date</div>
+          <div class="col-span-1">Category</div>
+          <div class="col-span-2">Date Registered</div>
           <div class="col-span-1">Payment</div>
           <div class="col-span-1 text-right"></div>
         </div>
@@ -78,11 +78,11 @@
           <!-- Event -->
           <div class="col-span-2 text-gray-700 text-xs">{{ reg.event || '—' }}</div>
           <!-- Category -->
-          <div class="col-span-2 text-gray-600 text-xs leading-tight">
+          <div class="col-span-1 text-gray-600 text-xs leading-tight">
             {{ reg.participation_role ? formatRole(reg.participation_role) : '—' }}
           </div>
-          <!-- Date -->
-          <div class="col-span-1 text-gray-400 text-xs whitespace-nowrap">
+          <!-- Date Registered -->
+          <div class="col-span-2 text-gray-400 text-xs whitespace-nowrap">
             {{ formatDate(reg.registered_at || reg.created_at) }}
           </div>
           <!-- Payment badge -->
