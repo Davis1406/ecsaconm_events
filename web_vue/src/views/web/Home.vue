@@ -65,6 +65,53 @@
       </div>
     </section>
 
+    <!-- ── INFORMATION NOTE / DOWNLOADS ─────────────────────────────────── -->
+    <section v-if="publicDocuments.length" class="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+      <div class="bg-white rounded-2xl shadow-lg overflow-hidden border-t-4"
+        style="border-color: rgb(254,80,103);">
+        <div class="px-6 py-4 flex items-center gap-3 border-b border-gray-100">
+          <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style="background-color: rgb(254,80,103);">
+            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold" style="color: rgb(254,80,103);">Information Note</h2>
+            <p class="text-xs text-gray-400">Official conference documents &amp; resources</p>
+          </div>
+        </div>
+        <div class="px-6 py-5">
+          <ul class="space-y-3">
+            <li v-for="file in publicDocuments" :key="file.id"
+              class="group flex items-center gap-4 p-4 rounded-xl bg-gray-50 hover:bg-pink-50 transition border border-transparent hover:border-pink-200">
+              <div class="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                style="background-color: rgb(254,80,103);">
+                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-bold text-gray-800 truncate">{{ file.name || file.file_name }}</p>
+                <p class="text-xs text-gray-400 capitalize">{{ formatDocType(file.document_type) }}</p>
+              </div>
+              <a :href="`${apiUrl}/${file.path}`" target="_blank" rel="noopener"
+                class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-semibold text-white transition hover:opacity-90 flex-shrink-0 shadow-sm"
+                style="background-color: rgb(254,80,103);">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
     <!-- Spinner while loading -->
     <div v-if="isLoading && !featuredEvent" class="flex justify-center py-24">
       <svg class="animate-spin h-10 w-10 text-bondi-blue-500" fill="none" viewBox="0 0 24 24">
@@ -143,7 +190,7 @@
 </template>
 
 <script>
-import { fetchData } from '@/services/apiService'
+import { fetchData, fetchItem } from '@/services/apiService'
 import goldenTulip from '@/assets/images/golden-tulip.avif'
 
 export default {
@@ -153,6 +200,7 @@ export default {
       isLoading: true,
       featuredEvent: null,
       otherEvents: [],
+      documents: [],
       apiUrl: import.meta.env.VITE_API_URL,
     }
   },
@@ -173,6 +221,9 @@ export default {
       // always use a dark overlay so text stays readable over the photo
       const opacity = this.featuredEvent?.banner_image ? '0.55' : '0.60'
       return { backgroundColor: `rgba(0,0,0,${opacity})` }
+    },
+    publicDocuments() {
+      return this.documents.filter(d => (d.access_level || 'public') === 'public')
     }
   },
   async mounted() {
@@ -181,6 +232,14 @@ export default {
       const all = (response.data || []).sort((a, b) => new Date(a.start_date) - new Date(b.start_date))
       this.featuredEvent = all[0] || null
       this.otherEvents = all.slice(1)
+      if (this.featuredEvent) {
+        try {
+          const res = await fetchItem('events', this.featuredEvent.id)
+          this.documents = res.documents || []
+        } catch (e) {
+          console.error('Error fetching event documents:', e)
+        }
+      }
     } catch (e) {
       console.error('Error fetching events:', e)
     } finally {
@@ -196,6 +255,17 @@ export default {
       if (!text) return ''
       return text.replace(/(\d+)(st|nd|rd|th)\b/gi, (_, num, suffix) =>
         `${num}<sup style="font-size:0.55em;vertical-align:super;">${suffix}</sup>`)
+    },
+    formatDocType(type) {
+      const map = {
+        ProgrammeBooklet: 'Programme Booklet',
+        Presentation: 'Presentation',
+        Photo: 'Photo',
+        Advert: 'Advert',
+        Guidelines: 'Guidelines',
+        Other: 'Document',
+      }
+      return map[type] || 'Document'
     }
   }
 }
