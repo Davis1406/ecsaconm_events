@@ -79,11 +79,15 @@
                 ✓ Presentation uploaded
               </span>
               <span class="text-xs text-gray-400">{{ formatDate(abstract.presentation_uploaded_at) }}</span>
+              <a :href="`${apiUrl}/abstracts/${abstract.id}/download-presentation`"
+                class="text-xs font-semibold underline hover:opacity-80" style="color: rgb(254,80,103);">
+                Download
+              </a>
             </div>
 
             <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
               <input type="file"
-                accept=".ppt,.pptx,.pdf,.zip,.mp4"
+                accept=".pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp"
                 @change="e => abstract._file = e.target.files[0]"
                 class="text-sm text-gray-600 border border-gray-200 rounded-xl px-3 py-1.5
                        file:mr-3 file:py-1 file:px-3 file:rounded-full file:border-0
@@ -97,7 +101,7 @@
                 {{ abstract._uploading ? 'Uploading…' : (abstract.presentation_file ? 'Replace file' : 'Upload') }}
               </button>
             </div>
-            <p class="text-xs text-gray-400 mt-1">Accepted: .pptx .ppt .pdf .zip .mp4 · Max 100 MB</p>
+            <p class="text-xs text-gray-400 mt-1">Accepted: .pdf .pptx .jpg .png .gif · Max 100 MB</p>
             <p v-if="abstract._uploadMsg" class="text-xs mt-1 font-medium"
               :class="abstract._uploadErr ? 'text-red-600' : 'text-green-600'">
               {{ abstract._uploadMsg }}
@@ -108,8 +112,8 @@
       </div>
     </div>
 
-    <!-- Presentation templates — only shown to paid, registered presenters -->
-    <div v-if="isPaidPresenter" class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <!-- Presentation templates -->
+    <div v-if="templates.length || templatesLoading" class="bg-white rounded-2xl shadow-sm overflow-hidden">
       <div class="px-6 py-5 border-b border-gray-100">
         <h3 class="font-semibold text-gray-800 mb-1">Presentation Templates</h3>
         <p class="text-sm text-gray-500">
@@ -204,7 +208,7 @@ export default {
                 );
                 this.isPaidPresenter = res.data.is_paid_presenter === true;
                 this.myPresentationTypeList = res.data.presentation_types || [];
-                if (this.isPaidPresenter) this.loadTemplates();
+                this.loadTemplates();
             } catch (e) {
                 console.warn("Could not check presenter status:", e);
                 this.isPaidPresenter = false;
