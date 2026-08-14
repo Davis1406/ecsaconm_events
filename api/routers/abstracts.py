@@ -23,7 +23,7 @@ from schemas.events_space import (
 
 PRESENTATION_UPLOAD_DIR = "uploads/presentations"
 os.makedirs(PRESENTATION_UPLOAD_DIR, exist_ok=True)
-ALLOWED_PRESENTATION_EXTS = {".ppt", ".pptx", ".pdf", ".zip", ".mp4"}
+ALLOWED_PRESENTATION_EXTS = {".pdf", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
 MAX_PRESENTATION_MB = 100
 
 router = APIRouter()
@@ -47,6 +47,8 @@ def _serialize_abstract(a: Abstract):
         "presentation_type": a.presentation_type.value if a.presentation_type else None,
         "status": a.status.value if a.status else None,
         "word_count": a.word_count,
+        "presentation_file": a.presentation_file,
+        "presentation_uploaded_at": a.presentation_uploaded_at,
         "submitted_by": a.submitted_by,
         "submitter_name": f"{a.submitter.firstname} {a.submitter.lastname}" if a.submitter else None,
         "submitter_email": a.submitter.email if a.submitter else None,
