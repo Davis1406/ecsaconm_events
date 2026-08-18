@@ -1867,118 +1867,101 @@ def hex_to_rgb(hex_color: str):
 
 
 def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
-    """Draw a single badge page onto ReportLab canvas c."""
+    """Draw a single badge page onto ReportLab canvas c.
+
+    Mirrors the frontend badge preview (BadgeModal / My Badge): ECSACONM pink
+    theme with top/bottom bars, ECSA + ECSACONM logos, participant name,
+    designation bar, institution/country, QR code, ID, theme and the
+    www.ecsaconm.org footer.
+    """
     width, height = (100 * mm, 140 * mm)
+    PINK = (254 / 255.0, 80 / 255.0, 103 / 255.0)  # rgb(254, 80, 103)
 
     # ── White background ─────────────────────────────────────────────────────
     c.setFillColorRGB(1, 1, 1)
     c.rect(0, 0, width, height, fill=True, stroke=False)
 
-    # ── Crop marks ───────────────────────────────────────────────────────────
-    mark_len = 5 * mm
-    line_offset = 0.5 * mm
-    c.setLineWidth(0.3)
-    c.setStrokeColorRGB(0.5, 0.5, 0.5)
-    c.line(0, height - line_offset, mark_len, height - line_offset)
-    c.line(line_offset, height, line_offset, height - mark_len)
-    c.line(width - mark_len, height - line_offset, width, height - line_offset)
-    c.line(width - line_offset, height, width - line_offset, height - mark_len)
-    c.line(0, line_offset, mark_len, line_offset)
-    c.line(line_offset, 0, line_offset, mark_len)
-    c.line(width - mark_len, line_offset, width, line_offset)
-    c.line(width - line_offset, 0, width - line_offset, mark_len)
+    # ── Top & bottom pink bars ───────────────────────────────────────────────
+    c.setFillColorRGB(*PINK)
+    c.setStrokeColorRGB(*PINK)
+    c.rect(0, height - 6 * mm, width, 6 * mm, fill=True, stroke=False)
+    c.rect(0, 0, width, 2.5 * mm, fill=True, stroke=False)
 
-    # ── Colored top banner (primary_color) ───────────────────────────────────
-    banner_h = 38 * mm
-    c.setFillColorRGB(*primary_rgb)
-    c.setStrokeColorRGB(*primary_rgb)
-    c.rect(0, height - banner_h, width, banner_h, fill=True, stroke=False)
-
-    # Logos inside the banner
-    logo_size = 22 * mm
+    # ── Logos: ECSA (left) + ECSACONM (right) ────────────────────────────────
+    logo_size = 18 * mm
+    logo_y = height - logo_size - 8 * mm
     c.drawImage(
-        logo_left,
-        4 * mm,
-        height - logo_size - 4 * mm,
-        logo_size,
-        logo_size,
-        preserveAspectRatio=True,
+        logo_left, 8 * mm, logo_y, logo_size, logo_size, preserveAspectRatio=True
     )
     c.drawImage(
         logo_right,
-        width - logo_size - 4 * mm,
-        height - logo_size - 4 * mm,
+        width - logo_size - 8 * mm,
+        logo_y,
         logo_size,
         logo_size,
         preserveAspectRatio=True,
     )
 
-    # Event name in white on the banner
-    event_name_y = height - banner_h + 5 * mm
-    c.setFillColorRGB(1, 1, 1)
-    c.setFont("Helvetica-Bold", 8)
-    c.drawCentredString(width / 2, event_name_y, normalize_event_name(p["event_name"]))
-
-    # ── Participant details ───────────────────────────────────────────────────
-    c.setFillColorRGB(0, 0, 0)
-    c.setStrokeColorRGB(0, 0, 0)
-
-    y = height - banner_h - 10 * mm
+    # ── Participant name ─────────────────────────────────────────────────────
     full_name = (
         f"{p['title']} {p['firstname']} {p['middle_name']} {p['lastname']}".strip()
     )
+    c.setFillColorRGB(0.15, 0.15, 0.15)
     c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(width / 2, y, full_name)
+    c.drawCentredString(width / 2, 108 * mm, full_name)
 
-    if p["position"]:
-        y -= 8 * mm
-        c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(width / 2, y, p["position"])
-
-    if p["organisation"]:
-        y -= 7 * mm
-        c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(width / 2, y, p["organisation"])
-
-    if p["country"]:
-        y -= 7 * mm
-        c.setFont("Helvetica", 10)
-        c.drawCentredString(width / 2, y, p["country"])
-
-    # Participant ID
-    y -= 7 * mm
-    c.setFont("Helvetica", 9)
-    c.drawCentredString(width / 2, y, f"Participant ID: BPF{p['registration_id']}")
-
-    if p["location"]:
-        y -= 7 * mm
-        c.setFont("Helvetica-Oblique", 9)
-        c.drawCentredString(width / 2, y, f"📍 {p['location']}")
-
-    # ── Colored role strip (secondary_color) ─────────────────────────────────
-    role_strip_h = 9 * mm
-    role_strip_y = 33 * mm
-    c.setFillColorRGB(*secondary_rgb)
-    c.setStrokeColorRGB(*secondary_rgb)
-    c.rect(0, role_strip_y, width, role_strip_h, fill=True, stroke=False)
-    if p["participation_role"]:
+    # ── Designation bar (pink pill) ──────────────────────────────────────────
+    designation = (p.get("designation") or "").strip()
+    if designation:
+        bar_h = 9 * mm
+        bar_y = 95 * mm
+        c.setFillColorRGB(*PINK)
+        c.setStrokeColorRGB(*PINK)
+        c.roundRect(12 * mm, bar_y, width - 24 * mm, bar_h, 2.5 * mm, fill=True, stroke=False)
         c.setFillColorRGB(1, 1, 1)
         c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(
-            width / 2, role_strip_y + 2.5 * mm, p["participation_role"].upper()
-        )
+        c.drawCentredString(width / 2, bar_y + 2.5 * mm, designation)
 
-    # ── QR code (links to attendance check-in) ───────────────────────────────
-    qr_size = 28 * mm
-    qr_y = 3.5 * mm
+    # ── Institution & country ────────────────────────────────────────────────
+    organisation = (p.get("organisation") or "").strip()
+    country = (p.get("country") or "").strip()
+    if organisation:
+        c.setFillColorRGB(0.15, 0.15, 0.15)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawCentredString(width / 2, 85 * mm, organisation)
+    if country:
+        c.setFillColorRGB(0.45, 0.45, 0.45)
+        c.setFont("Helvetica", 10)
+        c.drawCentredString(width / 2, 77 * mm, country)
+
+    # ── Theme ────────────────────────────────────────────────────────────────
+    theme = (p.get("event_theme") or "").strip()
+    if theme:
+        c.setFillColorRGB(0.45, 0.45, 0.45)
+        c.setFont("Helvetica-Oblique", 7)
+        c.drawCentredString(width / 2, 54 * mm, f"Theme: {theme}")
+
+    # ── Participant ID ───────────────────────────────────────────────────────
+    c.setFillColorRGB(0.55, 0.55, 0.55)
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(width / 2, 46 * mm, f"ID #{p['registration_id']}")
+
+    # ── QR code (links to the participant badge/status page) ─────────────────
+    qr_size = 30 * mm
+    qr_y = 12 * mm
     qr_data = (
-        f"{CLIENT_ORIGIN}/event-attendance/{p['event_id']}?reg={p['registration_id']}"
+        f"{CLIENT_ORIGIN}/#/user-event-status/{p['registration_id']}/{p['event_id']}/"
     )
     qr = qrcode.make(qr_data)
     qr_buf = BytesIO()
     qr.save(qr_buf, format="PNG")
     qr_buf.seek(0)
     c.drawImage(ImageReader(qr_buf), (width - qr_size) / 2, qr_y, qr_size, qr_size)
+
+    # ── Website footer ───────────────────────────────────────────────────────
+    c.setFillColorRGB(0.6, 0.6, 0.6)
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(width / 2, 6 * mm, "www.ecsaconm.org")
 
     c.showPage()
 
@@ -2032,10 +2015,12 @@ async def download_participant_badges_pdf(
                 "middle_name": profile.middle_name if profile else "",
                 "lastname": user.lastname,
                 "position": profile.position if profile else "",
+                "designation": profile.designation if profile else "",
                 "organisation": organisation,
                 "country": country,
                 "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
                 "event_name": event.event,
+                "event_theme": event.theme,
                 "location": event.location or "",
                 "paid": reg.paid,
             }
@@ -2133,10 +2118,12 @@ async def download_participant_badge_pdf(
         "middle_name": profile.middle_name if profile else "",
         "lastname": user.lastname,
         "position": profile.position if profile else "",
+        "designation": profile.designation if profile else "",
         "organisation": organisation,
         "country": country,
         "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
         "event_name": event.event,
+        "event_theme": event.theme,
         "location": event.location or "",
         "paid": reg.paid,
     }
@@ -2211,10 +2198,12 @@ async def download_my_badge(
         "middle_name": profile.middle_name if profile else "",
         "lastname": user.lastname,
         "position": profile.position if profile else "",
+        "designation": profile.designation if profile else "",
         "organisation": organisation,
         "country": country,
         "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
         "event_name": event.event,
+        "event_theme": event.theme,
         "location": event.location or "",
         "paid": reg.paid,
     }
