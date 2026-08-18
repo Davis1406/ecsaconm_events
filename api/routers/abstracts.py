@@ -1410,6 +1410,75 @@ def _count_authors(row: dict) -> int:
     return max(1, len([n for n in names.split("|") if n.strip()]))
 
 
+# ── Admin: batch-download uploaded presentations as a ZIP, by type ────────────
+# NB: must stay registered before "/{abstract_id}" — it's a single path segment
+# with no slash, so it would otherwise be swallowed by that route and fail
+# int-parsing on "download-presentations-zip" as the id.
+
+@router.get("/download-presentations-zip")
+def download_presentations_zip(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+    presentation_type: str = Query(None),  # "oral" | "poster" | None = all
+):
+    """Zip up every uploaded presentation file matching the filter and stream it."""
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    q = (
+        db.query(Abstract)
+        .options(joinedload(Abstract.authors))
+        .filter(
+            Abstract.deleted_at == None,
+            Abstract.presentation_file != None,
+        )
+    )
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+    if presentation_type:
+        q = q.filter(Abstract.presentation_type == presentation_type)
+    abstracts = q.order_by(Abstract.title.asc()).all()
+
+    if not abstracts:
+        raise HTTPException(status_code=404, detail="No uploaded presentations match this filter.")
+
+    def _safe_name(title: str, idx: int) -> str:
+        cleaned = re.sub(r'[^A-Za-z0-9 _-]+', '', title or "").strip()[:80] or "presentation"
+        return f"{idx:03d}_{cleaned}"
+
+    buf = io.BytesIO()
+    added = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        used_names = set()
+        for i, a in enumerate(abstracts, 1):
+            if not a.presentation_file or not os.path.exists(a.presentation_file):
+                continue
+            ext = os.path.splitext(a.presentation_file)[-1]
+            base_name = _safe_name(a.title, i)
+            arcname = f"{base_name}{ext}"
+            # guard against duplicate arcnames
+            n = 1
+            while arcname in used_names:
+                n += 1
+                arcname = f"{base_name}_{n}{ext}"
+            used_names.add(arcname)
+            zf.write(a.presentation_file, arcname=arcname)
+            added += 1
+
+    if added == 0:
+        raise HTTPException(status_code=404, detail="No presentation files were found on disk for this filter.")
+
+    buf.seek(0)
+    label = (presentation_type or "all").lower()
+    filename = f"presentations_{label}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @router.get("/{abstract_id}")
 def get_abstract(
     abstract_id: int,
@@ -1824,72 +1893,6 @@ def list_uploaded_presentations(
             for a in rows
         ],
     }
-
-
-# ── Admin: batch-download uploaded presentations as a ZIP, by type ────────────
-
-@router.get("/download-presentations-zip")
-def download_presentations_zip(
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-    event_id: int = Query(None),
-    presentation_type: str = Query(None),  # "oral" | "poster" | None = all
-):
-    """Zip up every uploaded presentation file matching the filter and stream it."""
-    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
-
-    q = (
-        db.query(Abstract)
-        .options(joinedload(Abstract.authors))
-        .filter(
-            Abstract.deleted_at == None,
-            Abstract.presentation_file != None,
-        )
-    )
-    if event_id:
-        q = q.filter(Abstract.event_id == event_id)
-    if presentation_type:
-        q = q.filter(Abstract.presentation_type == presentation_type)
-    abstracts = q.order_by(Abstract.title.asc()).all()
-
-    if not abstracts:
-        raise HTTPException(status_code=404, detail="No uploaded presentations match this filter.")
-
-    def _safe_name(title: str, idx: int) -> str:
-        cleaned = re.sub(r'[^A-Za-z0-9 _-]+', '', title or "").strip()[:80] or "presentation"
-        return f"{idx:03d}_{cleaned}"
-
-    buf = io.BytesIO()
-    added = 0
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        used_names = set()
-        for i, a in enumerate(abstracts, 1):
-            if not a.presentation_file or not os.path.exists(a.presentation_file):
-                continue
-            ext = os.path.splitext(a.presentation_file)[-1]
-            base_name = _safe_name(a.title, i)
-            arcname = f"{base_name}{ext}"
-            # guard against duplicate arcnames
-            n = 1
-            while arcname in used_names:
-                n += 1
-                arcname = f"{base_name}_{n}{ext}"
-            used_names.add(arcname)
-            zf.write(a.presentation_file, arcname=arcname)
-            added += 1
-
-    if added == 0:
-        raise HTTPException(status_code=404, detail="No presentation files were found on disk for this filter.")
-
-    buf.seek(0)
-    label = (presentation_type or "all").lower()
-    filename = f"presentations_{label}.zip"
-    return StreamingResponse(
-        buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
 
 
 # ── Preview an uploaded presentation (public, for iframe / Office Online) ──────

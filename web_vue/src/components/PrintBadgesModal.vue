@@ -20,49 +20,34 @@
 
             <div id="badge-container">
                 <div v-for="(participant, index) in paginatedParticipants" :key="index" class="badge-page">
-                    <div class="print-badge flex flex-col text-center overflow-hidden rounded-2xl"
+                    <div class="border-4 border-ecsa-blue-500 flex flex-col justify-center text-center pb-10"
                         style="width: 50%; height: 100%;">
-
-                        <!-- Gradient header with dual logos -->
-                        <div class="print-badge__header px-4 pt-4 pb-5 relative">
-                            <div class="bg-white/95 rounded-xl px-3 py-2.5 flex items-stretch justify-center gap-3 shadow-sm">
-                                <div class="flex-1 flex items-center justify-center">
-                                    <img src="@/assets/images/ecsalogo.png" class="sm:h-14 h-10 object-contain" />
-                                </div>
-                                <div class="w-px bg-gray-200 self-stretch"></div>
-                                <div class="flex-1 flex items-center justify-center">
-                                    <img src="@/assets/images/logo.png" class="sm:h-14 h-10 object-contain" />
-                                </div>
+                        <!-- Badge content here -->
+                        <div class="flex flex-row p-4 items-center justify-between space-x-4">
+                            <div><img src="@/assets/images/logo.png" class="sm:h-20 h-12" /></div>
+                            <div><img src="@/assets/images/ecsalogo.png" class="sm:h-20 h-12" /></div>
+                        </div>
+                        <div class="text-xl font-extrabold mb-3 pt-2">
+                            <p>{{ participant.title }} <span class="uppercase">{{ participant.firstname }}</span> {{
+                                participant.lastname }}</p>
+                        </div>
+                        <div class="flex flex-row bg-bondi-blue-500 font-bold text-white justify-center text-md pb-4">
+                            <span class="uppercase">{{ participant.institution }}</span>
+                        </div>
+                        <div class="flex flex-row font-bold justify-center text-md pb-4">
+                            <span>{{ participant.country }}</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="bg-bondi-blue-500 px-4 pb-4 font-bold text-white rounded-md text-md uppercase">
+                                {{ participant.participant_category }}
                             </div>
                         </div>
-
-                        <!-- Body -->
-                        <div class="bg-white px-4 pt-4 pb-3 -mt-3 rounded-t-2xl flex-1 flex flex-col">
-                            <p class="text-lg font-extrabold text-gray-900 leading-tight">
-                                {{ participant.title }} <span class="uppercase">{{ participant.firstname }}</span> {{ participant.lastname }}
-                            </p>
-
-                            <div class="flex justify-center mt-2">
-                                <span class="print-badge__pill inline-block px-4 py-1 rounded-full text-white text-xs font-bold uppercase tracking-wide">
-                                    {{ participant.participant_category }}
-                                </span>
-                            </div>
-
-                            <p class="text-sm font-semibold text-gray-800 uppercase mt-3">{{ participant.institution }}</p>
-                            <p class="text-xs text-gray-400 mt-0.5">{{ participant.country }}</p>
-
-                            <div class="print-badge__divider my-3"></div>
-
-                            <div class="flex flex-col items-center gap-1">
-                                <QRCodeVue :value="appUrl + '/#/user-event-status/' + participant.id + '/' + event_id + '/'"
-                                    :size="80" :color-dark="'#111827'" :color-light="'#ffffff'" />
-                                <div class="text-xs font-semibold text-gray-400 mt-1">ID #: {{ participant.id }}</div>
-                            </div>
-
-                            <div class="text-xs font-medium mt-3" style="color: rgb(220,50,75);">www.ecsaconm.org</div>
+                        <div class="flex justify-center pt-2">
+                            <QRCodeVue :value="appUrl + '/#/user-event-status/' + participant.id + '/' + event_id + '/'"
+                                :size="85" :color-dark="'#000000'" :color-light="'#ffffff'" />
                         </div>
-
-                        <div class="print-badge__footer h-2"></div>
+                        <div class="font-3xl font-bold">ID #: {{ participant.id }}</div>
+                        <div class="text-sm font-normal">www.ecsaconm.org</div>
                     </div>
                 </div>
             </div>
@@ -174,24 +159,6 @@ export default {
     justify-content: center;
     align-items: center;
     flex-direction: column;
-}
-
-.print-badge {
-    border: 1px solid rgba(0,0,0,0.08);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-}
-.print-badge__header {
-    background: linear-gradient(135deg, rgb(254,80,103) 0%, rgb(220,50,75) 100%);
-}
-.print-badge__pill {
-    background: linear-gradient(135deg, rgb(254,80,103) 0%, rgb(220,50,75) 100%);
-}
-.print-badge__divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(220,50,75,0.25), transparent);
-}
-.print-badge__footer {
-    background: linear-gradient(90deg, rgb(254,80,103) 0%, rgb(220,50,75) 100%);
 }
 
 .badge-content {
