@@ -676,20 +676,20 @@
               {{ u.title }}
             </router-link>
           </div>
-          <div class="sm:w-2/12 w-full text-xs text-gray-700">{{ u.presenting_author ? u.presenting_author.name : u.submitter_name }}</div>
-          <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ u.presenting_author ? u.presenting_author.email : u.submitter_email }}</div>
+          <div class="sm:w-2/12 w-full text-sm text-gray-700">{{ u.presenting_author ? u.presenting_author.name : u.submitter_name }}</div>
+          <div class="sm:w-2/12 w-full text-sm text-gray-500">{{ u.presenting_author ? u.presenting_author.email : u.submitter_email }}</div>
           <div class="sm:w-1/12 w-full">
             <span v-if="u.presentation_type === 'oral'"
-              class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-secondary-container/40 text-cp-secondary border border-secondary-container/60">
+              class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary-container/40 text-cp-secondary border border-secondary-container/60">
               Oral
             </span>
             <span v-else-if="u.presentation_type === 'poster'"
-              class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-tertiary-container/40 text-cp-tertiary border border-tertiary-container/60">
+              class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-tertiary-container/40 text-cp-tertiary border border-tertiary-container/60">
               Poster
             </span>
-            <span v-else class="text-xs text-gray-300">—</span>
+            <span v-else class="text-sm text-gray-300">—</span>
           </div>
-          <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ formatDate(u.presentation_uploaded_at) }}</div>
+          <div class="sm:w-2/12 w-full text-sm text-gray-500">{{ formatDate(u.presentation_uploaded_at) }}</div>
           <div class="sm:w-2/12 w-full flex items-center gap-1.5 justify-start sm:justify-end">
             <button v-if="isPreviewableFile(u.presentation_file)" @click="openUploadPreview(u)" title="Preview"
               class="action-btn" style="color: rgb(254,80,103);">
@@ -1511,15 +1511,18 @@ export default {
     // File types the preview modal can actually render inline
     isPreviewableFile(path) {
       const ext = (path || '').split('.').pop().toLowerCase()
-      return ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
+      return ['pdf', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
     },
 
     openUploadPreview(u) {
       const ext = (u.presentation_file || '').split('.').pop().toLowerCase()
       const fileUrl = `${this.apiUrl}/abstracts/${u.id}/preview-presentation`
-      const src = ext === 'pdf'
+      // PDFs and images render natively in an iframe; pptx needs the Office
+      // Online viewer (same approach as the template preview modal), which
+      // requires the source URL to be publicly reachable — it already is.
+      const src = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
         ? fileUrl
-        : fileUrl // images render natively in the iframe too
+        : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
       this.uploadPreview = { open: true, name: u.title, src, abstract: u }
     },
 
