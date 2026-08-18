@@ -477,7 +477,7 @@ def reset_password_request_email(
 def password_reset_email(
     recipient_email, firstname, background_tasks: BackgroundTasks = None
 ):
-    subject = "Your ECSA-HC Event Spaces Account password has been reset"
+    subject = "Your ECSACONM Events Portal password has been reset"
     template = templates.get_template("password_reset_template.html")
     email_body = template.render(
         subject=subject,
@@ -492,7 +492,7 @@ def password_reset_email(
 def account_verification_email(
     recipient_email, firstname, background_tasks: BackgroundTasks = None
 ):
-    subject = "Your ECSA-HC Event Spaces Account has been verified"
+    subject = "Your ECSACONM Events Portal account has been verified"
     template = templates.get_template("account_verification_template.html")
     email_body = template.render(
         subject=subject,
@@ -571,7 +571,7 @@ def reviewer_assignment_email(
     background_tasks: BackgroundTasks = None,
     sent_by_user_id=None,
 ):
-    subject = "You Have Been Assigned an Abstract to Review – ECSA Events Portal"
+    subject = "You Have Been Assigned an Abstract to Review – ECSACONM Events Portal"
     template = templates.get_template("reviewer_assignment_template.html")
     email_body = template.render(
         subject=subject,
