@@ -1,6 +1,7 @@
 import math, os
 import uuid
 import shutil
+import textwrap
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook, load_workbook
 from io import BytesIO
@@ -1934,21 +1935,9 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         c.setFont("Helvetica", 10)
         c.drawCentredString(width / 2, 77 * mm, country)
 
-    # ── Theme ────────────────────────────────────────────────────────────────
-    theme = (p.get("event_theme") or "").strip()
-    if theme:
-        c.setFillColorRGB(0.45, 0.45, 0.45)
-        c.setFont("Helvetica-Oblique", 7)
-        c.drawCentredString(width / 2, 54 * mm, f"Theme: {theme}")
-
-    # ── Participant ID ───────────────────────────────────────────────────────
-    c.setFillColorRGB(0.55, 0.55, 0.55)
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(width / 2, 46 * mm, f"ID #{p['registration_id']}")
-
     # ── QR code (links to the participant badge/status page) ─────────────────
-    qr_size = 30 * mm
-    qr_y = 12 * mm
+    qr_size = 28 * mm
+    qr_y = 46 * mm
     qr_data = (
         f"{CLIENT_ORIGIN}/#/user-event-status/{p['registration_id']}/{p['event_id']}/"
     )
@@ -1957,6 +1946,23 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     qr.save(qr_buf, format="PNG")
     qr_buf.seek(0)
     c.drawImage(ImageReader(qr_buf), (width - qr_size) / 2, qr_y, qr_size, qr_size)
+
+    # ── Participant ID (below QR) ────────────────────────────────────────────
+    c.setFillColorRGB(0.55, 0.55, 0.55)
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(width / 2, 41 * mm, f"ID #{p['registration_id']}")
+
+    # ── Theme (below ID, like the preview) ───────────────────────────────────
+    theme = (p.get("event_theme") or "").strip()
+    if theme:
+        c.setFillColorRGB(0.45, 0.45, 0.45)
+        c.setFont("Helvetica-Oblique", 7)
+        theme_text = f"Theme: {theme}"
+        wrapped = textwrap.wrap(theme_text, width=46)
+        theme_y = 36 * mm
+        for line in wrapped[:2]:
+            c.drawCentredString(width / 2, theme_y, line)
+            theme_y -= 3 * mm
 
     # ── Website footer ───────────────────────────────────────────────────────
     c.setFillColorRGB(0.6, 0.6, 0.6)
