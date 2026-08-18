@@ -7,7 +7,7 @@
             <SpinnerComponent v-if="isLoading" />
             <form v-else class="flex flex-col space-y-4" @submit.prevent="submitResetPasswordForm" method="POST">
                 <label class="block">
-                    <input type="email" name="email" v-model="userData.username"
+                    <input type="email" name="email" v-model="userData.email"
                         class="mt-2 py-3 px-3 bg-white border shadow-sm border-ghost-600 placeholder-slate-400 focus:outline-none focus:border-athens-gray-500 focus:border-athens-gray-500 block w-full rounded-md sm:text-sm focus:ring-1"
                         placeholder="Email" required />
                 </label>
@@ -47,7 +47,7 @@ export default {
     data() {
         return {
             userData: {
-                username: "",
+                email: "",
             },
             SpinnerComponent,
             message: null,
@@ -60,14 +60,14 @@ export default {
         async submitResetPasswordForm() {
             this.isLoading = true;
             try {
-                const response = await createItem("auth/reset_password/", this.userData);
+                const response = await createItem("auth/password-reset-link", this.userData);
                 console.log(response)
                 this.isLoading = false;
                 this.error = ""
-                this.message = "Password rest was successful, check your email"
+                this.message = "A password reset link has been sent to your email. Please check your inbox."
             } catch (error) {
                 this.message = ""; // Set the error message
-                this.error = "Invalid email address!"; // Set the error message
+                this.error = error.response?.data?.detail || "Invalid email address!"; // Set the error message
                 this.isLoading = false;
             }
         },
