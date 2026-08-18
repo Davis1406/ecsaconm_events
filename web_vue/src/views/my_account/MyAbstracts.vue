@@ -79,11 +79,27 @@
                 ✓ Presentation uploaded
               </span>
               <span class="text-xs text-gray-400">{{ formatDate(abstract.presentation_uploaded_at) }}</span>
-              <a :href="`${apiUrl}/abstracts/${abstract.id}/download-presentation`"
+              <button @click="downloadPresentation(abstract)"
                 class="text-xs font-semibold underline hover:opacity-80" style="color: rgb(254,80,103);">
                 Download
-              </a>
+              </button>
             </div>
+
+            <!-- Preview -->
+            <div v-if="abstract.presentation_file && isPresentationPreviewable(abstract)"
+              class="mt-3 mb-3 rounded-xl border border-gray-100 overflow-hidden bg-gray-50"
+              style="height: 60vh;">
+              <img v-if="isPresentationImage(abstract)"
+                :src="presentationPreviewSrc(abstract)"
+                class="w-full h-full object-contain" />
+              <iframe v-else
+                :src="presentationPreviewSrc(abstract)"
+                class="w-full h-full" style="border:none;"></iframe>
+            </div>
+            <p v-else-if="abstract.presentation_file"
+              class="text-xs text-gray-400 italic mt-2 mb-2">
+              Preview not available for this file type — use Download.
+            </p>
 
             <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
               <input type="file"
@@ -275,7 +291,7 @@ export default {
             try {
                 const form = new FormData();
                 form.append('file', abstract._file);
-                await axios.post(
+                const res = await axios.post(
                     `${this.apiUrl}/abstracts/${abstract.id}/upload-presentation`,
                     form,
                     {
@@ -286,7 +302,7 @@ export default {
                     }
                 );
                 abstract._uploadMsg = 'Uploaded successfully!';
-                abstract.presentation_file = 'uploaded'; // flag so badge shows
+                abstract.presentation_file = res.data.presentation_file;
                 abstract.presentation_uploaded_at = new Date().toISOString();
                 abstract._file = null;
             } catch (e) {
@@ -295,6 +311,47 @@ export default {
             } finally {
                 abstract._uploading = false;
             }
+        },
+
+        async downloadPresentation(abstract) {
+            try {
+                const res = await axios.get(
+                    `${this.apiUrl}/abstracts/${abstract.id}/download-presentation`,
+                    { responseType: 'blob', headers: { Authorization: `Bearer ${this.token}` } }
+                );
+                const url = window.URL.createObjectURL(res.data);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `presentation_${abstract.id}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error('Download failed:', e);
+            }
+        },
+
+        fileExtension(path) {
+            if (!path) return '';
+            return (path.split('.').pop() || '').toLowerCase();
+        },
+
+        isPresentationPreviewable(abstract) {
+            const ext = this.fileExtension(abstract.presentation_file);
+            return ['pdf', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
+        },
+
+        isPresentationImage(abstract) {
+            const ext = this.fileExtension(abstract.presentation_file);
+            return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
+        },
+
+        presentationPreviewSrc(abstract) {
+            const fileUrl = `${this.apiUrl}/abstracts/${abstract.id}/preview-presentation`;
+            const ext = this.fileExtension(abstract.presentation_file);
+            if (['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) return fileUrl;
+            return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
         },
 
         formatDate(dateString) {

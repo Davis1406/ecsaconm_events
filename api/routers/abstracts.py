@@ -14,7 +14,7 @@ from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
 from models.models import Abstract, AbstractAuthor, AbstractReviewer, AbstractReview, User, UserRole, Role, Registration, Event, AbstractStatus, EmailLog
 from datetime import datetime, timezone
-from sqlalchemy import text as _sql_text
+from sqlalchemy import text as _sql_text, or_
 from schemas.events_space import (
     AbstractSubmitSchema, AbstractUpdateSchema,
     AssignReviewerSchema, AbstractReviewSchema,
@@ -25,6 +25,18 @@ PRESENTATION_UPLOAD_DIR = "uploads/presentations"
 os.makedirs(PRESENTATION_UPLOAD_DIR, exist_ok=True)
 ALLOWED_PRESENTATION_EXTS = {".pdf", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
 MAX_PRESENTATION_MB = 100
+
+PRESENTATION_PREVIEW_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".webp": "image/webp",
+}
 
 router = APIRouter()
 
@@ -609,14 +621,27 @@ def my_submissions(
     current_user: user_dependency,
     db: Session = Depends(get_db),
 ):
-    abstracts = db.query(Abstract).options(
-        joinedload(Abstract.authors),
-        joinedload(Abstract.event),
-        joinedload(Abstract.reviewer_assignments),
-    ).filter(
-        Abstract.submitted_by == current_user["user_id"],
-        Abstract.deleted_at == None,
-    ).order_by(Abstract.created_at.desc()).all()
+    uid = current_user["user_id"]
+    user_email = db.query(User.email).filter(User.id == uid).scalar()
+
+    conditions = [Abstract.submitted_by == uid]
+    if user_email:
+        conditions.append(Abstract.authors.any(AbstractAuthor.email == user_email))
+
+    abstracts = (
+        db.query(Abstract)
+        .options(
+            joinedload(Abstract.authors),
+            joinedload(Abstract.event),
+            joinedload(Abstract.reviewer_assignments),
+        )
+        .filter(
+            or_(*conditions),
+            Abstract.deleted_at == None,
+        )
+        .order_by(Abstract.created_at.desc())
+        .all()
+    )
     return [_serialize_abstract(a) for a in abstracts]
 
 
@@ -1627,18 +1652,29 @@ async def upload_presentation(
     if not abstract:
         raise HTTPException(status_code=404, detail="Abstract not found")
 
-    # Only the submitter (or an admin) may upload
-    if abstract.submitted_by != current_user["user_id"]:
-        # allow admin to upload on behalf of presenter
-        from models.models import UserRole, Role
-        is_admin = (
-            db.query(UserRole)
-            .join(Role, UserRole.role_id == Role.id)
-            .filter(UserRole.user_id == current_user["user_id"], Role.role == "Admin")
+    # Only the submitter, a presenting author, or an admin may upload
+    uid = current_user["user_id"]
+    if abstract.submitted_by != uid:
+        user_email = db.query(User.email).filter(User.id == uid).scalar()
+        is_presenting_author = (
+            db.query(AbstractAuthor)
+            .filter(
+                AbstractAuthor.abstract_id == abstract_id,
+                AbstractAuthor.email == user_email,
+                AbstractAuthor.is_presenting == True,
+            )
             .first()
+            is not None
         )
-        if not is_admin:
-            raise HTTPException(status_code=403, detail="Not authorised to upload for this abstract")
+        if not is_presenting_author:
+            is_admin = (
+                db.query(UserRole)
+                .join(Role, UserRole.role_id == Role.id)
+                .filter(UserRole.user_id == uid, Role.role == "Admin")
+                .first()
+            )
+            if not is_admin:
+                raise HTTPException(status_code=403, detail="Not authorised to upload for this abstract")
 
     ext = os.path.splitext(file.filename or "")[-1].lower()
     if ext not in ALLOWED_PRESENTATION_EXTS:
@@ -1671,6 +1707,7 @@ async def upload_presentation(
         "message": "Presentation uploaded successfully",
         "filename": file.filename,
         "abstract_id": abstract_id,
+        "presentation_file": stored_path,
     }
 
 
@@ -1731,7 +1768,38 @@ def list_uploaded_presentations(
     }
 
 
-# ── Admin: download a presenter's uploaded file ───────────────────────────────
+# ── Preview an uploaded presentation (public, for iframe / Office Online) ──────
+
+@router.get("/{abstract_id}/preview-presentation")
+def preview_presentation(
+    abstract_id: int,
+    db: Session = Depends(get_db),
+):
+    """Serve an uploaded presentation inline for browser preview.
+
+    No Content-Disposition: attachment, and no auth — the Office Online
+    viewer (view.officeapps.live.com) needs to fetch this URL itself, so
+    the endpoint must be public, exactly like presentation_templates preview.
+    """
+    abstract = (
+        db.query(Abstract)
+        .filter(Abstract.id == abstract_id, Abstract.deleted_at == None)
+        .first()
+    )
+    if not abstract or not abstract.presentation_file:
+        raise HTTPException(status_code=404, detail="No presentation file found")
+    if not os.path.exists(abstract.presentation_file):
+        raise HTTPException(status_code=404, detail="File not found on server")
+
+    ext = os.path.splitext(abstract.presentation_file)[-1].lower()
+    media_type = PRESENTATION_PREVIEW_MEDIA_TYPES.get(ext)
+    if not media_type:
+        raise HTTPException(status_code=415, detail="Preview not supported for this file type")
+
+    return FileResponse(path=abstract.presentation_file, media_type=media_type)
+
+
+# ── Download a presenter's uploaded file ───────────────────────────────────────
 
 @router.get("/{abstract_id}/download-presentation")
 def download_presentation(
