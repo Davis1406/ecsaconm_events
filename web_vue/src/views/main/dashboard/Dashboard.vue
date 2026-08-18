@@ -26,7 +26,7 @@
             <p class="text-3xl font-bold text-gray-800">{{ stats.events }}</p>
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-0.5">Total Events</p>
           </div>
-          <router-link :to="{ name: 'Events' }" class="text-xs font-semibold hover:underline"
+          <router-link :to="manageEventsLink" class="text-xs font-semibold hover:underline"
             style="color: rgb(254,80,103);">Manage &rarr;</router-link>
         </div>
 
@@ -157,6 +157,14 @@ export default {
   },
   mounted() {
     this.loadDashboard()
+  },
+  computed: {
+    manageEventsLink() {
+      if (this.events.length === 1) {
+        return { name: 'Event', params: { id: this.events[0].id } };
+      }
+      return { name: 'Events' };
+    },
   },
   methods: {
     async loadDashboard() {

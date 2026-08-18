@@ -510,7 +510,9 @@ class Event(Base):
     user = relationship("User", back_populates="events")
     event_type = relationship("EventType", back_populates="events")
     organiser = relationship("Organiser", back_populates="events")
-    registrations = relationship("Registration", back_populates="events")
+    registrations = relationship(
+        "Registration", back_populates="events", order_by="Registration.registered_at.desc()"
+    )
     participants = relationship("Participant", back_populates="event")
     documents = relationship("Document", back_populates="events")
     links = relationship("Link", back_populates="events")
