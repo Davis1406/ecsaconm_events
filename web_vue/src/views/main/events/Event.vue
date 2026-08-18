@@ -657,6 +657,115 @@
             </div>
           </div>
 
+          <!-- Abstract Presenters -->
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Abstract Presenters</p>
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="text-center p-3 rounded-xl bg-gray-50">
+                <p class="text-2xl font-bold text-gray-800">{{ abstractPresenters.length }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Total</p>
+              </div>
+              <div class="text-center p-3 rounded-xl bg-green-50">
+                <p class="text-2xl font-bold text-green-600">{{ presenterPaidCount }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Paid</p>
+              </div>
+              <div class="text-center p-3 rounded-xl bg-yellow-50">
+                <p class="text-2xl font-bold text-yellow-600">{{ presenterUnpaidCount }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Pending</p>
+              </div>
+            </div>
+            <div class="space-y-2" v-if="abstractPresenters.length > 0">
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-500 w-16 text-right flex-shrink-0">Paid</span>
+                <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                  <div class="h-full rounded-full bg-green-500 transition-all duration-500 flex items-center justify-end pr-2"
+                    :style="{ width: (presenterPaidCount / abstractPresenters.length * 100) + '%' }">
+                    <span v-if="presenterPaidCount > 0" class="text-white text-xs font-bold">{{ Math.round(presenterPaidCount / abstractPresenters.length * 100) }}%</span>
+                  </div>
+                </div>
+                <span class="text-xs font-semibold text-gray-600 w-8">{{ presenterPaidCount }}</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-500 w-16 text-right flex-shrink-0">Pending</span>
+                <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                  <div class="h-full rounded-full bg-yellow-400 transition-all duration-500 flex items-center justify-end pr-2"
+                    :style="{ width: (presenterUnpaidCount / abstractPresenters.length * 100) + '%' }">
+                    <span v-if="presenterUnpaidCount > 0" class="text-white text-xs font-bold">{{ Math.round(presenterUnpaidCount / abstractPresenters.length * 100) }}%</span>
+                  </div>
+                </div>
+                <span class="text-xs font-semibold text-gray-600 w-8">{{ presenterUnpaidCount }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Payment Proof Submitted -->
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Proof Submitted</p>
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="text-center p-3 rounded-xl bg-gray-50">
+                <p class="text-2xl font-bold text-gray-800">{{ participants.length }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Total</p>
+              </div>
+              <div class="text-center p-3 rounded-xl bg-blue-50">
+                <p class="text-2xl font-bold text-blue-600">{{ withPaymentProof.length }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Proof Uploaded</p>
+              </div>
+              <div class="text-center p-3 rounded-xl bg-yellow-50">
+                <p class="text-2xl font-bold text-yellow-600">{{ withoutPaymentProofCount }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">No Proof</p>
+              </div>
+            </div>
+            <div class="space-y-2" v-if="participants.length > 0">
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-500 w-20 text-right flex-shrink-0">With proof</span>
+                <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                    :style="{ width: (withPaymentProof.length / participants.length * 100) + '%', backgroundColor: 'rgb(254,80,103)' }">
+                    <span v-if="withPaymentProof.length > 0" class="text-white text-xs font-bold">{{ Math.round(withPaymentProof.length / participants.length * 100) }}%</span>
+                  </div>
+                </div>
+                <span class="text-xs font-semibold text-gray-600 w-8">{{ withPaymentProof.length }}</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-500 w-20 text-right flex-shrink-0">No proof</span>
+                <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                  <div class="h-full rounded-full bg-yellow-400 transition-all duration-500 flex items-center justify-end pr-2"
+                    :style="{ width: (withoutPaymentProofCount / participants.length * 100) + '%' }">
+                    <span v-if="withoutPaymentProofCount > 0" class="text-white text-xs font-bold">{{ Math.round(withoutPaymentProofCount / participants.length * 100) }}%</span>
+                  </div>
+                </div>
+                <span class="text-xs font-semibold text-gray-600 w-8">{{ withoutPaymentProofCount }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Participants vs Abstract Presenters -->
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Participants vs Abstract Presenters</p>
+            <div class="space-y-3">
+              <div class="p-3 rounded-xl bg-gray-50">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-xs font-bold text-gray-700">Participants</p>
+                  <p class="text-xs font-semibold text-gray-500">{{ regularParticipants.length }}</p>
+                </div>
+                <div class="flex gap-2">
+                  <span class="flex-1 text-center text-xs font-semibold text-green-700 bg-green-100 rounded-lg py-1.5">{{ regularPaidCount }} Paid</span>
+                  <span class="flex-1 text-center text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-lg py-1.5">{{ regularUnpaidCount }} Pending</span>
+                </div>
+              </div>
+              <div class="p-3 rounded-xl bg-gray-50">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-xs font-bold text-gray-700">Abstract Presenters</p>
+                  <p class="text-xs font-semibold text-gray-500">{{ abstractPresenters.length }}</p>
+                </div>
+                <div class="flex gap-2">
+                  <span class="flex-1 text-center text-xs font-semibold text-green-700 bg-green-100 rounded-lg py-1.5">{{ presenterPaidCount }} Paid</span>
+                  <span class="flex-1 text-center text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-lg py-1.5">{{ presenterUnpaidCount }} Pending</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- By Category / Role -->
           <div v-if="categoryStats.length > 0">
             <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">By Category</p>
@@ -825,6 +934,30 @@ export default {
   computed: {
     paidCount() {
       return this.participants.filter(p => this.paidStatus(p.paid || p.event_payment)).length;
+    },
+    abstractPresenters() {
+      return this.participants.filter(p => p.is_abstract_presenter);
+    },
+    regularParticipants() {
+      return this.participants.filter(p => !p.is_abstract_presenter);
+    },
+    presenterPaidCount() {
+      return this.abstractPresenters.filter(p => this.paidStatus(p.paid || p.event_payment)).length;
+    },
+    presenterUnpaidCount() {
+      return this.abstractPresenters.filter(p => !this.paidStatus(p.paid || p.event_payment)).length;
+    },
+    regularPaidCount() {
+      return this.regularParticipants.filter(p => this.paidStatus(p.paid || p.event_payment)).length;
+    },
+    regularUnpaidCount() {
+      return this.regularParticipants.filter(p => !this.paidStatus(p.paid || p.event_payment)).length;
+    },
+    withPaymentProof() {
+      return this.participants.filter(p => p.payment_proof);
+    },
+    withoutPaymentProofCount() {
+      return this.participants.length - this.withPaymentProof.length;
     },
     filterCounts() {
       const paidOf = p => this.paidStatus(p.paid || p.event_payment);

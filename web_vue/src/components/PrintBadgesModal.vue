@@ -25,7 +25,6 @@
                         <!-- Badge content here -->
                         <div class="flex flex-row p-4 items-center justify-center space-x-4">
                             <div><img src="@/assets/images/logo.png" class="sm:h-20 h-12" /></div>
-                            <div><img src="@/assets/images/lesotho.png" class="sm:h-20 h-12" /></div>
                             <div><img src="@/assets/images/ecsalogo.png" class="sm:h-20 h-12" /></div>
                         </div>
                         <div class="text-xl font-extrabold mb-3 pt-2">

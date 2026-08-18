@@ -19,19 +19,12 @@
           <div class="h-5" style="background-color: rgb(254,80,103);"></div>
 
           <!-- Logo row -->
-          <div class="flex items-center justify-between px-5 py-4 bg-white">
-            <div class="h-14 w-14 flex-shrink-0 flex items-center justify-center rounded-lg"
-              :class="!leftLogoUrl ? 'border-2 border-dashed border-gray-100' : ''">
-              <img v-if="leftLogoUrl" :src="leftLogoUrl" class="max-h-14 max-w-full object-contain" alt="Left Logo" />
-              <span v-else class="text-gray-300 text-xs text-center leading-tight">Left<br/>Logo</span>
+          <div class="flex items-center justify-center gap-6 px-5 py-4 bg-white">
+            <div class="h-14 w-14 flex-shrink-0 flex items-center justify-center">
+              <img src="@/assets/images/ecsalogo.png" class="max-h-14 max-w-full object-contain" alt="ECSA" />
             </div>
             <div class="flex-1 flex justify-center px-3">
               <img src="@/assets/images/logo.png" class="h-14 object-contain" alt="ECSACONM" />
-            </div>
-            <div class="h-14 w-14 flex-shrink-0 flex items-center justify-center rounded-lg"
-              :class="!rightLogoUrl ? 'border-2 border-dashed border-gray-100' : ''">
-              <img v-if="rightLogoUrl" :src="rightLogoUrl" class="max-h-14 max-w-full object-contain" alt="Right Logo" />
-              <span v-else class="text-gray-300 text-xs text-center leading-tight">Right<br/>Logo</span>
             </div>
           </div>
 
@@ -85,9 +78,6 @@
 <script>
 import QRCodeVue from 'qrcode.vue'
 
-const LOGO_LEFT_KEY = 'badge_logo_left'
-const LOGO_RIGHT_KEY = 'badge_logo_right'
-
 export default {
   name: 'BadgeModal',
   components: { QRCodeVue },
@@ -98,10 +88,7 @@ export default {
     event: { type: Object, default: () => ({}) },
   },
   data() {
-    return {
-      leftLogoUrl: null,
-      rightLogoUrl: null,
-    }
+    return {}
   },
   computed: {
     qrValue() {
@@ -111,9 +98,6 @@ export default {
     eventTheme() {
       return this.event?.theme || ''
     },
-  },
-  mounted() {
-    this.loadLogos()
   },
   methods: {
     close() { this.$emit('close') },
@@ -126,15 +110,10 @@ export default {
       }
       return map[cat] || cat || 'Participant'
     },
-    loadLogos() {
-      this.leftLogoUrl = localStorage.getItem(LOGO_LEFT_KEY) || null
-      this.rightLogoUrl = localStorage.getItem(LOGO_RIGHT_KEY) || null
-    },
   },
   watch: {
     show(val) {
       document.body.style.overflow = val ? 'hidden' : ''
-      if (val) this.loadLogos()
     },
   },
 }

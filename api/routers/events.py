@@ -2053,7 +2053,7 @@ async def download_participant_badges_pdf(
     c = canvas.Canvas(buffer, pagesize=(width, height))
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
-    logo_right = convert_png_to_rgb("assets/logo_right.png")
+    logo_right = convert_png_to_rgb("assets/logo.png")
 
     for p in participants:
         _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
@@ -2132,7 +2132,7 @@ async def download_my_badge(
     c = canvas.Canvas(buffer, pagesize=(width, height))
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
-    logo_right = convert_png_to_rgb("assets/logo_right.png")
+    logo_right = convert_png_to_rgb("assets/logo.png")
 
     _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
 

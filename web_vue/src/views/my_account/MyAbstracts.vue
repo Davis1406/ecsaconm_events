@@ -71,7 +71,9 @@
 
           <!-- Upload presentation -->
           <div class="border-t border-gray-100 pt-4 mt-2">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Presentation File</p>
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              Upload presentation file <span class="text-red-500">*</span>
+            </p>
 
             <!-- Already uploaded -->
             <div v-if="abstract.presentation_file" class="flex items-center gap-3 mb-2">
@@ -107,7 +109,7 @@
                 @change="e => abstract._file = e.target.files[0]"
                 class="text-sm text-gray-600 border border-gray-200 rounded-xl px-3 py-1.5
                        file:mr-3 file:py-1 file:px-3 file:rounded-full file:border-0
-                       file:text-xs file:font-semibold file:text-white cursor-pointer"
+                       file:text-xs file:font-semibold file:text-white file:bg-[rgb(254,80,103)] cursor-pointer"
                 style="--tw-ring-color: rgb(254,80,103);" />
               <button
                 @click="uploadPresentation(abstract)"
