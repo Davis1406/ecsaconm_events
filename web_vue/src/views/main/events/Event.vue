@@ -153,6 +153,12 @@
           <IdentificationIcon class="w-4 h-4" />
           Print Badges
         </button>
+        <button v-if="permissions.includes('PRINT_BADGE')" @click="downloadAllBadges"
+          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
+          style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+          <ArrowDownTrayIcon class="w-4 h-4" />
+          Download All Badges (PDF)
+        </button>
         <button v-if="permissions.includes('BULK_UPLOAD')" @click="openBulkUploadParticipantsModal"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
@@ -264,6 +270,11 @@
             title="Preview Badge"
             class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-pink-300 hover:text-pink-500 transition">
             <IdentificationIcon class="w-4 h-4" />
+          </button>
+          <button @click="downloadBadge(participant)"
+            title="Download Badge"
+            class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-600 transition">
+            <ArrowDownTrayIcon class="w-4 h-4" />
           </button>
           <!-- Send Receipt — only for paid participants -->
           <button v-if="paidStatus(participant.paid || participant.event_payment)"
@@ -1162,6 +1173,42 @@ export default {
     previewBadge(participant) {
       this.participant = participant;
       this.showBadgeModal = true;
+    },
+    async downloadBadge(participant) {
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        const res = await api.get(`/events/${this.id}/participants/${participant.id}/badge`, { responseType: 'blob' });
+        const url = window.URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `badge_${String(participant.firstname || '').replace(/\s+/g, '_')}_${String(participant.lastname || '').replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download badge failed:', error);
+        this.errorMsg = 'Failed to download badge.';
+      }
+    },
+    async downloadAllBadges() {
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        const res = await api.get(`/events/${this.id}/participants/badges`, { responseType: 'blob' });
+        const url = window.URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${String(this.event.event || 'event').replace(/\s+/g, '_')}_badges.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download all badges failed:', error);
+        this.errorMsg = 'Failed to download badges.';
+      }
     },
     closeBadgeModal() { this.showBadgeModal = false; },
     openPrintBadgesModal() { this.showPrintBadgesModal = true; },
