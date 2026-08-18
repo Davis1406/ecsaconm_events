@@ -6,13 +6,13 @@ from fastapi.responses import JSONResponse
 from schemas.events_space import UserSchema, ProfileSchema, UserRoleSchema
 from passlib.hash import bcrypt
 import utils.mailer_util as mailer_util
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import or_
 from typing import Annotated
 from core.database import get_db
 from sqlalchemy.orm import Session, joinedload
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import User, UserPhoto, UserProfile, UserRole
+from models.models import User, UserPhoto, UserProfile, UserRole, PasswordReset
 from dependencies.dependency import Dependency
 from fastapi import (
     APIRouter,
@@ -301,15 +301,36 @@ async def admin_reset_user_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    new_password = auth_dependency.generate_random_password()
-    user.hashed_password = bcrypt.hash(new_password)
-    db.commit()
+    # Create (or reuse) an unexpired password-reset token and email the user a
+    # reset link, mirroring the self-service forgot-password flow. The user's
+    # current password is left untouched until they set a new one via the link.
+    now = datetime.utcnow()
+    existing_reset = (
+        db.query(PasswordReset)
+        .filter(
+            PasswordReset.user_id == user.id,
+            PasswordReset.is_used == False,
+            PasswordReset.expires_at > now,
+            PasswordReset.deleted_at == None,
+        )
+        .order_by(PasswordReset.created_at.desc())
+        .first()
+    )
+    if existing_reset:
+        reset_token = existing_reset.reset_token
+    else:
+        reset_token = str(uuid.uuid4())
+        db.add(
+            PasswordReset(
+                user_id=user.id,
+                reset_token=reset_token,
+                expires_at=now + timedelta(hours=1),
+            )
+        )
+        db.commit()
 
-    background_tasks.add_task(
-        mailer_util.new_account_email,
-        user.email,
-        user.firstname,
-        new_password,
+    mailer_util.reset_password_request_email(
+        user.email, user.firstname, reset_token, background_tasks
     )
 
     dependency.log_activity(
@@ -320,7 +341,7 @@ async def admin_reset_user_password(
         f"Admin reset password for user id {user_id}",
     )
 
-    return {"detail": "Password reset and sent to user's email successfully"}
+    return {"detail": "Password reset link sent to user's email successfully"}
 
 
 @router.delete("/{user_id}")
