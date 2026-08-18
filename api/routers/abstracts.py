@@ -2,6 +2,7 @@ import io
 import os
 import re
 import uuid
+import zipfile
 from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, status, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
@@ -257,6 +258,59 @@ def abstract_stats(
         "registered": registered_count,
         "paid": paid_count,
         "not_registered": unique_presenters - registered_count,
+    }
+
+
+@router.get("/report")
+def abstract_report(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """Aggregate breakdowns for the visual report: by track and by upload status."""
+    from sqlalchemy import func as sqlfunc
+
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    base = db.query(Abstract).filter(
+        Abstract.deleted_at == None,
+        Abstract.status == "accepted",
+    )
+    if event_id:
+        base = base.filter(Abstract.event_id == event_id)
+
+    # By track (top 12, "Uncategorised" bucket for blank tracks)
+    track_q = (
+        db.query(
+            sqlfunc.coalesce(sqlfunc.nullif(Abstract.track, ""), "Uncategorised").label("track"),
+            Abstract.presentation_type,
+            sqlfunc.count(Abstract.id).label("cnt"),
+        )
+        .filter(Abstract.deleted_at == None, Abstract.status == "accepted")
+    )
+    if event_id:
+        track_q = track_q.filter(Abstract.event_id == event_id)
+    track_q = track_q.group_by("track", Abstract.presentation_type)
+
+    track_totals: dict = {}
+    for row in track_q.all():
+        entry = track_totals.setdefault(row.track, {"track": row.track, "oral": 0, "poster": 0, "total": 0})
+        ptype = row.presentation_type.value if row.presentation_type else "other"
+        entry[ptype] = entry.get(ptype, 0) + row.cnt
+        entry["total"] += row.cnt
+
+    by_track = sorted(track_totals.values(), key=lambda r: r["total"], reverse=True)[:12]
+
+    # Upload status
+    uploaded = base.filter(Abstract.presentation_file != None).count()
+    total_accepted = base.count()
+
+    return {
+        "by_track": by_track,
+        "uploaded": uploaded,
+        "not_uploaded": total_accepted - uploaded,
+        "total": total_accepted,
     }
 
 
@@ -1719,6 +1773,7 @@ def list_uploaded_presentations(
     skip: int = 0,
     limit: int = 50,
     search: str = "",
+    presentation_type: str = Query(None),
     db: Session = Depends(get_db),
 ):
     """Returns all abstracts that have a presentation file uploaded."""
@@ -1736,6 +1791,8 @@ def list_uploaded_presentations(
     )
     if search:
         q = q.filter(Abstract.title.ilike(f"%{search}%"))
+    if presentation_type:
+        q = q.filter(Abstract.presentation_type == presentation_type)
 
     total = q.count()
     rows = q.order_by(Abstract.presentation_uploaded_at.desc()).offset(skip).limit(limit).all()
@@ -1747,6 +1804,7 @@ def list_uploaded_presentations(
                 "id": a.id,
                 "title": a.title,
                 "status": a.status.value if a.status else None,
+                "presentation_type": a.presentation_type.value if a.presentation_type else None,
                 "event": a.event.event if a.event else None,
                 "submitter_name": f"{a.submitter.firstname} {a.submitter.lastname}" if a.submitter else None,
                 "submitter_email": a.submitter.email if a.submitter else None,
@@ -1766,6 +1824,72 @@ def list_uploaded_presentations(
             for a in rows
         ],
     }
+
+
+# ── Admin: batch-download uploaded presentations as a ZIP, by type ────────────
+
+@router.get("/download-presentations-zip")
+def download_presentations_zip(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+    presentation_type: str = Query(None),  # "oral" | "poster" | None = all
+):
+    """Zip up every uploaded presentation file matching the filter and stream it."""
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    q = (
+        db.query(Abstract)
+        .options(joinedload(Abstract.authors))
+        .filter(
+            Abstract.deleted_at == None,
+            Abstract.presentation_file != None,
+        )
+    )
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+    if presentation_type:
+        q = q.filter(Abstract.presentation_type == presentation_type)
+    abstracts = q.order_by(Abstract.title.asc()).all()
+
+    if not abstracts:
+        raise HTTPException(status_code=404, detail="No uploaded presentations match this filter.")
+
+    def _safe_name(title: str, idx: int) -> str:
+        cleaned = re.sub(r'[^A-Za-z0-9 _-]+', '', title or "").strip()[:80] or "presentation"
+        return f"{idx:03d}_{cleaned}"
+
+    buf = io.BytesIO()
+    added = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        used_names = set()
+        for i, a in enumerate(abstracts, 1):
+            if not a.presentation_file or not os.path.exists(a.presentation_file):
+                continue
+            ext = os.path.splitext(a.presentation_file)[-1]
+            base_name = _safe_name(a.title, i)
+            arcname = f"{base_name}{ext}"
+            # guard against duplicate arcnames
+            n = 1
+            while arcname in used_names:
+                n += 1
+                arcname = f"{base_name}_{n}{ext}"
+            used_names.add(arcname)
+            zf.write(a.presentation_file, arcname=arcname)
+            added += 1
+
+    if added == 0:
+        raise HTTPException(status_code=404, detail="No presentation files were found on disk for this filter.")
+
+    buf.seek(0)
+    label = (presentation_type or "all").lower()
+    filename = f"presentations_{label}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── Preview an uploaded presentation (public, for iframe / Office Online) ──────

@@ -47,6 +47,13 @@
           {{ uploadsTotal }}
         </span>
       </button>
+
+      <button @click="activeTab = 'report'"
+        class="pb-3 flex items-center gap-2 whitespace-nowrap px-1 text-sm font-semibold border-b-2 transition-colors"
+        :class="activeTab === 'report' ? 'border-brand text-brand' : 'border-transparent text-on-surface-variant hover:text-on-surface'">
+        <ChartPieIcon class="w-4 h-4" />
+        Visual Report
+      </button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════ -->
@@ -626,39 +633,168 @@
         <span class="text-xs text-gray-400">{{ uploadsTotal }} file{{ uploadsTotal !== 1 ? 's' : '' }} uploaded</span>
       </div>
 
+      <!-- Batch download toolbar -->
+      <div class="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50">
+        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Batch download</span>
+        <button @click="downloadPresentationsZip(null)" :disabled="zipDownloading"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40"
+          style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+          <ArchiveBoxArrowDownIcon class="w-3.5 h-3.5" />
+          All ({{ uploadsTotal }})
+        </button>
+        <button @click="downloadPresentationsZip('oral')" :disabled="zipDownloading"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40
+                 bg-secondary-container/30 text-cp-secondary border-secondary-container/60">
+          <ArchiveBoxArrowDownIcon class="w-3.5 h-3.5" />
+          Oral only
+        </button>
+        <button @click="downloadPresentationsZip('poster')" :disabled="zipDownloading"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40
+                 bg-tertiary-container/30 text-cp-tertiary border-tertiary-container/60">
+          <ArchiveBoxArrowDownIcon class="w-3.5 h-3.5" />
+          Poster only
+        </button>
+        <span v-if="zipDownloading" class="text-xs text-gray-400 italic ml-1">Preparing ZIP…</span>
+        <span v-if="zipError" class="text-xs text-cp-error ml-1">{{ zipError }}</span>
+      </div>
+
       <SpinnerComponent v-if="uploadsLoading" />
       <div v-else>
         <div class="flex bg-mercury-500 px-5 py-2 uppercase text-xs font-bold text-gray-500">
-          <div class="w-4/12">Abstract Title</div>
+          <div class="w-3/12">Abstract Title</div>
           <div class="w-2/12">Presenter</div>
-          <div class="w-3/12">Email</div>
+          <div class="w-2/12">Email</div>
+          <div class="w-1/12">Type</div>
           <div class="w-2/12">Uploaded</div>
-          <div class="w-1/12">File</div>
+          <div class="w-2/12 text-right">Actions</div>
         </div>
         <div v-if="uploads.length === 0" class="px-5 py-10 text-center text-sm text-gray-400 italic">No presentations uploaded yet.</div>
         <div v-for="u in uploads" :key="u.id"
           class="flex sm:flex-row flex-col px-5 py-3 text-sm items-center border-t border-gray-100 hover:bg-gray-50 transition">
-          <div class="sm:w-4/12 w-full font-medium text-gray-800 leading-snug pr-3">
+          <div class="sm:w-3/12 w-full font-medium text-gray-800 leading-snug pr-3">
             <router-link :to="{ name: 'Abstract', params: { id: u.id } }" class="hover:underline" style="color: rgb(0,150,180);">
               {{ u.title }}
             </router-link>
           </div>
           <div class="sm:w-2/12 w-full text-xs text-gray-700">{{ u.presenting_author ? u.presenting_author.name : u.submitter_name }}</div>
-          <div class="sm:w-3/12 w-full text-xs text-gray-400">{{ u.presenting_author ? u.presenting_author.email : u.submitter_email }}</div>
-          <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ formatDate(u.presentation_uploaded_at) }}</div>
+          <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ u.presenting_author ? u.presenting_author.email : u.submitter_email }}</div>
           <div class="sm:w-1/12 w-full">
-            <a :href="`${apiUrl}/abstracts/${u.id}/download-presentation`" target="_blank"
+            <span v-if="u.presentation_type === 'oral'"
+              class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-secondary-container/40 text-cp-secondary border border-secondary-container/60">
+              Oral
+            </span>
+            <span v-else-if="u.presentation_type === 'poster'"
+              class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-tertiary-container/40 text-cp-tertiary border border-tertiary-container/60">
+              Poster
+            </span>
+            <span v-else class="text-xs text-gray-300">—</span>
+          </div>
+          <div class="sm:w-2/12 w-full text-xs text-gray-400">{{ formatDate(u.presentation_uploaded_at) }}</div>
+          <div class="sm:w-2/12 w-full flex items-center gap-1.5 justify-start sm:justify-end">
+            <button v-if="isPreviewableFile(u.presentation_file)" @click="openUploadPreview(u)" title="Preview"
+              class="action-btn" style="color: rgb(254,80,103);">
+              <EyeIcon class="w-4 h-4" />
+            </button>
+            <button @click="downloadSinglePresentation(u)" title="Download"
               class="inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
               style="background-color: rgb(0,150,180);">
               <ArrowDownTrayIcon class="h-3.5 w-3.5" />
               Get
-            </a>
+            </button>
           </div>
         </div>
         <div class="px-5 py-3 border-t border-gray-100">
           <pagination-component :currentPage="uploadsPage" :totalPages="uploadsTotalPages" @page-change="handleUploadsPage" />
         </div>
       </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB 5 · Visual Report                                                -->
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <div v-if="activeTab === 'report'" class="flex flex-col gap-6">
+      <SpinnerComponent v-if="reportLoading" />
+      <template v-else>
+
+        <!-- Top row: Oral/Poster split + Upload completion -->
+        <div class="grid md:grid-cols-2 gap-4">
+
+          <!-- Oral vs Poster donut -->
+          <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+            <h3 class="text-sm font-bold text-on-surface mb-4">Oral vs Poster</h3>
+            <div class="flex items-center gap-6">
+              <svg viewBox="0 0 42 42" class="w-32 h-32 flex-shrink-0" role="img" aria-label="Oral vs poster split">
+                <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="rgb(230,232,236)" stroke-width="5"/>
+                <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="rgb(37,99,235)" stroke-width="5"
+                  :stroke-dasharray="`${oralPct} ${100 - oralPct}`" stroke-dashoffset="25" stroke-linecap="round"/>
+                <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="rgb(124,58,237)" stroke-width="5"
+                  :stroke-dasharray="`${posterPct} ${100 - posterPct}`" :stroke-dashoffset="25 - oralPct" stroke-linecap="round"/>
+                <text x="21" y="19.5" text-anchor="middle" class="fill-on-surface" style="font-size:6px;font-weight:700;">{{ stats.total ?? 0 }}</text>
+                <text x="21" y="25.5" text-anchor="middle" class="fill-on-surface-variant" style="font-size:3.2px;">abstracts</text>
+              </svg>
+              <div class="flex flex-col gap-2 text-sm">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:rgb(37,99,235)"></span>
+                  <span class="font-semibold text-on-surface">{{ stats.oral ?? 0 }}</span>
+                  <span class="text-on-surface-variant">Oral ({{ oralPct }}%)</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:rgb(124,58,237)"></span>
+                  <span class="font-semibold text-on-surface">{{ stats.poster ?? 0 }}</span>
+                  <span class="text-on-surface-variant">Poster ({{ posterPct }}%)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Registration funnel -->
+          <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+            <h3 class="text-sm font-bold text-on-surface mb-4">Presenter Registration</h3>
+            <div class="flex flex-col gap-3">
+              <div v-for="row in registrationFunnel" :key="row.label" class="flex items-center gap-3">
+                <span class="w-24 text-xs text-on-surface-variant flex-shrink-0">{{ row.label }}</span>
+                <div class="flex-1 h-3 rounded-full bg-surface-container-high overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500" :style="`width:${row.pct}%; background:${row.color}`"></div>
+                </div>
+                <span class="w-8 text-right text-xs font-semibold text-on-surface flex-shrink-0">{{ row.value }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Presentation upload completion -->
+        <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-on-surface">Presentation Upload Completion</h3>
+            <span class="text-xs text-on-surface-variant">{{ report.uploaded ?? 0 }} / {{ report.total ?? 0 }} uploaded</span>
+          </div>
+          <div class="h-4 rounded-full bg-surface-container-high overflow-hidden flex">
+            <div class="h-full transition-all duration-500" style="background: rgb(16,185,129);" :style="`width:${uploadPct}%; background: rgb(16,185,129);`"></div>
+          </div>
+          <p class="text-xs text-on-surface-variant mt-2">{{ uploadPct }}% of accepted presenters have uploaded their slides.</p>
+        </div>
+
+        <!-- By track bar chart -->
+        <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+          <h3 class="text-sm font-bold text-on-surface mb-4">Abstracts by Track</h3>
+          <div v-if="!report.by_track || report.by_track.length === 0" class="text-sm text-on-surface-variant italic py-6 text-center">No track data available.</div>
+          <div v-else class="flex flex-col gap-3">
+            <div v-for="t in report.by_track" :key="t.track" class="flex items-center gap-3">
+              <span class="w-40 flex-shrink-0 text-xs text-on-surface truncate" :title="t.track">{{ t.track }}</span>
+              <div class="flex-1 h-4 rounded-full bg-surface-container-high overflow-hidden flex">
+                <div class="h-full" style="background: rgb(37,99,235);" :style="`width:${(t.oral / maxTrackTotal) * 100}%`" :title="`${t.oral} oral`"></div>
+                <div class="h-full" style="background: rgb(124,58,237);" :style="`width:${(t.poster / maxTrackTotal) * 100}%`" :title="`${t.poster} poster`"></div>
+              </div>
+              <span class="w-8 text-right text-xs font-semibold text-on-surface flex-shrink-0">{{ t.total }}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-4 mt-4 text-xs text-on-surface-variant">
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:rgb(37,99,235)"></span>Oral</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:rgb(124,58,237)"></span>Poster</span>
+          </div>
+        </div>
+
+      </template>
     </div>
 
   </div><!-- /page canvas -->
@@ -806,6 +942,39 @@
     </div>
   </Teleport>
 
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- Uploaded Presentation Preview Modal                                   -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <Teleport to="body">
+    <div v-if="uploadPreview.open"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      @click.self="closeUploadPreview">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeUploadPreview"></div>
+
+      <div class="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="height: 85vh;">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <h2 class="font-semibold text-gray-800 text-base truncate pr-4">{{ uploadPreview.name }}</h2>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button v-if="uploadPreview.abstract" @click="downloadSinglePresentation(uploadPreview.abstract)"
+              class="px-3 py-1.5 text-xs rounded-full font-semibold text-white hover:opacity-90 transition"
+              style="background-color: rgb(0,150,180);">
+              Download
+            </button>
+            <button @click="closeUploadPreview" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex-1 bg-gray-50">
+          <iframe v-if="uploadPreview.src" :src="uploadPreview.src" class="w-full h-full" style="border:none;"></iframe>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
 </template>
 
 <script>
@@ -816,10 +985,12 @@ import SearchComponent from '@/components/SearchComponent.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 import axios from 'axios'
+import { saveAs } from 'file-saver'
 import {
   DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
+  ArchiveBoxArrowDownIcon,
 } from '@heroicons/vue/24/outline'
-import { PresentationChartBarIcon, BellAlertIcon } from '@heroicons/vue/24/solid'
+import { PresentationChartBarIcon, BellAlertIcon, ChartPieIcon } from '@heroicons/vue/24/solid'
 
 // Registration filter values that require server-side filtering
 const REGISTRATION_FILTERS = ['registered', 'not_registered', 'paid']
@@ -829,7 +1000,7 @@ export default {
   components: {
     HeaderView, SpinnerComponent, PaginationComponent, SearchComponent,
     DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
-    PresentationChartBarIcon, BellAlertIcon,
+    PresentationChartBarIcon, BellAlertIcon, ChartPieIcon, ArchiveBoxArrowDownIcon,
   },
 
   setup() {
@@ -881,6 +1052,12 @@ export default {
       uploads: [], uploadsLoading: true,
       uploadsPage: 1, uploadsPageSize: 20,
       uploadsTotal: 0, uploadsSearch: '',
+      zipDownloading: false, zipError: '',
+      uploadPreview: { open: false, name: '', src: '', abstract: null },
+
+      // ── Tab 5: Visual Report ─────────────────────────────────────────────
+      report: { by_track: [], uploaded: 0, not_uploaded: 0, total: 0 },
+      reportLoading: false,
 
       successMsg: '', errorMsg: '',
 
@@ -953,6 +1130,34 @@ export default {
         return this.abstractsSort.dir === 'asc' ? cmp : -cmp
       })
     },
+
+    // ── Report computed values ───────────────────────────────────────────
+    oralPct() {
+      const total = this.stats.total || 0
+      return total ? Math.round(((this.stats.oral || 0) / total) * 100) : 0
+    },
+    posterPct() {
+      const total = this.stats.total || 0
+      return total ? Math.round(((this.stats.poster || 0) / total) * 100) : 0
+    },
+    uploadPct() {
+      const total = this.report.total || 0
+      return total ? Math.round(((this.report.uploaded || 0) / total) * 100) : 0
+    },
+    maxTrackTotal() {
+      const list = this.report.by_track || []
+      return Math.max(1, ...list.map(t => t.total || 0))
+    },
+    registrationFunnel() {
+      const total = this.stats.unique_presenters || 0
+      const pct = (v) => total ? Math.round((v / total) * 100) : 0
+      return [
+        { label: 'Presenters', value: total, pct: 100, color: 'rgb(107,114,128)' },
+        { label: 'Registered', value: this.stats.registered ?? 0, pct: pct(this.stats.registered ?? 0), color: 'rgb(13,148,136)' },
+        { label: 'Paid', value: this.stats.paid ?? 0, pct: pct(this.stats.paid ?? 0), color: 'rgb(16,185,129)' },
+        { label: 'Not Registered', value: this.stats.not_registered ?? 0, pct: pct(this.stats.not_registered ?? 0), color: 'rgb(220,38,38)' },
+      ]
+    },
   },
 
   watch: {
@@ -960,6 +1165,7 @@ export default {
       if (tab === 'templates' && !this.templates.length && !this.templatesLoading) this.loadTemplates()
       if (tab === 'reminders' && !this.presenters.length) this.loadPresenters()
       if (tab === 'uploads'   && !this.uploads.length && !this.uploadsLoading) this.loadUploads()
+      if (tab === 'report'    && !this.reportLoading) this.loadReport()
     },
   },
 
@@ -1301,6 +1507,83 @@ export default {
     },
     handleUploadsSearch(q) { this.uploadsSearch = q; this.uploadsPage = 1; this.loadUploads() },
     handleUploadsPage(p)   { this.uploadsPage = p; this.loadUploads() },
+
+    // File types the preview modal can actually render inline
+    isPreviewableFile(path) {
+      const ext = (path || '').split('.').pop().toLowerCase()
+      return ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
+    },
+
+    openUploadPreview(u) {
+      const ext = (u.presentation_file || '').split('.').pop().toLowerCase()
+      const fileUrl = `${this.apiUrl}/abstracts/${u.id}/preview-presentation`
+      const src = ext === 'pdf'
+        ? fileUrl
+        : fileUrl // images render natively in the iframe too
+      this.uploadPreview = { open: true, name: u.title, src, abstract: u }
+    },
+
+    closeUploadPreview() {
+      this.uploadPreview = { open: false, name: '', src: '', abstract: null }
+    },
+
+    async downloadSinglePresentation(u) {
+      try {
+        const res = await axios.get(`${this.apiUrl}/abstracts/${u.id}/download-presentation`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          responseType: 'blob',
+        })
+        const ext = (u.presentation_file || '').split('.').pop()
+        const cleanTitle = (u.title || 'presentation').replace(/[^A-Za-z0-9 _-]+/g, '').trim().slice(0, 60)
+        saveAs(res.data, `${cleanTitle || 'presentation'}.${ext}`)
+      } catch (e) {
+        this.errorMsg = 'Failed to download presentation.'
+      }
+    },
+
+    async downloadPresentationsZip(presentationType) {
+      this.zipDownloading = true
+      this.zipError = ''
+      try {
+        const params = {}
+        if (presentationType) params.presentation_type = presentationType
+        const res = await axios.get(`${this.apiUrl}/abstracts/download-presentations-zip`, {
+          params,
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          responseType: 'blob',
+        })
+        saveAs(res.data, `presentations_${presentationType || 'all'}.zip`)
+      } catch (e) {
+        this.zipError = await this.blobErrorDetail(e) || 'No matching presentations found to download.'
+      } finally {
+        this.zipDownloading = false
+      }
+    },
+
+    // Blob-response errors carry their JSON body as a Blob, not parsed data —
+    // read it back out so error messages surface instead of "[object Blob]".
+    async blobErrorDetail(e) {
+      const blob = e.response?.data
+      if (!(blob instanceof Blob)) return e.response?.data?.detail || null
+      try {
+        const text = await blob.text()
+        return JSON.parse(text)?.detail || null
+      } catch {
+        return null
+      }
+    },
+
+    // ── Report ────────────────────────────────────────────────────────────
+    async loadReport() {
+      this.reportLoading = true
+      try {
+        const res = await axios.get(`${this.apiUrl}/abstracts/report`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.report = res.data
+      } catch (e) { console.error('report:', e) }
+      finally { this.reportLoading = false }
+    },
 
     // ── Helpers ───────────────────────────────────────────────────────────
     formatDate(d) {
