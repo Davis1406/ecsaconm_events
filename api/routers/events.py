@@ -2074,6 +2074,98 @@ async def download_participant_badges_pdf(
     )
 
 
+@router.get("/{event_id}/participants/{registration_id}/badge")
+async def download_participant_badge_pdf(
+    request: Request,
+    event_id: int,
+    registration_id: int,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    dependency=Depends(get_dependency),
+    auth_dependency: Auth = Depends(get_auth_dependency),
+):
+    auth_dependency.secure_access("VIEW_EVENT", current_user["user_id"])
+    client_ip = dependency.request_ip(request)
+    dependency.log_activity(
+        current_user["user_id"],
+        "DOWNLOAD_BADGE",
+        current_user["username"],
+        client_ip,
+        f"Downloaded badge for registration {registration_id} (event {event_id})",
+    )
+
+    event = get_object(event_id, db, Event)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    reg = (
+        db.query(Registration)
+        .filter(
+            Registration.id == registration_id,
+            Registration.event_id == event_id,
+            Registration.deleted_at == None,
+        )
+        .first()
+    )
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found")
+
+    user = reg.user
+    profile = user.user_profile[0] if user.user_profile else None
+    country = profile.country.country if profile and profile.country else None
+    organisation = profile.organisation if profile else None
+    role_key = (
+        reg.participation_role.name
+        if hasattr(reg.participation_role, "name")
+        else str(reg.participation_role).lower()
+    )
+
+    primary_color = (event.org_unit.primary_color or "#0095B6") if event.org_unit else "#0095B6"
+    secondary_color = (event.org_unit.secondary_color or "#F7941D") if event.org_unit else "#F7941D"
+    primary_rgb = hex_to_rgb(primary_color)
+    secondary_rgb = hex_to_rgb(secondary_color)
+
+    p = {
+        "registration_id": reg.id,
+        "event_id": event_id,
+        "title": profile.title if profile else "",
+        "firstname": user.firstname,
+        "middle_name": profile.middle_name if profile else "",
+        "lastname": user.lastname,
+        "position": profile.position if profile else "",
+        "organisation": organisation,
+        "country": country,
+        "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
+        "event_name": event.event,
+        "location": event.location or "",
+        "paid": reg.paid,
+    }
+
+    buffer = BytesIO()
+    width, height = (100 * mm, 140 * mm)
+    c = canvas.Canvas(buffer, pagesize=(width, height))
+
+    logo_left = convert_png_to_rgb("assets/logo_left.png")
+    logo_right = convert_png_to_rgb("assets/logo.png")
+
+    _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
+
+    c.save()
+    buffer.seek(0)
+
+    safe_name = sanitize_filename(f"{user.firstname}_{user.lastname}")
+    ascii_filename = f"badge_{safe_name}.pdf"
+    utf8_filename = urllib.parse.quote(ascii_filename)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={ascii_filename}; filename*=UTF-8''{utf8_filename}"
+        },
+    )
+
+
 @router.get("/{event_id}/my-badge")
 async def download_my_badge(
     event_id: int,

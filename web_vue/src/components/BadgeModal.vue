@@ -69,6 +69,19 @@
           <!-- Bottom bar -->
           <div class="h-5" style="background-color: rgb(254,80,103);"></div>
         </div>
+
+        <!-- Download button -->
+        <button @click="downloadPdf" :disabled="downloading"
+          class="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+          <svg v-if="downloading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          {{ downloading ? 'Preparing PDF…' : 'Download Badge (PDF)' }}
+        </button>
       </div>
 
     </div>
@@ -76,7 +89,11 @@
 </template>
 
 <script>
+import axios from 'axios'
 import QRCodeVue from 'qrcode.vue'
+import { useAuthStore } from '@/store/authStore'
+
+const API_URL = import.meta.env.VITE_API_URL
 
 export default {
   name: 'BadgeModal',
@@ -88,7 +105,9 @@ export default {
     event: { type: Object, default: () => ({}) },
   },
   data() {
-    return {}
+    return {
+      downloading: false,
+    }
   },
   computed: {
     qrValue() {
@@ -109,6 +128,27 @@ export default {
         speaker: 'Speaker', sponsor: 'Sponsor', moderator: 'Moderator', moh: 'Ministry of Health',
       }
       return map[cat] || cat || 'Participant'
+    },
+    async downloadPdf() {
+      this.downloading = true
+      try {
+        const authStore = useAuthStore()
+        const api = axios.create({ baseURL: API_URL })
+        if (authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${authStore.accessToken}`
+        const res = await api.get(`/events/${this.event_id}/participants/${this.participant.id}/badge`, { responseType: 'blob' })
+        const url = window.URL.createObjectURL(res.data)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `badge_${String(this.participant.firstname || '').replace(/\s+/g, '_')}_${String(this.participant.lastname || '').replace(/\s+/g, '_')}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.URL.revokeObjectURL(url)
+      } catch (e) {
+        console.error('Badge download failed:', e)
+      } finally {
+        this.downloading = false
+      }
     },
   },
   watch: {
