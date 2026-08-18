@@ -24,6 +24,10 @@ templates = Jinja2Templates(directory="templates")
 # "https://events.ecsaconm.org/api" in production or "http://localhost:8001" locally.
 API_BASE_URL = os.getenv("BASE_URL", "http://localhost:8001")
 
+# Public frontend origin used to build clickable links inside emails, e.g.
+# "https://events.ecsaconm.org" in production.
+CLIENT_ORIGIN = os.getenv("CLIENT_ORIGIN", "https://events.ecsaconm.org")
+
 # Every outgoing email is CC'd here so there's a visible record of what the
 # system has sent, independent of the SMTP account's own (unpopulated, since
 # sends go out over raw SMTP rather than through a client that IMAP-appends
@@ -456,12 +460,14 @@ def reset_password_request_email(
     recipient_email, firstname, reset_token, background_tasks: BackgroundTasks = None
 ):
     subject = "Password Reset Request"
+    reset_link = f"{CLIENT_ORIGIN}/#/reset-password/{reset_token}"
     template = templates.get_template("password_reset_request_template.html")
     email_body = template.render(
         subject=subject,
         username=recipient_email,
         firstname=firstname,
         reset_token=reset_token,
+        reset_link=reset_link,
         year=YEAR,
     )
     send_email_backgroundable(recipient_email, subject, email_body, background_tasks,

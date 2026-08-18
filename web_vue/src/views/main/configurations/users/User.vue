@@ -170,7 +170,7 @@
 <script>
 import HeaderView from '@/includes/Header.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
-import { fetchItem, createItem, fetchData, deleteItemWithBody, updateItem, setAuthToken } from '@/services/apiService'
+import { fetchItem, createItem, fetchData, deleteItemWithBody, setAuthToken } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -276,7 +276,7 @@ export default {
     },
     async resetPassword() {
       try {
-        await updateItem('users/password', this.id)
+        await createItem(`users/${this.id}/reset-password`, {})
         this.showMessage('Password reset and sent to email.', 'success')
       } catch (error) {
         this.showMessage('Failed to reset password.', 'error')
