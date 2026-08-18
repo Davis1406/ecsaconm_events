@@ -288,7 +288,15 @@
         </div>
       </div>
 
-      <div class="px-5 pb-2">
+      <div class="px-5 pb-2 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+          <span>Showing {{ rowStart }}–{{ rowEnd }} of {{ filteredParticipants.length }}</span>
+          <select v-model.number="localPageSize"
+            title="Entries per page"
+            class="border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-600 bg-white focus:outline-none">
+            <option v-for="n in pageSizeOptions" :key="n" :value="n">{{ n }} / page</option>
+          </select>
+        </div>
         <pagination-component :currentPage="localPage" :totalPages="localTotalPages" @page-change="handleLocalPageChange" />
       </div>
     </div>
@@ -796,7 +804,8 @@ export default {
         { key: 'proof_pending', label: 'Proof Submitted, Not Paid' },
       ],
       localPage: 1,
-      localPageSize: 20,
+      localPageSize: 25,
+      pageSizeOptions: [25, 50, 100],
     };
   },
   mounted() {
@@ -805,6 +814,7 @@ export default {
   watch: {
     filterPreset() { this.localPage = 1; },
     searchPhrase() { this.localPage = 1; },
+    localPageSize() { this.localPage = 1; },
   },
   setup() {
     const authStore = useAuthStore();
@@ -827,17 +837,36 @@ export default {
       };
     },
     filteredParticipants() {
+      const term = (this.searchPhrase || '').trim().toLowerCase();
+      let list = this.participants;
+      if (term) {
+        list = list.filter(p => {
+          const haystack = [
+            p.title, p.firstname, p.lastname, p.email, p.phone,
+            p.organisation, p.institution, p.country, p.designation,
+            p.participation_role, p.participant_category,
+          ].filter(Boolean).join(' ').toLowerCase();
+          return haystack.includes(term);
+        });
+      }
       const paidOf = p => this.paidStatus(p.paid || p.event_payment);
       switch (this.filterPreset) {
-        case 'presenters': return this.participants.filter(p => p.is_abstract_presenter);
-        case 'paid': return this.participants.filter(paidOf);
-        case 'unpaid': return this.participants.filter(p => !paidOf(p));
-        case 'proof_pending': return this.participants.filter(p => p.payment_proof && !paidOf(p));
-        default: return this.participants;
+        case 'presenters': return list.filter(p => p.is_abstract_presenter);
+        case 'paid': return list.filter(paidOf);
+        case 'unpaid': return list.filter(p => !paidOf(p));
+        case 'proof_pending': return list.filter(p => p.payment_proof && !paidOf(p));
+        default: return list;
       }
     },
     localTotalPages() {
       return Math.max(1, Math.ceil(this.filteredParticipants.length / this.localPageSize));
+    },
+    rowStart() {
+      if (this.filteredParticipants.length === 0) return 0;
+      return (this.localPage - 1) * this.localPageSize + 1;
+    },
+    rowEnd() {
+      return Math.min(this.localPage * this.localPageSize, this.filteredParticipants.length);
     },
     pagedParticipants() {
       const start = (this.localPage - 1) * this.localPageSize;
@@ -914,9 +943,8 @@ export default {
         this.isLoading = false;
       }
     },
-    async handleSearch(searchQuery) {
+    handleSearch(searchQuery) {
       this.searchPhrase = searchQuery;
-      this.getEvent();
     },
     async handlePageChange(newPage) {
       this.currentPage = newPage;
