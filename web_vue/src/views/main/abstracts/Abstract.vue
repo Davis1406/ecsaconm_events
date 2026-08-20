@@ -251,7 +251,7 @@
                 <span class="text-xs font-bold text-abbey-500 uppercase tracking-wide">Author {{ i + 1 }}</span>
                 <div class="flex items-center gap-2">
                   <label class="flex items-center gap-1.5 text-xs text-abbey-600 cursor-pointer">
-                    <input type="checkbox" v-model="au.is_presenting" @change="onPresenterToggle(i)"
+                    <input type="checkbox" v-model="au.is_presenting"
                       class="rounded border-mercury-300 text-bondi-blue-500 focus:ring-bondi-blue-400" />
                     Presenter
                   </label>
@@ -433,15 +433,6 @@ export default {
 
     removeAuthorRow(index) {
       this.editForm.authors.splice(index, 1);
-    },
-
-    // When a presenter checkbox is toggled on, uncheck all others
-    onPresenterToggle(checkedIndex) {
-      if (this.editForm.authors[checkedIndex].is_presenting) {
-        this.editForm.authors.forEach((au, i) => {
-          if (i !== checkedIndex) au.is_presenting = false;
-        });
-      }
     },
 
     async saveEdit() {
