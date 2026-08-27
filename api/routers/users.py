@@ -8,6 +8,7 @@ from passlib.hash import bcrypt
 import utils.mailer_util as mailer_util
 from datetime import datetime, timedelta
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from typing import Annotated
 from core.database import get_db
 from sqlalchemy.orm import Session, joinedload
@@ -281,7 +282,18 @@ async def update_user(
     user_model.phone = user_schema.phone
     user_model.email = user_schema.email
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        if "email" in str(e.orig):
+            detail = "That email address is already in use by another user."
+        elif "phone" in str(e.orig):
+            detail = "That phone number is already in use by another user."
+        else:
+            detail = "Could not update user: a unique field conflicts with another user."
+        raise HTTPException(status_code=400, detail=detail)
+
     db.refresh(user_model)
     return user_schema
 
@@ -360,6 +372,15 @@ async def delete_user(
 
     now = datetime.utcnow()
     user.deleted_at = now
+
+    # email/phone carry a DB-level UNIQUE constraint that soft-delete alone
+    # doesn't clear, so a deleted user's email/phone would otherwise stay
+    # permanently reserved and block any future user from reusing them.
+    # Mangle with the (now-frozen) user id, which is always unique.
+    if user.email:
+        user.email = f"del{user.id}_{user.email}"[:45]
+    if user.phone:
+        user.phone = f"del{user.id}_{user.phone}"[:25]
 
     # Soft-delete the user profile too
     profile = db.query(UserProfile).filter(UserProfile.user_id == user_id, UserProfile.deleted_at == None).first()
