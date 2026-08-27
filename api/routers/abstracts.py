@@ -1859,7 +1859,30 @@ def list_uploaded_presentations(
         )
     )
     if search:
-        q = q.filter(Abstract.title.ilike(f"%{search}%"))
+        # Match on the abstract title, the submitting account's name/email, or
+        # any listed author's name/email — so admins can find an upload by
+        # presenter name, not just by the abstract's title.
+        like = f"%{search}%"
+        matching_ids = (
+            db.query(Abstract.id)
+            .outerjoin(User, Abstract.submitted_by == User.id)
+            .outerjoin(AbstractAuthor, AbstractAuthor.abstract_id == Abstract.id)
+            .filter(
+                Abstract.deleted_at == None,
+                Abstract.presentation_file != None,
+                or_(
+                    Abstract.title.ilike(like),
+                    User.firstname.ilike(like),
+                    User.lastname.ilike(like),
+                    User.email.ilike(like),
+                    AbstractAuthor.firstname.ilike(like),
+                    AbstractAuthor.lastname.ilike(like),
+                    AbstractAuthor.email.ilike(like),
+                ),
+            )
+            .distinct()
+        )
+        q = q.filter(Abstract.id.in_(matching_ids))
     if presentation_type:
         q = q.filter(Abstract.presentation_type == presentation_type)
 
