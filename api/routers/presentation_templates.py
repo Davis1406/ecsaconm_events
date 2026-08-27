@@ -206,6 +206,56 @@ def update_template(
     }
 
 
+# ── Replace file (admin only) ────────────────────────────────────────────────
+# Overwrite an existing template's file in place, keeping the same row id so the
+# download/preview URLs stay stable. The old file on disk is removed.
+
+@router.post("/{template_id}/replace", status_code=status.HTTP_200_OK)
+async def replace_template_file(
+    template_id: int,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tpl = _get_template_or_404(template_id, db)
+
+    ext = _ext(file.filename or "")
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Accepted: {', '.join(ALLOWED_EXTENSIONS)}",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File exceeds {MAX_SIZE_MB} MB limit")
+
+    # Remove the previous file on disk (ignore if it is already missing)
+    old_path = tpl.filename
+    if old_path and os.path.exists(old_path):
+        try:
+            os.remove(old_path)
+        except OSError:
+            pass
+
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    stored_path = os.path.join(UPLOAD_DIR, stored_name)
+    with open(stored_path, "wb") as fh:
+        fh.write(content)
+
+    tpl.filename = stored_path
+    tpl.original_name = file.filename or stored_name
+    tpl.file_size = len(content)
+    db.commit()
+    db.refresh(tpl)
+
+    return {
+        "id": tpl.id,
+        "original_name": tpl.original_name,
+        "file_size": tpl.file_size,
+    }
+
+
 # ── Delete (soft, admin only) ─────────────────────────────────────────────────
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)

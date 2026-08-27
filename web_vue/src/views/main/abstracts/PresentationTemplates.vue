@@ -48,6 +48,11 @@
       </button>
     </div>
 
+    <!-- Hidden file input for replacing an existing template's file -->
+    <input type="file" ref="replaceFileInput" class="hidden"
+      accept=".ppt,.pptx,.doc,.docx,.pdf,.zip"
+      @change="onReplaceSelected" />
+
     <!-- Template list -->
     <div class="rounded-2xl border border-gray-100 shadow-sm bg-white overflow-hidden">
       <div class="px-4 pt-3 pb-1 text-xs text-gray-400">
@@ -82,6 +87,11 @@
             style="background-color: rgb(0,150,180);">
             Download
           </a>
+          <button v-if="isAdmin" @click="replaceTemplate(tpl.id)"
+            class="px-3 py-1 text-xs rounded-full font-semibold text-white transition hover:opacity-90"
+            style="background-color: rgb(0,150,180);">
+            Replace
+          </button>
           <button v-if="isAdmin" @click="deleteTemplate(tpl.id)"
             class="px-3 py-1 text-xs rounded-full font-semibold text-white bg-red-500 hover:bg-red-400 transition">
             Delete
@@ -114,6 +124,8 @@ export default {
       newDescription: '',
       successMsg: '',
       errorMsg: '',
+      replaceTargetId: null,
+      replacing: false,
       apiUrl: import.meta.env.VITE_API_URL,
     }
   },
@@ -187,6 +199,42 @@ export default {
         this.successMsg = 'Template deleted.'
       } catch (e) {
         this.errorMsg = 'Delete failed.'
+      }
+    },
+
+    async replaceTemplate(id) {
+      this.replaceTargetId = id
+      if (this.$refs.replaceFileInput) this.$refs.replaceFileInput.value = ''
+      this.$refs.replaceFileInput.click()
+    },
+
+    async onReplaceSelected(e) {
+      const file = e.target.files[0]
+      if (!file || !this.replaceTargetId) return
+      this.replacing = true
+      this.successMsg = ''
+      this.errorMsg = ''
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await axios.post(`${this.apiUrl}/presentation_templates/${this.replaceTargetId}/replace`, form, {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        })
+        const tpl = this.templates.find(t => t.id === this.replaceTargetId)
+        if (tpl) {
+          tpl.original_name = res.data.original_name
+          tpl.file_size = res.data.file_size
+        }
+        this.successMsg = 'Template file replaced successfully.'
+      } catch (e) {
+        this.errorMsg = e.response?.data?.detail || 'Replace failed.'
+      } finally {
+        this.replacing = false
+        this.replaceTargetId = null
+        if (this.$refs.replaceFileInput) this.$refs.replaceFileInput.value = ''
       }
     },
 

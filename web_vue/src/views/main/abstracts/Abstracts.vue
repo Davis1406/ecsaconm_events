@@ -425,6 +425,11 @@
         </button>
       </div>
 
+      <!-- Hidden file input for replacing an existing template's file -->
+      <input type="file" ref="templateReplaceInput" class="hidden"
+        accept=".ppt,.pptx,.doc,.docx,.pdf,.zip"
+        @change="onTemplateReplaceSelected" />
+
       <!-- Template list -->
       <SpinnerComponent v-if="templatesLoading" />
       <div v-else>
@@ -453,6 +458,10 @@
             <button v-if="isPreviewable(tpl.original_name)" @click="openTemplatePreview(tpl)" title="Preview"
               class="action-btn" style="color: rgb(254,80,103);">
               <EyeIcon class="w-4 h-4" />
+            </button>
+            <button @click="openTemplateReplace(tpl)" title="Replace file"
+              class="action-btn" style="color: rgb(0,150,180);">
+              <ArrowPathIcon class="w-4 h-4" />
             </button>
             <a :href="`${apiUrl}/presentation_templates/${tpl.id}/download`" target="_blank" title="Download"
               class="action-btn" style="color: rgb(0,150,180);">
@@ -988,7 +997,7 @@ import axios from 'axios'
 import { saveAs } from 'file-saver'
 import {
   DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
-  ArchiveBoxArrowDownIcon,
+  ArchiveBoxArrowDownIcon, ArrowPathIcon,
 } from '@heroicons/vue/24/outline'
 import { PresentationChartBarIcon, BellAlertIcon, ChartPieIcon } from '@heroicons/vue/24/solid'
 
@@ -1000,7 +1009,7 @@ export default {
   components: {
     HeaderView, SpinnerComponent, PaginationComponent, SearchComponent,
     DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
-    PresentationChartBarIcon, BellAlertIcon, ChartPieIcon, ArchiveBoxArrowDownIcon,
+    PresentationChartBarIcon, BellAlertIcon, ChartPieIcon, ArchiveBoxArrowDownIcon, ArrowPathIcon,
   },
 
   setup() {
@@ -1033,6 +1042,7 @@ export default {
       showTemplateUpload: false,
       selectedTemplateFile: null, newTemplateDescription: '', newTemplateType: 'either',
       templateUploading: false,
+      templateReplaceTarget: null, templateReplacing: false,
       templatePreview: { open: false, id: null, name: '', src: '' },
 
       // ── Tab 3: Reminders ──────────────────────────────────────────────────
@@ -1428,6 +1438,37 @@ export default {
         })
         this.templates = this.templates.filter(t => t.id !== id)
       } catch (e) { this.errorMsg = 'Delete failed.' }
+    },
+
+    // ── Replace a template's file (keep id, swap content) ─────────────────
+    openTemplateReplace(tpl) {
+      this.templateReplaceTarget = tpl
+      if (this.$refs.templateReplaceInput) this.$refs.templateReplaceInput.value = ''
+      this.$refs.templateReplaceInput.click()
+    },
+
+    async onTemplateReplaceSelected(e) {
+      const file = e.target.files[0]
+      if (!file || !this.templateReplaceTarget) return
+      const tpl = this.templateReplaceTarget
+      this.templateReplacing = true
+      this.successMsg = ''; this.errorMsg = ''
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await axios.post(`${this.apiUrl}/presentation_templates/${tpl.id}/replace`, form, {
+          headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'multipart/form-data' },
+        })
+        tpl.original_name = res.data.original_name
+        tpl.file_size = res.data.file_size
+        this.successMsg = 'Template file replaced successfully.'
+      } catch (e) {
+        this.errorMsg = e.response?.data?.detail || 'Replace failed.'
+      } finally {
+        this.templateReplacing = false
+        this.templateReplaceTarget = null
+        if (this.$refs.templateReplaceInput) this.$refs.templateReplaceInput.value = ''
+      }
     },
 
     // ── Reminders ─────────────────────────────────────────────────────────
