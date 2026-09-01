@@ -2,11 +2,14 @@
 Seed/refresh the email_template table from the HTML template files in
 ./templates. The Email Templates admin section (Configurations → Email
 Templates) only lists rows present in this table, so until this runs it is
-empty and no template can be edited from the UI. Idempotent — upserts by
-template_key, so it can be re-run safely after editing a file to refresh
-the DB copy.
+empty and no template can be edited from the UI. Idempotent — safe to
+re-run.
 
-Run from the api directory: python seed_email_templates.py
+By default it only INSERTS template keys that don't exist yet, leaving any
+already-present rows (e.g. customised production content) untouched. Pass
+--update to also overwrite existing rows from the files.
+
+Run from the api directory: python seed_email_templates.py [--update]
 """
 import os
 import sys
@@ -87,10 +90,11 @@ TEMPLATES = {
 }
 
 
-def seed():
+def seed(update_existing=False):
     db: Session = SessionLocal()
     created = 0
     updated = 0
+    skipped = 0
     try:
         for key, meta in TEMPLATES.items():
             fpath = os.path.join(TEMPLATES_DIR, meta["file"])
@@ -102,11 +106,14 @@ def seed():
 
             t = db.query(EmailTemplate).filter_by(template_key=key).first()
             if t:
-                t.name = meta["name"]
-                t.subject = meta["subject"]
-                t.body_html = body_html
-                t.variables = meta["variables"]
-                updated += 1
+                if update_existing:
+                    t.name = meta["name"]
+                    t.subject = meta["subject"]
+                    t.body_html = body_html
+                    t.variables = meta["variables"]
+                    updated += 1
+                else:
+                    skipped += 1
             else:
                 db.add(EmailTemplate(
                     template_key=key,
@@ -117,7 +124,10 @@ def seed():
                 ))
                 created += 1
         db.commit()
-        print(f"✓ {created} created, {updated} updated, {len(TEMPLATES)} templates in the email_template table")
+        print(
+            f"✓ {created} created, {updated} updated, {skipped} skipped (already exist)"
+            f" — {len(TEMPLATES)} templates defined in TEMPLATES"
+        )
     except Exception as e:
         db.rollback()
         print(f"✗ Error: {e}")
@@ -127,4 +137,4 @@ def seed():
 
 
 if __name__ == "__main__":
-    seed()
+    seed(update_existing="--update" in sys.argv)
