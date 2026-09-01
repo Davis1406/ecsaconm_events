@@ -31,6 +31,7 @@ cd api
 source venv/bin/activate
 python seed_roles.py
 python seed_permissions.py
+python seed_email_templates.py   # populates the Email Templates admin section (idempotent)
 ```
 
 ## 5. Start the API

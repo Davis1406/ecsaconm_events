@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+        color: #333333;
+      }
+      .email-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 40px;
+        box-sizing: border-box;
+        border-top: 6px solid rgb(254,80,103);
+      }
+      h1 { font-size: 24px; margin-bottom: 16px; color: #003f5c; }
+      h2 { font-size: 18px; color: #003f5c; margin-bottom: 8px; }
+      p { font-size: 16px; line-height: 1.5; margin-bottom: 16px; color: #444444; }
+      .deadline-box {
+        background-color: #fdf0f3;
+        border-left: 4px solid rgb(254,80,103);
+        border-radius: 0 8px 8px 0;
+        padding: 16px 20px;
+        margin: 20px 0;
+      }
+      .deadline-box p { margin: 4px 0; font-size: 15px; }
+      a.button {
+        display: inline-block;
+        background-color: rgb(254,80,103);
+        color: #ffffff;
+        text-decoration: none;
+        padding: 12px 28px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        margin-top: 16px;
+      }
+      .footer {
+        font-size: 13px;
+        color: #888888;
+        margin-top: 40px;
+        border-top: 1px solid #eaeaea;
+        padding-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <h1>{{subject}}</h1>
+      <p>Dear <strong>{{ firstname }}</strong>,</p>
+
+      <p>
+        This is a friendly reminder that the deadline to submit your abstract for
+        <strong>{{ event_name }}</strong> is <strong>TODAY, before the end of the day</strong>.
+      </p>
+
+      <div class="deadline-box">
+        <p><strong>Deadline:</strong> Today, before the end of the day</p>
+        <p><strong>Event:</strong> {{ event_name }}</p>
+      </div>
+
+      <p>Please log in to the ECSACONM Events Portal and complete your submission as soon as possible.</p>
+      <a href="https://events.ecsaconm.org/#/abstract-submission" class="button">Submit Your Abstract</a>
+
+      <p style="margin-top: 28px;">
+        If you have any issues or questions, please email
+        <a href="mailto:admission@cosecsa.org">admission@cosecsa.org</a> and we will be happy to assist you.
+      </p>
+
+      <p>Warm regards,<br />ECSACONM Conference Team<br />ECSACONM Secretariat</p>
+      <div class="footer">&copy; {{ year }} ECSACONM. All rights reserved.</div>
+    </div>
+  </body>
+</html>

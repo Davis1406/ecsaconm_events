@@ -86,7 +86,8 @@ async def update_email_template(
         t.subject = schema.subject
     if schema.body_html is not None:
         t.body_html = schema.body_html
-        # Sync back to file so live emails use updated template
+        # Sync back to file so live emails use updated template.
+        # Keep in sync with seed_email_templates.py's TEMPLATES filenames.
         import os
         fname_map = {
             "account_creation": "acount_creation_template.html",
@@ -95,6 +96,10 @@ async def update_email_template(
             "account_verification_request": "account_verification_request_template.html",
             "account_verification": "account_verification_template.html",
             "registration_reminder": "registration_reminder_template.html",
+            "organisation_verification_request": "organisation_verification_request_template.html",
+            "organisation_approval_status": "organisation_approval_status_template.html",
+            "reviewer_assignment": "reviewer_assignment_template.html",
+            "abstract_submission_deadline": "abstract_submission_deadline_template.html",
         }
         fname = fname_map.get(template_key)
         if fname:
