@@ -111,6 +111,10 @@ deploy_api() {
   ssh_cmd "sudo systemctl restart ecsaconm && sudo systemctl is-active ecsaconm"
   echo "==> Recent logs:"
   ssh_cmd "sudo journalctl -u ecsaconm -n 20 --no-pager"
+
+  echo
+  echo "Reminder: if api/models/models.py changed, run '$0 migrate' too — it is NOT"
+  echo "automatic. (2026-09-02 outage: a model column shipped without it. See deployment.md.)"
 }
 
 deploy_web() {

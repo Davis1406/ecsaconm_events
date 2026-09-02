@@ -42,6 +42,10 @@ deploy_api() {
   sudo systemctl is-active ecsaconm
   echo "==> Recent logs:"
   sudo journalctl -u ecsaconm -n 20 --no-pager
+
+  echo
+  echo "Reminder: if api/models/models.py changed, run 'ecsaconm-deploy migrate' too — it"
+  echo "is NOT automatic. (2026-09-02 outage: a model column shipped without it. See deployment.md.)"
 }
 
 deploy_web() {

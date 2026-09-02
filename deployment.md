@@ -95,3 +95,43 @@ already has. The next `deploy/deploy.sh api` run will silently overwrite that
 hand-edited file with git's version — which restores the *correct*
 registration-reminder wording, but if that hijacked copy is still mid-use for an
 active campaign, check with whoever's running it before deploying `api/`.
+
+---
+
+## 2026-09-02 — Outage: migration never ran, `alembic upgrade head` was silently broken
+
+Ran `ecsaconm-deploy api` + `web` to ship the abstract-submission-open feature
+(new `event.abstract_submission_open` column) without running `migrate` first.
+Every `Event` query started throwing `1054 Unknown column
+'event.abstract_submission_open'` — a hard 500 on `/events/` and anything that
+touches it, i.e. most of the site. Live for a few minutes before caught.
+
+Root cause, two layers:
+
+1. **Forgot the migration step.** `deploy.sh`/`server-deploy.sh api` and `web`
+   don't run `migrate` automatically — has to be called separately, on purpose
+   (a migration is a schema change, riskier to bundle silently into every
+   deploy). Should have run `migrate` first.
+2. **`migrate` wouldn't have worked anyway.** `alembic.ini`'s `sqlalchemy.url`
+   is a placeholder (`root:root@localhost` — never real credentials, since
+   `alembic.ini` is committed to git) and `alembic/env.py`'s
+   `run_migrations_online()` built its engine from that placeholder instead of
+   the app's real one, which it already imported and then never used. Alembic
+   had apparently never successfully connected to *this* database — the
+   `alembic_version` table being at a real revision suggests it was applied
+   against a local dev DB and hand-applied to prod separately (see the
+   `presentation_template.presentation_type` commit: "applied directly to
+   prod"). `alembic` also wasn't in `requirements.txt`, so it wasn't even
+   installed in the server's venv until this incident.
+
+**Fix**: `env.py` now points `run_migrations_online()` at `core.database.engine`
+(the app's real, working engine) instead of building one from `alembic.ini`.
+`alembic` (and its `Mako` dependency) added to `requirements.txt`. The missing
+column was applied directly via `sudo mysql` to restore service immediately,
+and `alembic_version` updated to match by hand — `alembic upgrade head` should
+now be a genuine no-op for it, and should actually work for future migrations.
+
+**Takeaway — always run `migrate` before/with `api` when a change touches
+`api/models/models.py`**, and don't assume `alembic upgrade head` works just
+because it's the documented command; this incident is the first time anyone
+actually depended on it running successfully against production.
