@@ -241,28 +241,22 @@ web/dist/
 
 Deployments are **manual** — there is no CI/CD pipeline yet.
 
-### Fast path — `deploy/deploy.sh`
+### Fast path — `deploy/deploy.sh` and `deploy/server-deploy.sh`
 
-The steps below are also wrapped in `deploy/deploy.sh` (and, in VS Code, as Run Task
-entries prefixed `ecsaconm-deploy:`). It reads the same key/host as documented here
-(override with `ECSACONM_DEPLOY_KEY` / `ECSACONM_DEPLOY_HOST` if yours differ), uses
-`rsync` when installed and falls back to plain `tar`-over-`ssh` otherwise (nothing
-extra to install), and refuses to run if the relevant directory (`api/` or
-`web_vue/src/`) has uncommitted changes — commit and push first (Step 1 below), or
-pass `--allow-dirty` for a genuine hotfix.
+The steps below are also wrapped in two scripts — see `deploy/README.md` for the
+full rundown of each:
 
-```bash
-deploy/deploy.sh api --dry-run   # preview what would be synced
-deploy/deploy.sh api             # sync api/, restart the ecsaconm service
-deploy/deploy.sh web --dry-run   # preview the built dist/
-deploy/deploy.sh web             # npm run build, then sync dist/
-deploy/deploy.sh migrate         # alembic upgrade head on the server
-deploy/deploy.sh status          # systemd status + recent logs
-deploy/deploy.sh logs            # follow live API logs
-```
+- `deploy/deploy.sh` — run from your own machine, pushes your working tree to the
+  server (`api --dry-run`, `api`, `web`, `migrate`, `status`, `logs`).
+- `deploy/server-deploy.sh` — installed on the server as `ecsaconm-deploy`; SSH in
+  and run `ecsaconm-deploy api` / `web` / `all` / `migrate` / `status` / `logs`
+  directly, `git pull`-based.
 
-The manual, step-by-step equivalent (useful if the script doesn't fit what you need,
-or to understand what it's doing under the hood) follows.
+Both refuse to run over uncommitted changes (local or on the server) — commit and
+push first (Step 1 below).
+
+The manual, step-by-step equivalent (useful if neither script fits what you need,
+or to understand what they're doing under the hood) follows.
 
 ### Prerequisites
 
