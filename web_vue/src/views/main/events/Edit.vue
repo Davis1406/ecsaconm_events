@@ -106,6 +106,17 @@
               placeholder="Sponsors and partners"></textarea>
           </div>
 
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Abstract Submission</label>
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" v-model="eventData.abstract_submission_open"
+                class="w-4 h-4 cursor-pointer" style="accent-color: rgb(254,80,103);" />
+              <span class="text-sm text-gray-600">
+                {{ eventData.abstract_submission_open ? 'Open — presenters can submit abstracts' : 'Closed — submission form is disabled to presenters' }}
+              </span>
+            </label>
+          </div>
+
           <div v-if="errorMsg" class="p-3 rounded-xl text-white text-sm" style="background-color: rgb(239,68,68);">{{ errorMsg }}</div>
 
           <div class="flex gap-3 pt-2">
@@ -206,6 +217,7 @@ export default {
         participation_info: "",
         logistics_info: "",
         sponsors_info: "",
+        abstract_submission_open: true,
       },
       isLoading: true,
       errorMsg: "",
@@ -250,6 +262,7 @@ export default {
         this.eventData.participation_info = e.participation_info || "";
         this.eventData.logistics_info = e.logistics_info || "";
         this.eventData.sponsors_info = e.sponsors_info || "";
+        this.eventData.abstract_submission_open = e.abstract_submission_open ?? true;
         this.currentBanner = e.banner_image || "";
         this.countries = countriesRes.data || [];
         this.orgUnits = orgUnitsRes.data || [];

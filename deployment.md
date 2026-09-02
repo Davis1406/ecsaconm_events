@@ -71,3 +71,27 @@ deploy**, so `git pull` never has to reconcile a diverged working tree.
 Treat `/var/www/ecsaconm_events` on the server as a deploy target, not a
 place to develop — same rule applies whether the edit is made by hand or
 by an agent with SSH access.
+
+---
+
+## 2026-09-02 — `TEAM.md` was server-only; `deploy/deploy.sh` added; found another live hand-edit
+
+While setting up scripted deploys, found that `TEAM.md` (the step-by-step deploy
+guide `deployment.md` refers to at the top of this file) existed only on the
+production server, untracked by git — a single point of failure. It's now
+committed at the repo root, alongside a new `deploy/deploy.sh` (wraps §6's
+rsync/ssh/systemctl steps; see `TEAM.md` §6 "Fast path") and `.vscode/tasks.json`
+(gitignored, local-only — recreate it per checkout, or force-add it if the team
+wants it shared) exposing those as VS Code Run Task entries.
+
+Also found the same anti-pattern as the 2026-08-13 incident, on a smaller scale:
+`api/routers/email_templates.py` had drifted from git (matched what later landed
+in commits `7979000`/`498c521`/`2fe6d3b` — harmless, already reconciled) but
+**`api/templates/registration_reminder_template.html` had been hand-edited on the
+server** to repurpose the registration-reminder copy into an ad-hoc "abstract
+deadline is today" blast (different subject framing, different CTA link), instead
+of using the dedicated `abstract_submission_deadline_template.html` this repo
+already has. The next `deploy/deploy.sh api` run will silently overwrite that
+hand-edited file with git's version — which restores the *correct*
+registration-reminder wording, but if that hijacked copy is still mid-use for an
+active campaign, check with whoever's running it before deploying `api/`.

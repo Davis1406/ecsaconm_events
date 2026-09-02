@@ -110,6 +110,12 @@ def submit_abstract(
     current_user: user_dependency,
     db: Session = Depends(get_db),
 ):
+    event = db.query(Event).filter(Event.id == schema.event_id, Event.deleted_at == None).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not event.abstract_submission_open:
+        raise HTTPException(status_code=403, detail="Abstract submission is currently closed for this event.")
+
     word_count = len(schema.abstract_text.split())
     abstract = Abstract(
         event_id=schema.event_id,

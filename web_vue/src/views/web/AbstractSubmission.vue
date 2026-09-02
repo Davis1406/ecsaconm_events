@@ -30,6 +30,13 @@
                 {{ submitError }}
             </div>
 
+            <!-- Submission window closed for the selected event -->
+            <div v-if="!submitted && selectedEventClosed"
+                class="p-4 rounded-2xl text-sm bg-yellow-50 border border-yellow-300 text-yellow-800">
+                Abstract submission for this event is currently closed. Please check back later or contact
+                <a href="mailto:abstracts2019@ecsahc.org" class="font-semibold hover:underline">abstracts2019@ecsahc.org</a>.
+            </div>
+
             <SpinnerComponent v-if="isLoading" />
 
             <form v-if="!submitted && isLoggedIn" @submit.prevent="submitAbstract" class="space-y-5">
@@ -43,8 +50,9 @@
                         <select v-model="form.event_id" required
                             class="border border-mercury-500 rounded-md px-3 py-2 text-sm text-abbey-500 focus:outline-none focus:border-bondi-blue-500">
                             <option :value="null" disabled>Select an event</option>
-                            <option v-for="event in events" :key="event.id" :value="event.id">
-                                {{ event.event }}
+                            <option v-for="event in events" :key="event.id" :value="event.id"
+                                :disabled="event.abstract_submission_open === false">
+                                {{ event.event }}{{ event.abstract_submission_open === false ? ' (submission closed)' : '' }}
                             </option>
                         </select>
                     </div>
@@ -108,7 +116,7 @@
 
                 <div class="flex justify-end">
                     <button type="submit"
-                        :disabled="isSubmitting || wordCount > 300"
+                        :disabled="isSubmitting || wordCount > 300 || selectedEventClosed"
                         class="px-6 py-2 rounded-md text-white bg-bondi-blue-500 hover:bg-bondi-blue-400 disabled:opacity-50 text-sm font-medium">
                         {{ isSubmitting ? 'Submitting...' : 'Submit Abstract' }}
                     </button>
@@ -163,6 +171,10 @@ export default {
         wordCount() {
             const text = this.form.abstract_text.trim();
             return text ? text.split(/\s+/).length : 0;
+        },
+        selectedEventClosed() {
+            const ev = this.events.find(e => e.id === this.form.event_id);
+            return !!ev && ev.abstract_submission_open === false;
         }
     },
     methods: {

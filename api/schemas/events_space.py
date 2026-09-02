@@ -101,6 +101,7 @@ class EventSchema(BaseModel):
     participation_info: Optional[str] = None
     logistics_info: Optional[str] = None
     sponsors_info: Optional[str] = None
+    abstract_submission_open: Optional[bool] = True
 
     @field_validator("start_date", "end_date")
     def check_dates_not_in_past(cls, v: date):
@@ -130,6 +131,7 @@ class EventUpdateSchema(BaseModel):
     participation_info: Optional[str] = None
     logistics_info: Optional[str] = None
     sponsors_info: Optional[str] = None
+    abstract_submission_open: Optional[bool] = True
 
     @model_validator(mode="after")
     def check_date_order(self):

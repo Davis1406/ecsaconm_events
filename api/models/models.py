@@ -494,6 +494,7 @@ class Event(Base):
     participation_info = Column(Text, nullable=True)
     logistics_info = Column(Text, nullable=True)
     sponsors_info = Column(Text, nullable=True)
+    abstract_submission_open = Column(Boolean, nullable=False, server_default="1")
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

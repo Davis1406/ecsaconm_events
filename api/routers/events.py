@@ -200,6 +200,7 @@ async def get_events(
             Event.organizers,
             Event.org_unit_id,
             Event.country_id,
+            Event.abstract_submission_open,
         )
         .all()
     )
@@ -223,6 +224,7 @@ async def get_events(
                 "organizers": e.organizers,
                 "org_unit_id": e.org_unit_id,
                 "country_id": e.country_id,
+                "abstract_submission_open": e.abstract_submission_open,
             }
             for e in events
         ],
@@ -264,6 +266,7 @@ async def add_event(
         participation_info=event_schema.participation_info,
         logistics_info=event_schema.logistics_info,
         sponsors_info=event_schema.sponsors_info,
+        abstract_submission_open=event_schema.abstract_submission_open,
     )
 
     db.add(create_event_model)
@@ -553,6 +556,7 @@ async def get_event(
                 "participation_info": event.participation_info,
                 "logistics_info": event.logistics_info,
                 "sponsors_info": event.sponsors_info,
+                "abstract_submission_open": event.abstract_submission_open,
                 "participation_role": (
                     registrations[0].participation_role if registrations else None
                 ),
@@ -676,6 +680,7 @@ async def update_event(
     event_model.participation_info = event_schema.participation_info
     event_model.logistics_info = event_schema.logistics_info
     event_model.sponsors_info = event_schema.sponsors_info
+    event_model.abstract_submission_open = event_schema.abstract_submission_open
     if event_schema.banner_image is not None:
         event_model.banner_image = event_schema.banner_image
 
