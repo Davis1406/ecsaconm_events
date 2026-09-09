@@ -1074,3 +1074,39 @@ class EmailLog(Base):
 
     def __repr__(self):
         return f"<EmailLog id={self.id} to={self.recipient_email} type={self.email_type}>"
+
+
+class AttendanceFormResponse(BaseWithSoftDelete):
+    """Personal attendance-confirmation record for a presenter who hasn't
+    registered yet. Each row is a per-person form link (token) emailed to the
+    presenter so the secretariat can plan the programme."""
+    __tablename__ = "attendance_form_response"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("event.id"), nullable=False)
+    email = Column(String(255), nullable=False)
+    firstname = Column(String(100), nullable=True)
+    lastname = Column(String(100), nullable=True)
+    abstract_title = Column(String(500), nullable=True)
+    token = Column(String(100), nullable=False, unique=True, index=True)
+    # "attending" | "not_attending" | None (not yet responded)
+    response = Column(String(30), nullable=True)
+    responded_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at = Column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    event = relationship("Event")
+
+    __table_args__ = (
+        Index("ix_attendance_form_response", "event_id", "email", "deleted_at"),
+    )
+
+    def __repr__(self):
+        return f"<AttendanceFormResponse id={self.id} email={self.email} response={self.response}>"

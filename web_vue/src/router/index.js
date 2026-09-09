@@ -94,6 +94,12 @@ const routeComponents = {
   // Abstract Submission (public/web)
   AbstractSubmissionView: () => import("@/views/web/AbstractSubmission.vue"),
 
+  // Attendance Confirmation Form (public/web)
+  AttendanceFormView: () => import("@/views/web/AttendanceForm.vue"),
+
+  // Attendance Confirmation Form (admin)
+  AttendanceFormAdminView: () => import("@/views/main/attendance/AttendanceFormAdmin.vue"),
+
   // Contact page
   ContactView: () => import("@/views/web/Contact.vue"),
 };
@@ -160,6 +166,11 @@ const routes = [
         path: "/contact",
         name: "Contact",
         component: routeComponents.ContactView,
+      },
+      {
+        path: "/attendance-form/:token",
+        name: "AttendanceForm",
+        component: routeComponents.AttendanceFormView,
       },
       {
         path: "/register/:id",
@@ -408,6 +419,12 @@ const routes = [
         path: "/attendance-confirmation",
         name: "AttendanceConfirmation",
         component: routeComponents.AttendanceConfirmationView,
+      },
+
+      {
+        path: "/attendance-form-admin",
+        name: "AttendanceFormAdmin",
+        component: routeComponents.AttendanceFormAdminView,
       },
     ],
   },

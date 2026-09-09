@@ -87,6 +87,12 @@ TEMPLATES = {
         "file": "abstract_submission_deadline_template.html",
         "variables": "subject, firstname, event_name, year",
     },
+    "attendance_confirmation_form": {
+        "name": "Attendance Confirmation Form",
+        "subject": "Confirm Your Attendance for {event_name}",
+        "file": "attendance_form_template.html",
+        "variables": "subject, firstname, event_name, abstract_title, form_link, year",
+    },
 }
 
 

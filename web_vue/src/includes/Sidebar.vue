@@ -46,6 +46,16 @@
       </a>
     </router-link>
 
+    <router-link v-if="has('ADMIN_DASHBOARD')" :to="{ name: 'AttendanceFormAdmin' }" v-slot="{ isActive }" custom>
+      <a @click.prevent="go('AttendanceFormAdmin')"
+        class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        Attendance Form
+      </a>
+    </router-link>
+
     <router-link v-if="has('VIEW_USER')" :to="{ name: 'Users' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('Users')"
         class="nav-item" :class="isUserActive ? 'nav-item--active' : 'nav-item--idle'">
