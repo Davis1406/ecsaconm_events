@@ -224,7 +224,7 @@ export default {
     },
     async loadEvents() {
       try {
-        const res = await this.api().get('/events/?skip=0&limit=200')
+        const res = await this.api().get('/events/?skip=0&limit=100')
         this.events = res.data?.data || res.data || []
         if (this.events.length === 1) {
           this.selectedEventId = this.events[0].id

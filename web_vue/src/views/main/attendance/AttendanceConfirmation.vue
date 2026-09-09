@@ -182,7 +182,7 @@ export default {
   methods: {
     async loadEvents() {
       try {
-        const res = await fetchData('events', 0, 200, '')
+        const res = await fetchData('events', 0, 100, '')
         this.events = res.data || []
         // Auto-select if only one event exists
         if (this.events.length === 1) {
