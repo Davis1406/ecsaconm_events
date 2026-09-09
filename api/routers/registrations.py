@@ -1,7 +1,7 @@
 import io
 import math
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
@@ -123,6 +123,7 @@ async def list_registrations(
     limit: int = Query(default=10),
     search: str = Query(default=""),
     paid: str = Query(default="all"),
+    proof: str = Query(default="all"),
 ):
     auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
 
@@ -141,6 +142,17 @@ async def list_registrations(
 
     if paid != "all":
         q = q.filter(Registration.paid == (paid == "true"))
+
+    if proof != "all":
+        if proof == "with":
+            q = q.filter(Registration.payment_proof.isnot(None))
+        elif proof == "without":
+            q = q.filter(Registration.payment_proof.is_(None))
+        elif proof == "pending":
+            q = q.filter(
+                Registration.payment_proof.isnot(None),
+                Registration.paid == False,
+            )
 
     if search:
         term = f"%{search}%"
@@ -164,6 +176,183 @@ async def list_registrations(
     }
 
 
+class BulkPaymentSchema(BaseModel):
+    registration_ids: list[int]
+    paid: bool
+
+
+@router.post("/bulk_payment")
+async def bulk_update_payment(
+    data: BulkPaymentSchema,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """Bulk verify / un-verify payment for a set of registrations."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    if not data.registration_ids:
+        raise HTTPException(status_code=400, detail="No registrations selected")
+
+    regs = (
+        db.query(Registration)
+        .filter(Registration.id.in_(data.registration_ids), Registration.deleted_at == None)
+        .all()
+    )
+    for r in regs:
+        r.paid = data.paid
+    db.commit()
+    return {"updated": len(regs), "paid": data.paid}
+
+
+class SendPaymentRemindersSchema(BaseModel):
+    event_id: Optional[int] = None
+    deadline: Optional[str] = None  # ISO date e.g. 2026-09-14
+    registration_ids: Optional[list] = None
+
+
+@router.post("/send_payment_reminders")
+async def send_payment_reminders(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    body: SendPaymentRemindersSchema = None,
+):
+    """Email unpaid registrations a payment reminder with a countdown to the
+    configured deadline, telling them to pay to confirm availability (or share
+    proof if they've already paid). Uses the admin-editable `payment_reminder`
+    email template."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+
+    body = body or SendPaymentRemindersSchema()
+    event_id = body.event_id
+    selected_ids = set(body.registration_ids or [])
+    deadline_str = body.deadline
+
+    # Resolve deadline: explicit body value > stored system setting > event start
+    from models.models import SystemSetting
+    setting = (
+        db.query(SystemSetting).filter(SystemSetting.key == "payment_deadline").first()
+    )
+    stored_deadline = setting.value if setting and setting.value else None
+    resolved_deadline = deadline_str or stored_deadline
+
+    # Persist the deadline so future sends reuse it
+    if deadline_str:
+        if setting:
+            setting.value = deadline_str
+        else:
+            db.add(SystemSetting(key="payment_deadline", value=deadline_str))
+        db.commit()
+
+    def _parse_date(s):
+        from datetime import date
+        try:
+            return date.fromisoformat(str(s)[:10])
+        except Exception:
+            return None
+
+    q = (
+        db.query(Registration)
+        .join(Registration.user)
+        .options(
+            joinedload(Registration.user).joinedload(User.user_profile),
+            joinedload(Registration.events),
+        )
+        .filter(Registration.deleted_at == None, Registration.paid == False)
+    )
+    if event_id:
+        q = q.filter(Registration.event_id == event_id)
+    if selected_ids:
+        q = q.filter(Registration.id.in_(selected_ids))
+
+    regs = q.order_by(Registration.registered_at.desc()).all()
+    recipients = []
+    for r in regs:
+        user = r.user
+        if not user or not user.email:
+            continue
+        # Determine deadline per registration: body/setting, else this event's start
+        deadline_date = _parse_date(resolved_deadline)
+        if not deadline_date and r.events and r.events.start_date:
+            deadline_date = r.events.start_date.date()
+        if not deadline_date:
+            continue
+        from datetime import date as _date
+        days_left = max(0, (deadline_date - _date.today()).days)
+        recipients.append(
+            {
+                "email": user.email,
+                "firstname": user.firstname or "Participant",
+                "event_name": r.events.event if r.events else "ECSACONM Event",
+                "days_left": days_left,
+                "deadline": deadline_date.isoformat(),
+            }
+        )
+
+    sent_by_user_id = current_user["user_id"]
+
+    import utils.mailer_util as mailer_util
+    from models.models import EmailTemplate as EmailTemplateModel
+    from jinja2 import Template as Jinja2Template
+
+    db_tpl = (
+        db.query(EmailTemplateModel)
+        .filter_by(template_key="payment_reminder")
+        .first()
+    )
+
+    jobs = []
+    for r in recipients:
+        subject = f"Payment Reminder: {r['days_left']} day{'s' if r['days_left'] != 1 else ''} left"
+        render_vars = dict(
+            subject=subject,
+            firstname=r["firstname"],
+            event_name=r["event_name"],
+            days_left=r["days_left"],
+            deadline=r["deadline"],
+            info_email="info@ecsaconm.org",
+            cc_email="admission@cosecsa.org",
+            year=mailer_util.YEAR,
+        )
+        try:
+            if db_tpl and db_tpl.body_html:
+                email_body = Jinja2Template(db_tpl.body_html).render(**render_vars)
+            else:
+                file_tpl = mailer_util.templates.get_template("payment_reminder_template.html")
+                email_body = file_tpl.render(**render_vars)
+        except Exception:
+            email_body = (
+                f"<p>Dear {r['firstname']},</p>"
+                f"<p>You have <strong>{r['days_left']} day(s)</strong> left to pay for "
+                f"<strong>{r['event_name']}</strong>. Payment is required to confirm your availability.</p>"
+                f"<p>If you have already paid, please share your proof of payment with "
+                f"{render_vars['info_email']} and copy {render_vars['cc_email']}.</p>"
+                f"<p>ECSACONM Events Team</p>"
+            )
+
+        jobs.append(
+            {
+                "recipient_email": r["email"],
+                "subject": subject,
+                "email_body": email_body,
+                "email_type": "payment_reminder",
+                "sent_by_user_id": sent_by_user_id,
+            }
+        )
+
+    sent = len(jobs)
+    if jobs:
+        background_tasks.add_task(mailer_util.send_bulk_emails, jobs)
+
+    return {
+        "sent": sent,
+        "deadline": resolved_deadline,
+        "message": f"Payment reminders queued for {sent} unpaid registration(s).",
+        "reminders_sent": sent,
+    }
+
+
 @router.get("/export")
 async def export_registrations(
     current_user: user_dependency,
@@ -171,6 +360,7 @@ async def export_registrations(
     auth_dependency: Auth = Depends(get_auth_dep),
     event_id: int = Query(default=None),
     paid: str = Query(default="all"),
+    proof: str = Query(default="all"),
     search: str = Query(default=""),
 ):
     auth_dependency.secure_access("EXPORT_REGISTRATIONS", current_user["user_id"])
@@ -191,6 +381,17 @@ async def export_registrations(
 
     if paid != "all":
         q = q.filter(Registration.paid == (paid == "true"))
+
+    if proof != "all":
+        if proof == "with":
+            q = q.filter(Registration.payment_proof.isnot(None))
+        elif proof == "without":
+            q = q.filter(Registration.payment_proof.is_(None))
+        elif proof == "pending":
+            q = q.filter(
+                Registration.payment_proof.isnot(None),
+                Registration.paid == False,
+            )
 
     if search:
         term = f"%{search}%"

@@ -55,8 +55,12 @@
             </div>
             <p class="text-sm font-semibold text-gray-800">
               {{ form.response === 'attending'
-                ? 'Thank you! We look forward to seeing you at the event.'
+                ? 'Thank you! Please complete your registration and payment to confirm your availability for the event.'
                 : 'Thank you for letting us know. We will plan the programme accordingly.' }}
+            </p>
+            <p v-if="form.response === 'attending'" class="text-xs text-gray-500">
+              Register and pay at <a href="#/register" class="underline" style="color: rgb(254,80,103);">events.ecsaconm.org</a>.
+              If you've already paid, email your proof of payment to info@ecsaconm.org and copy admission@cosecsa.org.
             </p>
             <p class="text-xs text-gray-400">Your response has already been recorded.</p>
           </div>
@@ -73,14 +77,6 @@
             </p>
 
             <div class="space-y-3 mt-6">
-              <button @click="submitResponse('attending')" :disabled="isSubmitting"
-                class="w-full py-3.5 rounded-xl text-white font-bold text-sm transition hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-                style="background-color: rgb(34,197,94);">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-                I will still attend
-              </button>
               <button @click="submitResponse('not_attending')" :disabled="isSubmitting"
                 class="w-full py-3.5 rounded-xl text-white font-bold text-sm transition hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
                 style="background-color: rgb(254,80,103);">
@@ -88,6 +84,14 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
                 I will not be Attending
+              </button>
+              <button @click="submitResponse('attending')" :disabled="isSubmitting"
+                class="w-full py-3.5 rounded-xl text-white font-bold text-sm transition hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+                style="background-color: rgb(34,197,94);">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                I will still be attending
               </button>
             </div>
           </div>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+        color: #333333;
+      }
+      .email-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 40px;
+        box-sizing: border-box;
+        border-top: 6px solid rgb(254,80,103);
+      }
+      h1 { font-size: 24px; margin-bottom: 16px; color: #003f5c; }
+      p { font-size: 16px; line-height: 1.5; margin-bottom: 16px; color: #444444; }
+      .countdown {
+        background-color: #fdeef0;
+        border: 2px solid rgb(254,80,103);
+        border-radius: 12px;
+        text-align: center;
+        padding: 20px;
+        margin: 24px 0;
+      }
+      .countdown .days {
+        font-size: 40px;
+        font-weight: 800;
+        color: rgb(254,80,103);
+        line-height: 1;
+      }
+      .countdown .label {
+        font-size: 13px;
+        color: #7a7a7a;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 6px;
+      }
+      a.button {
+        display: inline-block;
+        background-color: rgb(254,80,103);
+        color: #ffffff;
+        text-decoration: none;
+        padding: 12px 28px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        margin-top: 16px;
+      }
+      .footer {
+        font-size: 13px;
+        color: #888888;
+        margin-top: 40px;
+        border-top: 1px solid #eaeaea;
+        padding-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <h1>{{subject}}</h1>
+      <p>Dear <strong>{{ firstname }}</strong>,</p>
+
+      <p>
+        We're counting down to <strong>{{ event_name }}</strong> and noticed you
+        haven't completed your payment yet. Payment is required to confirm your
+        availability for the conference.
+      </p>
+
+      <div class="countdown">
+        <div class="days">{{ days_left }}</div>
+        <div class="label">day{{ 's' if days_left != 1 else '' }} left until {{ deadline }}</div>
+      </div>
+
+      <p>Please complete your payment before the deadline to secure your place.</p>
+
+      <p>
+        <strong>If you have already paid</strong>, simply share your proof of
+        payment to <a href="mailto:{{ info_email }}">{{ info_email }}</a> and copy
+        <a href="mailto:{{ cc_email }}">{{ cc_email }}</a> so we can confirm your
+        registration.
+      </p>
+
+      <p style="margin-top: 28px;">
+        If you have any questions, please contact us at
+        <a href="mailto:info@ecsaconm.org">info@ecsaconm.org</a>.
+      </p>
+
+      <p>Warm regards,<br />ECSACONM Conference Team<br />ECSACONM Secretariat</p>
+      <div class="footer">&copy; {{ year }} ECSACONM. All rights reserved.</div>
+    </div>
+  </body>
+</html>

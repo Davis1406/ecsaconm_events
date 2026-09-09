@@ -137,7 +137,7 @@
 
 <script>
 import HeaderView from '@/includes/Header.vue'
-import { fetchData } from '@/services/apiService'
+import { fetchData, fetchDataWithParams } from '@/services/apiService'
 
 export default {
   name: 'DashboardView',
@@ -169,9 +169,11 @@ export default {
   methods: {
     async loadDashboard() {
       try {
-        const [eventsRes, regsRes] = await Promise.allSettled([
+        const [eventsRes, regsRes, paidRes, unpaidRes] = await Promise.allSettled([
           fetchData('events', 0, 100, ''),
-          fetchData('registrations', 0, 500, ''),
+          fetchDataWithParams('registrations', { skip: 0, limit: 1 }),
+          fetchDataWithParams('registrations', { skip: 0, limit: 1, paid: 'true' }),
+          fetchDataWithParams('registrations', { skip: 0, limit: 1, paid: 'false' }),
         ])
 
         if (eventsRes.status === 'fulfilled') {
@@ -181,11 +183,13 @@ export default {
         }
 
         if (regsRes.status === 'fulfilled') {
-          const regs = regsRes.value?.data || regsRes.value || []
-          const list = Array.isArray(regs) ? regs : []
-          this.stats.registrations = regsRes.value?.total || list.length
-          this.stats.paid = list.filter(r => r.paid).length
-          this.stats.unpaid = list.filter(r => !r.paid).length
+          this.stats.registrations = regsRes.value?.total || 0
+        }
+        if (paidRes.status === 'fulfilled') {
+          this.stats.paid = paidRes.value?.total || 0
+        }
+        if (unpaidRes.status === 'fulfilled') {
+          this.stats.unpaid = unpaidRes.value?.total || 0
         }
       } catch (e) {
         console.error('Dashboard load error:', e)

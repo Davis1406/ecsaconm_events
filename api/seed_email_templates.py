@@ -93,6 +93,12 @@ TEMPLATES = {
         "file": "attendance_form_template.html",
         "variables": "subject, firstname, event_name, abstract_title, form_link, year",
     },
+    "payment_reminder": {
+        "name": "Payment Reminder",
+        "subject": "Payment Reminder: {days_left} days left",
+        "file": "payment_reminder_template.html",
+        "variables": "subject, firstname, event_name, days_left, deadline, info_email, cc_email, year",
+    },
 }
 
 

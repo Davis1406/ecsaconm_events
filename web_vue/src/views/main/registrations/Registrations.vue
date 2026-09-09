@@ -18,6 +18,13 @@
             <option value="true">Paid</option>
             <option value="false">Unpaid</option>
           </select>
+          <select v-model="proofFilter" @change="handleFilterChange"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-pink-400 bg-white">
+            <option value="all">All Proof</option>
+            <option value="with">With Proof</option>
+            <option value="without">Without Proof</option>
+            <option value="pending">Proof Pending (not paid)</option>
+          </select>
         </div>
       </div>
 
@@ -25,13 +32,46 @@
         {{ total }} registration{{ total !== 1 ? 's' : '' }}
       </p>
 
+      <!-- Bulk toolbar -->
+      <div v-if="!isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-3 flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-2 text-sm text-gray-600 font-medium mr-auto">
+          <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          {{ selectedIds.size }} selected
+        </div>
+        <button @click="bulkMarkPaid(true)" :disabled="bulkSaving || selectedIds.size === 0"
+          class="px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          style="background-color: rgb(34,197,94);">
+          {{ bulkSaving ? 'Updating…' : 'Mark Paid' }}
+        </button>
+        <button @click="bulkMarkPaid(false)" :disabled="bulkSaving || selectedIds.size === 0"
+          class="px-4 py-2 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-50"
+          style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+          Mark Unpaid
+        </button>
+        <button @click="openReminderModal" :disabled="selectedIds.size === 0"
+          class="px-4 py-2 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-50"
+          style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+          Send Reminder ({{ selectedIds.size }})
+        </button>
+        <button @click="openUploadModal"
+          class="px-4 py-2 rounded-xl text-sm font-semibold border-2 transition"
+          style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+          Upload Names
+        </button>
+      </div>
+
       <!-- Spinner -->
       <SpinnerComponent v-if="isLoading" />
 
       <div v-else class="bg-white rounded-2xl shadow-sm">
         <!-- Table header -->
         <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100 rounded-t-2xl">
-          <div class="col-span-1">#</div>
+          <div class="col-span-1 flex items-center gap-2">
+            <input type="checkbox" :checked="allSelected" @change="toggleSelectAll"
+              class="w-4 h-4 rounded border-gray-300 cursor-pointer" style="accent-color: rgb(254,80,103);" />
+          </div>
           <div class="col-span-2">Participant</div>
           <div class="col-span-2">Email</div>
           <div class="col-span-2">Event</div>
@@ -55,10 +95,13 @@
 
         <!-- Rows -->
         <div v-for="(reg, idx) in registrations" :key="reg.id || reg.registration_id"
-          class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3.5 border-b border-gray-50 hover:bg-gray-50 transition text-sm">
-          <!-- # -->
-          <div class="col-span-1 text-gray-400 text-xs font-medium hidden sm:block">
-            {{ (currentPage - 1) * pageSize + idx + 1 }}
+          class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3.5 border-b border-gray-50 hover:bg-gray-50 transition text-sm"
+          :class="isSelected(reg) ? 'bg-pink-50/40' : ''">
+          <!-- Checkbox + # -->
+          <div class="col-span-1 flex items-center gap-2">
+            <input type="checkbox" :checked="isSelected(reg)" @change="toggleSelect(reg)"
+              class="w-4 h-4 rounded border-gray-300 cursor-pointer" style="accent-color: rgb(254,80,103);" />
+            <span class="text-gray-400 text-xs hidden sm:block">{{ (currentPage - 1) * pageSize + idx + 1 }}</span>
           </div>
           <!-- Participant — click to open user profile -->
           <div class="col-span-2">
@@ -457,6 +500,158 @@
       </div>
     </div>
 
+    <!-- ── Payment Reminder Modal ──────────────────────────────────────────── -->
+    <div v-if="reminderModal.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      @click.self="closeReminderModal">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl flex flex-col max-h-[92vh] overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
+          style="background-color: rgba(254,80,103,0.04);">
+          <div>
+            <p class="font-bold text-gray-800">Payment Reminder</p>
+            <p class="text-xs text-gray-400 mt-0.5">Email unpaid registrations a countdown to the payment deadline.</p>
+          </div>
+          <button @click="closeReminderModal" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 overflow-y-auto flex-1 space-y-4">
+          <div class="p-3 rounded-xl bg-blue-50 border border-blue-100 text-sm text-blue-700">
+            Will be sent to <strong>{{ reminderModal.recipientCount }}</strong> selected unpaid registration(s).
+          </div>
+          <div v-if="reminderModal.result" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ reminderModal.result }}</div>
+          <div v-if="reminderModal.error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{{ reminderModal.error }}</div>
+
+          <!-- Deadline -->
+          <div>
+            <label class="edit-label">Payment Deadline <span class="text-xs text-gray-400">(used for the days counter)</span></label>
+            <input v-model="reminderModal.deadline" type="date"
+              class="edit-input" />
+          </div>
+
+          <!-- Subject -->
+          <div>
+            <label class="edit-label">Email Subject</label>
+            <input v-model="reminderModal.subject" type="text" class="edit-input" />
+          </div>
+
+          <!-- Body editor -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">HTML Body</label>
+              <button @click="reminderModal.editMode = reminderModal.editMode === 'edit' ? 'preview' : 'edit'"
+                class="text-xs px-3 py-1 rounded-lg border transition"
+                :class="reminderModal.editMode === 'preview'
+                  ? 'border-pink-400 text-pink-600 bg-pink-50'
+                  : 'border-gray-200 text-gray-500 hover:border-gray-300'">
+                {{ reminderModal.editMode === 'preview' ? '✎ Edit HTML' : '👁 Preview' }}
+              </button>
+            </div>
+            <div v-if="reminderModal.editMode === 'preview'" class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+              <iframe :srcdoc="renderReminderPreview(reminderModal.body_html)" style="width:100%; height:360px; border:none;"></iframe>
+            </div>
+            <textarea v-else v-model="reminderModal.body_html" rows="16"
+              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:border-pink-400"
+              style="resize: vertical;"></textarea>
+            <p class="text-xs text-gray-400 mt-1">
+              Variables:
+              <code class="bg-gray-100 px-1 rounded">firstname</code>
+              <code class="bg-gray-100 px-1 rounded">event_name</code>
+              <code class="bg-gray-100 px-1 rounded">days_left</code>
+              <code class="bg-gray-100 px-1 rounded">deadline</code>
+              <code class="bg-gray-100 px-1 rounded">info_email</code>
+              <code class="bg-gray-100 px-1 rounded">cc_email</code>
+              <code class="bg-gray-100 px-1 rounded">year</code>
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100">
+          <button @click="closeReminderModal" class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <div class="flex gap-3">
+            <button @click="saveReminderTemplate" :disabled="reminderModal.saving"
+              class="px-5 py-2.5 border rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+              style="border-color: rgb(254,80,103);">
+              {{ reminderModal.saving ? 'Saving…' : 'Save Template' }}
+            </button>
+            <button @click="sendReminder" :disabled="reminderModal.sending || reminderModal.recipientCount === 0"
+              class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(254,80,103);">
+              {{ reminderModal.sending ? 'Sending…' : `Send to ${reminderModal.recipientCount}` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Bulk Upload Names Modal ─────────────────────────────────────────── -->
+    <div v-if="uploadModal.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      @click.self="uploadModal.show = false">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
+          style="background-color: rgba(254,80,103,0.04);">
+          <div>
+            <p class="font-bold text-gray-800">Upload Registration Names</p>
+            <p class="text-xs text-gray-400 mt-0.5">Bulk-import participants from an Excel (.xlsx / .csv) file.</p>
+          </div>
+          <button @click="uploadModal.show = false" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="p-6 overflow-y-auto flex-1 space-y-4">
+          <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-600">
+            Expected columns: <span class="font-semibold">First Name</span>, <span class="font-semibold">Last Name</span>,
+            <span class="font-semibold">Delegate Valid Email Address</span> (or <em>Email</em>), <span class="font-semibold">Telephone</span>,
+            plus optional <em>Title, Country, Participation Category, Amount Paid, Proof, Photo</em>.
+          </div>
+
+          <div v-if="!selectedEventId" class="p-3 rounded-xl bg-yellow-50 border border-yellow-200 text-sm text-yellow-700">
+            Select an event first so the uploaded names are registered to it.
+          </div>
+
+          <div>
+            <label class="edit-label">Event</label>
+            <select v-model="uploadModal.eventId" class="edit-input">
+              <option value="">— Choose an event —</option>
+              <option v-for="event in events" :key="event.id" :value="event.id">{{ event.event }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="edit-label">Excel / CSV File</label>
+            <input type="file" accept=".xlsx,.csv,.xls" @change="onUploadFile"
+              class="w-full text-sm text-gray-600" />
+          </div>
+
+          <div v-if="uploadModal.fileName" class="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm">
+            <DocumentTextIcon class="w-4 h-4 text-blue-400" />
+            <span class="font-semibold text-blue-800 truncate">{{ uploadModal.fileName }}</span>
+          </div>
+
+          <div v-if="uploadModal.result" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ uploadModal.result }}</div>
+          <div v-if="uploadModal.error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{{ uploadModal.error }}</div>
+        </div>
+        <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button @click="uploadModal.show = false" class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+            Close
+          </button>
+          <button @click="uploadNames" :disabled="uploadModal.uploading || !uploadModal.file || !uploadModal.eventId"
+            class="px-6 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ uploadModal.uploading ? 'Uploading…' : 'Upload & Register' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -468,13 +663,14 @@ import SearchComponent from '@/components/SearchComponent.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData, fetchDataWithParams, updateItem } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
+import { DocumentTextIcon } from '@heroicons/vue/24/outline'
 
 const API_URL = import.meta.env.VITE_API_URL
 
 export default {
   name: 'RegistrationsView',
   components: {
-    PaginationComponent, SearchComponent, HeaderView, SpinnerComponent,
+    PaginationComponent, SearchComponent, HeaderView, SpinnerComponent, DocumentTextIcon,
   },
   data() {
     return {
@@ -490,7 +686,20 @@ export default {
       searchPhrase: '',
       selectedEventId: '',
       paidFilter: 'all',
+      proofFilter: 'all',
       openMenuId: null,
+      selectedIds: new Set(),
+      bulkSaving: false,
+      reminderModal: {
+        show: false, loading: false, saving: false, sending: false,
+        recipientCount: 0, deadline: '',
+        subject: '', body_html: '', originalSubject: '', originalBody: '',
+        editMode: 'preview', result: '', error: '',
+      },
+      uploadModal: {
+        show: false, eventId: '', file: null, fileName: '',
+        uploading: false, result: '', error: '',
+      },
       deleteModal: { show: false, reg: null, deleting: false },
       toast: { show: false, message: '', type: 'success' },
       proofModal: {
@@ -539,6 +748,11 @@ export default {
     const permissions = raw.map(p => typeof p === "string" ? p : p.permission_code)
     return { permissions, authStore }
   },
+  computed: {
+    allSelected() {
+      return this.registrations.length > 0 && this.registrations.every(r => this.selectedIds.has(r.id || r.registration_id))
+    },
+  },
   mounted() {
     this.loadEvents()
     this.loadRegistrations()
@@ -564,6 +778,7 @@ export default {
           limit: this.pageSize,
           search: this.searchPhrase || '',
           paid: this.paidFilter,
+          proof: this.proofFilter,
         }
         if (this.selectedEventId) params.event_id = this.selectedEventId
         const response = await fetchDataWithParams('registrations', params)
@@ -577,6 +792,179 @@ export default {
         this.isLoading = false
       }
     },
+    isSelected(reg) {
+      return this.selectedIds.has(reg.id || reg.registration_id)
+    },
+    toggleSelect(reg) {
+      const id = reg.id || reg.registration_id
+      if (this.selectedIds.has(id)) this.selectedIds.delete(id)
+      else this.selectedIds.add(id)
+      this.selectedIds = new Set(this.selectedIds)
+    },
+    toggleSelectAll() {
+      if (this.allSelected) this.selectedIds = new Set()
+      else this.selectedIds = new Set(this.registrations.map(r => r.id || r.registration_id))
+    },
+    async bulkMarkPaid(paid) {
+      if (this.selectedIds.size === 0) return
+      this.bulkSaving = true
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.post('/registrations/bulk_payment', {
+          registration_ids: Array.from(this.selectedIds),
+          paid,
+        })
+        this.showToast(`Marked ${res.data?.updated || 0} registration(s) as ${paid ? 'paid' : 'unpaid'}.`, 'success')
+        this.selectedIds = new Set()
+        await this.loadRegistrations()
+      } catch (error) {
+        this.showToast(error.response?.data?.detail || 'Bulk update failed.', 'error')
+      } finally {
+        this.bulkSaving = false
+      }
+    },
+
+    // ── Payment reminder ─────────────────────────────────────────────────
+    async openReminderModal() {
+      if (this.selectedIds.size === 0) return
+      this.reminderModal = {
+        show: true, loading: true, saving: false, sending: false,
+        recipientCount: this.selectedIds.size, deadline: '',
+        subject: '', body_html: '', originalSubject: '', originalBody: '',
+        editMode: 'preview', result: '', error: '',
+      }
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const [tplRes, deadlineRes] = await Promise.allSettled([
+          api.get('/email_templates/payment_reminder'),
+          api.get('/system/settings/payment_deadline'),
+        ])
+        if (tplRes.status === 'fulfilled') {
+          this.reminderModal.subject = tplRes.value.data.subject || ''
+          this.reminderModal.body_html = tplRes.value.data.body_html || ''
+          this.reminderModal.originalSubject = this.reminderModal.subject
+          this.reminderModal.originalBody = this.reminderModal.body_html
+        }
+        if (deadlineRes.status === 'fulfilled') {
+          this.reminderModal.deadline = deadlineRes.value.data?.value || ''
+        }
+      } catch (e) {
+        this.reminderModal.error = 'Failed to load template.'
+      } finally {
+        this.reminderModal.loading = false
+      }
+    },
+    closeReminderModal() {
+      this.reminderModal.show = false
+    },
+    renderReminderPreview(bodyHtml) {
+      const daysLeft = this.reminderModal.deadline
+        ? Math.max(0, Math.ceil((new Date(this.reminderModal.deadline) - new Date()) / 86400000))
+        : 14
+      const sample = {
+        subject: this.reminderModal.subject || 'Payment Reminder',
+        firstname: 'Jane Presenter',
+        event_name: 'ECSACONM Scientific Conference',
+        days_left: daysLeft,
+        deadline: this.reminderModal.deadline || '2026-09-14',
+        info_email: 'info@ecsaconm.org',
+        cc_email: 'admission@cosecsa.org',
+        year: new Date().getFullYear(),
+      }
+      return (bodyHtml || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key) => {
+        return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
+      })
+    },
+    async saveReminderTemplate() {
+      this.reminderModal.saving = true
+      this.reminderModal.result = ''
+      this.reminderModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        await api.put('/email_templates/payment_reminder', {
+          subject: this.reminderModal.subject,
+          body_html: this.reminderModal.body_html,
+        })
+        this.reminderModal.originalSubject = this.reminderModal.subject
+        this.reminderModal.originalBody = this.reminderModal.body_html
+        this.reminderModal.result = 'Template saved. It will be used on send.'
+      } catch (e) {
+        this.reminderModal.error = e.response?.data?.detail || 'Failed to save template.'
+      } finally {
+        this.reminderModal.saving = false
+      }
+    },
+    async sendReminder() {
+      this.reminderModal.sending = true
+      this.reminderModal.result = ''
+      this.reminderModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.post('/registrations/send_payment_reminders', {
+          event_id: this.selectedEventId || null,
+          deadline: this.reminderModal.deadline || null,
+          registration_ids: Array.from(this.selectedIds),
+        })
+        this.reminderModal.result = res.data?.message || `Reminders queued for ${res.data?.sent || 0} registration(s).`
+        this.selectedIds = new Set()
+      } catch (e) {
+        this.reminderModal.error = e.response?.data?.detail || 'Failed to send reminders.'
+      } finally {
+        this.reminderModal.sending = false
+      }
+    },
+
+    // ── Bulk upload names ────────────────────────────────────────────────
+    openUploadModal() {
+      this.uploadModal = {
+        show: true, eventId: this.selectedEventId || '', file: null, fileName: '',
+        uploading: false, result: '', error: '',
+      }
+    },
+    onUploadFile(e) {
+      this.uploadModal.file = e.target.files[0] || null
+      this.uploadModal.fileName = this.uploadModal.file?.name || ''
+      this.uploadModal.result = ''
+      this.uploadModal.error = ''
+    },
+    async uploadNames() {
+      if (!this.uploadModal.file || !this.uploadModal.eventId) return
+      this.uploadModal.uploading = true
+      this.uploadModal.result = ''
+      this.uploadModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const form = new FormData()
+        form.append('file', this.uploadModal.file)
+        form.append('eventID', this.uploadModal.eventId)
+        const res = await api.post('/events/upload_participants/', form)
+        const d = res.data
+        const parts = []
+        if (d.created) parts.push(`${d.created} new`)
+        if (d.updated) parts.push(`${d.updated} updated`)
+        if (d.skipped) parts.push(`${d.skipped} skipped`)
+        this.uploadModal.result = `Import complete! ${parts.join(', ') || '0 rows'} (${d.total_processed} processed).`
+        if (d.errors && d.errors.length) this.uploadModal.error = 'Warnings: ' + d.errors.join(' | ')
+        this.uploadModal.file = null
+        this.uploadModal.fileName = ''
+        await this.loadRegistrations()
+      } catch (e) {
+        this.uploadModal.error = e.response?.data?.detail || 'Import failed. Check the file and try again.'
+      } finally {
+        this.uploadModal.uploading = false
+      }
+    },
+
     async verifyPayment(reg) {
       const regId = reg.id || reg.registration_id
       this.verifyingId = regId

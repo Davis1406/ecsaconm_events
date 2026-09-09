@@ -76,7 +76,7 @@
       <!-- Quick stats strip -->
       <div class="grid grid-cols-3 divide-x divide-gray-100 px-2">
         <div class="py-4 px-6 text-center">
-          <p class="text-2xl font-bold text-gray-800">{{ participants.length }}</p>
+          <p class="text-2xl font-bold text-gray-800">{{ totalParticipants }}</p>
           <p class="text-xs text-gray-400 uppercase tracking-wide mt-0.5">Participants</p>
         </div>
         <div class="py-4 px-6 text-center">
@@ -84,7 +84,7 @@
           <p class="text-xs text-gray-400 uppercase tracking-wide mt-0.5">Paid</p>
         </div>
         <div class="py-4 px-6 text-center">
-          <p class="text-2xl font-bold text-yellow-600">{{ participants.length - paidCount }}</p>
+          <p class="text-2xl font-bold text-yellow-600">{{ totalParticipants - paidCount }}</p>
           <p class="text-xs text-gray-400 uppercase tracking-wide mt-0.5">Pending</p>
         </div>
       </div>
@@ -97,7 +97,7 @@
           class="flex items-center gap-2 px-5 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 transition"
           :class="activeTab === 'participants' ? 'border-pink-500 text-pink-600' : 'border-transparent text-gray-500 hover:text-gray-700'">
           <UsersIcon class="w-4 h-4" />
-          Participants <span class="ml-1 text-xs font-normal text-gray-400">({{ participants.length }})</span>
+          Participants <span class="ml-1 text-xs font-normal text-gray-400">({{ totalParticipants }})</span>
         </button>
         <button @click="activeTab = 'documents'"
           class="flex items-center gap-2 px-5 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 transition"
@@ -243,8 +243,8 @@
         <!-- Date Registered -->
         <div class="col-span-2 text-gray-400 text-xs whitespace-nowrap">{{ formatDate(participant.registered_at) }}</div>
 
-        <!-- Paid badge -->
-        <div class="col-span-1 flex justify-center">
+        <!-- Paid badge + toggle -->
+        <div class="col-span-1 flex items-center justify-center gap-1.5">
           <span v-if="paidStatus(participant.paid || participant.event_payment)"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
             <CheckCircleIcon class="w-3.5 h-3.5" /> Yes
@@ -252,6 +252,14 @@
           <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-600">
             <XCircleIcon class="w-3.5 h-3.5" /> No
           </span>
+          <button @click="togglePaid(participant)"
+            :disabled="togglingPaidId === participant.id"
+            :title="paidStatus(participant.paid || participant.event_payment) ? 'Mark unpaid' : 'Mark paid'"
+            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50"
+            :style="paidStatus(participant.paid || participant.event_payment) ? 'background-color: rgb(34,197,94);' : 'background-color: #d1d5db;'">
+            <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200"
+              :class="paidStatus(participant.paid || participant.event_payment) ? 'translate-x-5' : 'translate-x-0.5'"></span>
+          </button>
         </div>
 
         <!-- Payment Proof -->
@@ -631,7 +639,7 @@
             <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Status</p>
             <div class="grid grid-cols-3 gap-3 mb-4">
               <div class="text-center p-3 rounded-xl bg-gray-50">
-                <p class="text-2xl font-bold text-gray-800">{{ participants.length }}</p>
+                <p class="text-2xl font-bold text-gray-800">{{ totalParticipants }}</p>
                 <p class="text-xs text-gray-400 mt-0.5">Total</p>
               </div>
               <div class="text-center p-3 rounded-xl bg-green-50">
@@ -639,7 +647,7 @@
                 <p class="text-xs text-gray-400 mt-0.5">Paid</p>
               </div>
               <div class="text-center p-3 rounded-xl bg-yellow-50">
-                <p class="text-2xl font-bold text-yellow-600">{{ participants.length - paidCount }}</p>
+                <p class="text-2xl font-bold text-yellow-600">{{ totalParticipants - paidCount }}</p>
                 <p class="text-xs text-gray-400 mt-0.5">Pending</p>
               </div>
             </div>
@@ -820,7 +828,7 @@
 
 <script>
 import axios from 'axios';
-import { fetchItem, createItem } from "@/services/apiService";
+import { createItem } from "@/services/apiService";
 import {
   MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon,
   XCircleIcon, CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon,
@@ -923,6 +931,9 @@ export default {
         { key: 'unpaid', label: 'Unpaid' },
         { key: 'proof_pending', label: 'Proof Submitted, Not Paid' },
       ],
+      participantsTotal: 0,
+      filterCounts: { all: 0, presenters: 0, paid: 0, unpaid: 0, proof_pending: 0 },
+      togglingPaidId: null,
       localPage: 1,
       localPageSize: 25,
       pageSizeOptions: [25, 50, 100],
@@ -932,9 +943,10 @@ export default {
     this.getEvent();
   },
   watch: {
-    filterPreset() { this.localPage = 1; },
+    filterPreset() { this.localPage = 1; this.getEvent(); },
     searchPhrase() { this.localPage = 1; },
-    localPageSize() { this.localPage = 1; },
+    localPageSize() { this.localPage = 1; this.getEvent(); },
+    localPage() { this.getEvent(); },
   },
   setup() {
     const authStore = useAuthStore();
@@ -944,7 +956,10 @@ export default {
   },
   computed: {
     paidCount() {
-      return this.participants.filter(p => this.paidStatus(p.paid || p.event_payment)).length;
+      return this.filterCounts.paid || 0;
+    },
+    totalParticipants() {
+      return this.participantsTotal || this.participants.length;
     },
     abstractPresenters() {
       return this.participants.filter(p => p.is_abstract_presenter);
@@ -970,16 +985,6 @@ export default {
     withoutPaymentProofCount() {
       return this.participants.length - this.withPaymentProof.length;
     },
-    filterCounts() {
-      const paidOf = p => this.paidStatus(p.paid || p.event_payment);
-      return {
-        all: this.participants.length,
-        presenters: this.participants.filter(p => p.is_abstract_presenter).length,
-        paid: this.participants.filter(paidOf).length,
-        unpaid: this.participants.filter(p => !paidOf(p)).length,
-        proof_pending: this.participants.filter(p => p.payment_proof && !paidOf(p)).length,
-      };
-    },
     filteredParticipants() {
       const term = (this.searchPhrase || '').trim().toLowerCase();
       let list = this.participants;
@@ -993,17 +998,10 @@ export default {
           return haystack.includes(term);
         });
       }
-      const paidOf = p => this.paidStatus(p.paid || p.event_payment);
-      switch (this.filterPreset) {
-        case 'presenters': return list.filter(p => p.is_abstract_presenter);
-        case 'paid': return list.filter(paidOf);
-        case 'unpaid': return list.filter(p => !paidOf(p));
-        case 'proof_pending': return list.filter(p => p.payment_proof && !paidOf(p));
-        default: return list;
-      }
+      return list;
     },
     localTotalPages() {
-      return Math.max(1, Math.ceil(this.filteredParticipants.length / this.localPageSize));
+      return Math.max(1, Math.ceil(this.participantsTotal / this.localPageSize));
     },
     rowStart() {
       if (this.filteredParticipants.length === 0) return 0;
@@ -1074,13 +1072,23 @@ export default {
     async getEvent(silent = false) {
       if (!silent) this.isLoading = true;
       try {
-        const response = await fetchItem("events", this.id, this.currentPage, this.pageSize, this.searchPhrase);
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        const res = await api.get(`/events/${this.id}`, {
+          params: {
+            participant_skip: (this.localPage - 1) * this.localPageSize,
+            participant_limit: this.localPageSize,
+            participant_filter: this.filterPreset,
+          },
+        });
+        const response = res.data;
         this.event = response.event;
-        this.participants = response.data || response.participants || [];
+        this.participants = response.participants || [];
         this.attendance = response.attendance || [];
-        this.totalPages = response.pages || 1;
         this.documents = response.documents || [];
         this.links = response.links || [];
+        this.participantsTotal = response.participants_total_all ?? this.participants.length;
+        if (response.filter_counts) this.filterCounts = response.filter_counts;
       } catch (error) {
         console.error("Error fetching event:", error);
       } finally {
@@ -1089,10 +1097,6 @@ export default {
     },
     handleSearch(searchQuery) {
       this.searchPhrase = searchQuery;
-    },
-    async handlePageChange(newPage) {
-      this.currentPage = newPage;
-      this.getEvent();
     },
     handleLocalPageChange(newPage) {
       this.localPage = newPage;
@@ -1148,6 +1152,28 @@ export default {
       this.userID = userID;
       this.eventID = this.id;
       this.showPaymentModal = true;
+    },
+    async togglePaid(participant) {
+      this.togglingPaidId = participant.id;
+      const isPaid = this.paidStatus(participant.paid || participant.event_payment);
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        if (!isPaid) {
+          await api.put(`/events/verify_payment/${participant.id}`, {});
+        } else {
+          await api.put(`/events/unverify_payment/${participant.id}`, {});
+        }
+        this.successMsg = isPaid ? 'Marked as unpaid.' : 'Marked as paid.';
+        this.errorMsg = '';
+        setTimeout(() => { this.successMsg = ''; }, 3000);
+        await this.getEvent(true);
+      } catch (e) {
+        this.errorMsg = e.response?.data?.detail || 'Failed to update payment status.';
+        setTimeout(() => { this.errorMsg = ''; }, 3000);
+      } finally {
+        this.togglingPaidId = null;
+      }
     },
     confirmPayment() {
       this.message = "Payment confirmation was successful";

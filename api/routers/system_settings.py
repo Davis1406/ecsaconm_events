@@ -66,3 +66,36 @@ async def update_contacts(
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
     write_contacts(contacts.dict())
     return {"detail": "Contacts updated successfully"}
+
+
+@router.get("/settings/{key}")
+async def get_setting(
+    key: str,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dependency),
+):
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    from models.models import SystemSetting
+    row = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    return {"key": key, "value": row.value if row else None}
+
+
+@router.put("/settings/{key}")
+async def put_setting(
+    key: str,
+    payload: dict,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dependency),
+):
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    from models.models import SystemSetting
+    row = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    value = str(payload.get("value", "") or "")
+    if row:
+        row.value = value
+    else:
+        db.add(SystemSetting(key=key, value=value))
+    db.commit()
+    return {"key": key, "value": value}

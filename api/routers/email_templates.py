@@ -101,6 +101,7 @@ async def update_email_template(
             "reviewer_assignment": "reviewer_assignment_template.html",
             "abstract_submission_deadline": "abstract_submission_deadline_template.html",
             "attendance_confirmation_form": "attendance_form_template.html",
+            "payment_reminder": "payment_reminder_template.html",
         }
         fname = fname_map.get(template_key)
         if fname:

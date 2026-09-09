@@ -452,6 +452,9 @@ async def get_event(
     db: Session = Depends(get_db),
     dependency: Dependency = Depends(get_dependency),
     current_user: Optional[dict] = Depends(get_optional_current_user),
+    participant_skip: int = Query(default=0, ge=0),
+    participant_limit: int = Query(default=25, ge=1, le=200),
+    participant_filter: str = Query(default="all"),
 ):
     client_ip = dependency.request_ip(request)
 
@@ -464,7 +467,6 @@ async def get_event(
     )
 
     if event := get_object(event_id, db, Event):
-        registrations = event.registrations or []
         documents = event.documents or []
         links = event.links or []
 
@@ -532,6 +534,99 @@ async def get_event(
             # "admin" (or anything else unrecognised) — staff only
             return can_view_participants
 
+        # ── Participant roster (paginated + filterable) ───────────────────────
+        # Loaded in batches so the event page renders fast instead of pulling
+        # every participant (with all their joins) up front. Counts are computed
+        # server-side so the stat strip / filter chips stay accurate across pages.
+        reg_q = (
+            db.query(Registration)
+            .options(
+                joinedload(Registration.user).joinedload(User.user_profile).joinedload(UserProfile.country),
+                joinedload(Registration.user).joinedload(User.user_photo),
+                joinedload(Registration.payment),
+                joinedload(Registration.events),
+            )
+            .filter(Registration.event_id == event_id, Registration.deleted_at == None)
+        )
+
+        base_total = (
+            db.query(Registration)
+            .filter(Registration.event_id == event_id, Registration.deleted_at == None)
+            .count()
+        )
+        paid_total = (
+            db.query(Registration)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.deleted_at == None,
+                Registration.paid == True,
+            )
+            .count()
+        )
+        proof_pending_total = (
+            db.query(Registration)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.deleted_at == None,
+                Registration.payment_proof.isnot(None),
+                Registration.paid == False,
+            )
+            .count()
+        )
+        presenter_total = 0
+        if presenter_emails:
+            presenter_total = (
+                db.query(Registration)
+                .join(User, Registration.user_id == User.id)
+                .filter(
+                    Registration.event_id == event_id,
+                    Registration.deleted_at == None,
+                    User.email.in_(presenter_emails),
+                )
+                .count()
+            )
+
+        filter_counts = {
+            "all": base_total,
+            "paid": paid_total,
+            "unpaid": base_total - paid_total,
+            "proof_pending": proof_pending_total,
+            "presenters": presenter_total,
+        }
+
+        if participant_filter == "paid":
+            reg_q = reg_q.filter(Registration.paid == True)
+        elif participant_filter == "unpaid":
+            reg_q = reg_q.filter(Registration.paid == False)
+        elif participant_filter == "proof_pending":
+            reg_q = reg_q.filter(
+                Registration.payment_proof.isnot(None),
+                Registration.paid == False,
+            )
+        elif participant_filter == "presenters" and presenter_emails:
+            reg_q = reg_q.join(User, Registration.user_id == User.id).filter(
+                User.email.in_(presenter_emails)
+            )
+
+        participants_total = reg_q.count()
+        registrations = (
+            reg_q.order_by(Registration.registered_at.desc())
+            .offset(participant_skip)
+            .limit(participant_limit)
+            .all()
+        )
+
+        # The current user's own participation role (public pages), independent
+        # of the participant page being viewed.
+        my_role = None
+        if current_user and user_access != "none":
+            my_reg = db.query(Registration).filter(
+                Registration.user_id == current_user["user_id"],
+                Registration.event_id == event_id,
+                Registration.deleted_at == None,
+            ).first()
+            my_role = my_reg.participation_role if my_reg else None
+
         return {
             "event": {
                 "id": event.id,
@@ -557,11 +652,12 @@ async def get_event(
                 "logistics_info": event.logistics_info,
                 "sponsors_info": event.sponsors_info,
                 "abstract_submission_open": event.abstract_submission_open,
-                "participation_role": (
-                    registrations[0].participation_role if registrations else None
-                ),
+                "participation_role": my_role,
                 "user_access": user_access,
             },
+            "participants_total": participants_total if can_view_participants else 0,
+            "participants_total_all": base_total if can_view_participants else 0,
+            "filter_counts": filter_counts if can_view_participants else {},
             "participants": [
                 {
                     "id": r.id,

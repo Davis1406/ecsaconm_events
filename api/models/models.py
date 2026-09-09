@@ -1110,3 +1110,25 @@ class AttendanceFormResponse(BaseWithSoftDelete):
 
     def __repr__(self):
         return f"<AttendanceFormResponse id={self.id} email={self.email} response={self.response}>"
+
+
+class SystemSetting(Base):
+    """Simple key/value store for configurable system values (e.g. the
+    payment deadline used by reminder emails)."""
+    __tablename__ = "system_setting"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), nullable=False, unique=True, index=True)
+    value = Column(Text, nullable=True)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at = Column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self):
+        return f"<SystemSetting key={self.key}>"
