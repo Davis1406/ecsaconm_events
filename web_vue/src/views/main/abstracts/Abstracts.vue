@@ -1334,11 +1334,17 @@ export default {
 
     presenterName(abstract) {
       const authors = abstract.authors || []
-      const presenter = authors.find(au => au.is_presenting) || authors[0]
+      let presenter = null
+      if (abstract.matched_presenter_email) {
+        const m = abstract.matched_presenter_email.toLowerCase()
+        presenter = authors.find(au => (au.email || '').toLowerCase() === m) || null
+      }
+      presenter = presenter || authors.find(au => au.is_presenting) || authors[0]
       if (presenter) return [presenter.firstname, presenter.lastname].filter(Boolean).join(' ') || '—'
       return abstract.submitter_name || '—'
     },
     presenterEmail(abstract) {
+      if (abstract.matched_presenter_email) return abstract.matched_presenter_email
       const authors = abstract.authors || []
       const presenter = authors.find(au => au.is_presenting) || null
       return presenter?.email || ''

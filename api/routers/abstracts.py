@@ -48,7 +48,7 @@ def get_auth_dep(db: Session = Depends(get_db)) -> Auth:
     return Auth(db)
 
 
-def _serialize_abstract(a: Abstract):
+def _serialize_abstract(a: Abstract, matched_email=None):
     return {
         "id": a.id,
         "event_id": a.event_id,
@@ -65,6 +65,11 @@ def _serialize_abstract(a: Abstract):
         "submitted_by": a.submitted_by,
         "submitter_name": f"{a.submitter.firstname} {a.submitter.lastname}" if a.submitter else None,
         "submitter_email": a.submitter.email if a.submitter else None,
+        # When a presenter-level filter (registered / not_registered / paid) is
+        # active, this is the specific presenter whose registration status matched
+        # the filter — the UI must display THIS person, not whichever co-presenter
+        # happens to be listed first, or the row's badge contradicts the filter.
+        "matched_presenter_email": matched_email,
         "created_at": a.created_at,
         "updated_at": a.updated_at,
         "authors": [
@@ -398,6 +403,7 @@ def list_abstracts(
         presenter_paid in ("yes", "no")
     )
     presenter_people_total = None  # set when presenter filtering is active
+    matched_by_abstract: dict = {}  # abstract_id -> matched presenter email
     if needs_presenter_filter:
         pres_q = (
             db.query(
@@ -425,7 +431,6 @@ def list_abstracts(
             email_rows.setdefault(email, []).append(row)
 
         user_cache2: dict = {}  # email → User
-        matched_abstract_ids = set()
         people_count = 0
         for email, rows in email_rows.items():
             if email not in user_cache2:
@@ -458,9 +463,9 @@ def list_abstracts(
                 people_count += 1
                 # Keep one abstract per email — the latest by created_at
                 best = max(rows, key=lambda r: r.created_at or datetime.min)
-                matched_abstract_ids.add(best.abstract_id)
+                matched_by_abstract[best.abstract_id] = email
 
-        q = q.filter(Abstract.id.in_(matched_abstract_ids))
+        q = q.filter(Abstract.id.in_(list(matched_by_abstract.keys())))
         presenter_people_total = people_count
 
     total = presenter_people_total if presenter_people_total is not None else q.count()
@@ -477,7 +482,13 @@ def list_abstracts(
         joinedload(Abstract.submitter),
         joinedload(Abstract.event),
     ).order_by(order_expr).offset(skip).limit(limit).all()
-    return {"data": [_serialize_abstract(a) for a in abstracts], "total": total}
+    return {
+        "data": [
+            _serialize_abstract(a, matched_email=matched_by_abstract.get(a.id))
+            for a in abstracts
+        ],
+        "total": total,
+    }
 
 
 @router.get("/export")
