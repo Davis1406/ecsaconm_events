@@ -940,7 +940,7 @@ export default {
   },
   watch: {
     filterPreset() { this.localPage = 1; this.getEvent(); },
-    searchPhrase() { this.localPage = 1; },
+    searchPhrase() { this.localPage = 1; this.getEvent(); },
     localPageSize() { this.localPage = 1; this.getEvent(); },
     localPage() { this.getEvent(); },
   },
@@ -982,19 +982,9 @@ export default {
       return this.participants.length - this.withPaymentProof.length;
     },
     filteredParticipants() {
-      const term = (this.searchPhrase || '').trim().toLowerCase();
-      let list = this.participants;
-      if (term) {
-        list = list.filter(p => {
-          const haystack = [
-            p.title, p.firstname, p.lastname, p.email, p.phone,
-            p.organisation, p.institution, p.country, p.designation,
-            p.participation_role, p.participant_category,
-          ].filter(Boolean).join(' ').toLowerCase();
-          return haystack.includes(term);
-        });
-      }
-      return list;
+      // Search + filter are applied server-side, so the loaded page is already
+      // scoped to the query — return it as-is rather than filtering the page.
+      return this.participants;
     },
     localTotalPages() {
       return Math.max(1, Math.ceil(this.participantsTotal / this.localPageSize));
@@ -1076,6 +1066,7 @@ export default {
             participant_skip: (this.localPage - 1) * this.localPageSize,
             participant_limit: this.localPageSize,
             participant_filter: this.filterPreset,
+            participant_search: this.searchPhrase || '',
           },
         });
         const response = res.data;

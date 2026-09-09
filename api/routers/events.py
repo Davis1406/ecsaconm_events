@@ -455,6 +455,7 @@ async def get_event(
     participant_skip: int = Query(default=0, ge=0),
     participant_limit: int = Query(default=25, ge=1, le=200),
     participant_filter: str = Query(default="all"),
+    participant_search: str = Query(default=""),
 ):
     client_ip = dependency.request_ip(request)
 
@@ -603,9 +604,24 @@ async def get_event(
                 Registration.payment_proof.isnot(None),
                 Registration.paid == False,
             )
-        elif participant_filter == "presenters" and presenter_emails:
-            reg_q = reg_q.join(User, Registration.user_id == User.id).filter(
-                User.email.in_(presenter_emails)
+
+        needs_user_join = (
+            (participant_filter == "presenters" and presenter_emails)
+            or bool(participant_search)
+        )
+        if needs_user_join:
+            reg_q = reg_q.join(User, Registration.user_id == User.id)
+        if participant_filter == "presenters" and presenter_emails:
+            reg_q = reg_q.filter(User.email.in_(presenter_emails))
+        if participant_search:
+            term = f"%{participant_search.strip()}%"
+            reg_q = reg_q.filter(
+                or_(
+                    User.firstname.ilike(term),
+                    User.lastname.ilike(term),
+                    User.email.ilike(term),
+                    User.phone.ilike(term),
+                )
             )
 
         participants_total = reg_q.count()
