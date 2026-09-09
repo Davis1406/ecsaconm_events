@@ -243,22 +243,18 @@
         <!-- Date Registered -->
         <div class="col-span-2 text-gray-400 text-xs whitespace-nowrap">{{ formatDate(participant.registered_at) }}</div>
 
-        <!-- Paid badge + toggle -->
-        <div class="col-span-1 flex items-center justify-center gap-1.5">
-          <span v-if="paidStatus(participant.paid || participant.event_payment)"
-            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-            <CheckCircleIcon class="w-3.5 h-3.5" /> Yes
-          </span>
-          <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-600">
-            <XCircleIcon class="w-3.5 h-3.5" /> No
-          </span>
+        <!-- Paid badge — click to toggle paid/unpaid -->
+        <div class="col-span-1 flex justify-center">
           <button @click="togglePaid(participant)"
             :disabled="togglingPaidId === participant.id"
-            :title="paidStatus(participant.paid || participant.event_payment) ? 'Mark unpaid' : 'Mark paid'"
-            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50"
-            :style="paidStatus(participant.paid || participant.event_payment) ? 'background-color: rgb(34,197,94);' : 'background-color: #d1d5db;'">
-            <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200"
-              :class="paidStatus(participant.paid || participant.event_payment) ? 'translate-x-5' : 'translate-x-0.5'"></span>
+            :title="paidStatus(participant.paid || participant.event_payment) ? 'Mark as unpaid' : 'Mark as paid'"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+            :class="paidStatus(participant.paid || participant.event_payment)
+              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+              : 'bg-red-100 text-red-600 hover:bg-red-200'">
+            <CheckCircleIcon v-if="paidStatus(participant.paid || participant.event_payment)" class="w-3.5 h-3.5" />
+            <XCircleIcon v-else class="w-3.5 h-3.5" />
+            {{ paidStatus(participant.paid || participant.event_payment) ? 'Yes' : 'No' }}
           </button>
         </div>
 
@@ -309,7 +305,7 @@
 
       <div class="px-5 pb-2 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-2 text-sm text-gray-500">
-          <span>Showing {{ rowStart }}–{{ rowEnd }} of {{ filteredParticipants.length }}</span>
+          <span>Showing {{ rowStart }}–{{ rowEnd }} of {{ participantsTotal }}</span>
           <select v-model.number="localPageSize"
             title="Entries per page"
             class="border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-600 bg-white focus:outline-none">
@@ -1004,15 +1000,16 @@ export default {
       return Math.max(1, Math.ceil(this.participantsTotal / this.localPageSize));
     },
     rowStart() {
-      if (this.filteredParticipants.length === 0) return 0;
+      if (this.participantsTotal === 0) return 0;
       return (this.localPage - 1) * this.localPageSize + 1;
     },
     rowEnd() {
-      return Math.min(this.localPage * this.localPageSize, this.filteredParticipants.length);
+      return Math.min(this.localPage * this.localPageSize, this.participantsTotal || 0);
     },
     pagedParticipants() {
-      const start = (this.localPage - 1) * this.localPageSize;
-      return this.filteredParticipants.slice(start, start + this.localPageSize);
+      // The server already returns one page — don't slice again, or pages
+      // beyond the first would render empty.
+      return this.filteredParticipants;
     },
     bannerUrl() {
       if (!this.event.banner_image) return '';
