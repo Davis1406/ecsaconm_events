@@ -54,6 +54,13 @@
         <ChartPieIcon class="w-4 h-4" />
         Visual Report
       </button>
+
+      <button @click="activeTab = 'confirmation_results'; loadConfirmationResults()"
+        class="pb-3 flex items-center gap-2 whitespace-nowrap px-1 text-sm font-semibold border-b-2 transition-colors"
+        :class="activeTab === 'confirmation_results' ? 'border-brand text-brand' : 'border-transparent text-on-surface-variant hover:text-on-surface'">
+        <EnvelopeIcon class="w-4 h-4" />
+        Confirmation Results
+      </button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════ -->
@@ -813,6 +820,90 @@
       </template>
     </div>
 
+    <!-- TAB 6 · Confirmation Results                                          -->
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <div v-if="activeTab === 'confirmation_results'" class="flex flex-col gap-6">
+      <SpinnerComponent v-if="confirmationResults.loading" />
+      <template v-else>
+
+        <!-- Summary cards -->
+        <div class="grid sm:grid-cols-4 gap-4">
+          <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+            <p class="text-2xl font-bold text-on-surface">{{ confirmationResults.total }}</p>
+            <p class="text-xs text-on-surface-variant uppercase tracking-wide mt-0.5">Forms Sent</p>
+          </div>
+          <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+            <p class="text-2xl font-bold text-green-600">{{ confirmationResults.attending }}</p>
+            <p class="text-xs text-on-surface-variant uppercase tracking-wide mt-0.5">Will Attend</p>
+          </div>
+          <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+            <p class="text-2xl font-bold" style="color: rgb(254,80,103);">{{ confirmationResults.notAttending }}</p>
+            <p class="text-xs text-on-surface-variant uppercase tracking-wide mt-0.5">Won't Attend</p>
+          </div>
+          <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl p-5">
+            <p class="text-2xl font-bold text-yellow-600">{{ confirmationResults.pending }}</p>
+            <p class="text-xs text-on-surface-variant uppercase tracking-wide mt-0.5">No Response</p>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <input v-model="confirmationResults.search" type="text" placeholder="Search name or email…"
+            class="border border-outline-variant bg-surface-container-lowest rounded-xl px-3 py-2 text-sm focus:outline-none max-w-xs w-full" />
+          <div class="flex gap-2">
+            <button @click="loadConfirmationResults"
+              class="px-4 py-2 bg-surface-container text-on-surface-variant rounded-md text-sm font-medium hover:bg-surface-container-high transition">
+              Refresh
+            </button>
+            <button @click="exportConfirmationResults"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white transition hover:opacity-90"
+              style="background-color: rgb(254,80,103);">
+              <ArrowDownTrayIcon class="w-4 h-4" />
+              Export
+            </button>
+          </div>
+        </div>
+
+        <!-- Results table -->
+        <div class="bg-surface-container-lowest border border-surface-container-high rounded-xl overflow-hidden">
+          <div v-if="filteredConfirmationResults.length === 0" class="py-16 text-center">
+            <p class="text-sm text-on-surface-variant italic">No confirmation responses yet. Send the Confirmation Email from the Accepted Abstracts toolbar.</p>
+          </div>
+          <template v-else>
+            <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-on-surface-variant border-b border-surface-container-high">
+              <div class="col-span-1">#</div>
+              <div class="col-span-3">Presenter</div>
+              <div class="col-span-3">Email</div>
+              <div class="col-span-3">Abstract</div>
+              <div class="col-span-2 text-center">Response</div>
+            </div>
+            <div v-for="(r, idx) in filteredConfirmationResults" :key="r.id"
+              class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3 border-b border-surface-container-high hover:bg-surface-container-lowest/60 transition text-sm">
+              <div class="col-span-1 text-gray-400 text-xs hidden sm:block">{{ idx + 1 }}</div>
+              <div class="col-span-3 font-semibold text-on-surface">{{ [r.firstname, r.lastname].filter(Boolean).join(' ') || '—' }}</div>
+              <div class="col-span-3 text-gray-500 text-xs truncate">{{ r.email }}</div>
+              <div class="col-span-3 text-gray-500 text-xs truncate">{{ r.abstract_title }}</div>
+              <div class="col-span-2 flex justify-center">
+                <span v-if="r.response === 'attending'"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
+                  Will attend
+                </span>
+                <span v-else-if="r.response === 'not_attending'"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-600">
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                  Won't attend
+                </span>
+                <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+                  No response
+                </span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
   </div><!-- /page canvas -->
   </div><!-- /root -->
 
@@ -1125,6 +1216,7 @@ import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 import axios from 'axios'
 import { saveAs } from 'file-saver'
+import { exportToExcel } from '@/utils/exportToExcel'
 import {
   DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
   ArchiveBoxArrowDownIcon, ArrowPathIcon, EnvelopeIcon,
@@ -1206,6 +1298,12 @@ export default {
       // ── Tab 5: Visual Report ─────────────────────────────────────────────
       report: { by_track: [], uploaded: 0, not_uploaded: 0, total: 0 },
       reportLoading: false,
+
+      // ── Tab 6: Confirmation Results ─────────────────────────────────────
+      confirmationResults: {
+        loading: false, search: '', list: [],
+        total: 0, attending: 0, notAttending: 0, pending: 0,
+      },
 
       successMsg: '', errorMsg: '',
 
@@ -1305,6 +1403,15 @@ export default {
         { label: 'Paid', value: this.stats.paid ?? 0, pct: pct(this.stats.paid ?? 0), color: 'rgb(16,185,129)' },
         { label: 'Not Registered', value: this.stats.not_registered ?? 0, pct: pct(this.stats.not_registered ?? 0), color: 'rgb(220,38,38)' },
       ]
+    },
+    filteredConfirmationResults() {
+      const term = (this.confirmationResults.search || '').trim().toLowerCase()
+      const list = this.confirmationResults.list || []
+      if (!term) return list
+      return list.filter(r => {
+        const name = `${r.firstname || ''} ${r.lastname || ''}`.toLowerCase()
+        return name.includes(term) || (r.email || '').toLowerCase().includes(term)
+      })
     },
   },
 
@@ -1865,6 +1972,39 @@ export default {
         this.report = res.data
       } catch (e) { console.error('report:', e) }
       finally { this.reportLoading = false }
+    },
+
+    // ── Confirmation Results ─────────────────────────────────────────────
+    async loadConfirmationResults() {
+      this.confirmationResults.loading = true
+      try {
+        const res = await axios.get(`${this.apiUrl}/attendance-form/responses`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        const list = res.data?.data || []
+        this.confirmationResults.list = list
+        this.confirmationResults.total = list.length
+        this.confirmationResults.attending = list.filter(r => r.response === 'attending').length
+        this.confirmationResults.notAttending = list.filter(r => r.response === 'not_attending').length
+        this.confirmationResults.pending = list.filter(r => !r.response).length
+      } catch (e) {
+        console.error('confirmation results:', e)
+      } finally {
+        this.confirmationResults.loading = false
+      }
+    },
+    exportConfirmationResults() {
+      const rows = this.filteredConfirmationResults.map((r, i) => ({
+        '#': i + 1,
+        'First Name': r.firstname || '',
+        'Last Name': r.lastname || '',
+        'Email': r.email || '',
+        'Abstract': r.abstract_title || '',
+        'Response': r.response === 'attending' ? 'Will attend'
+          : r.response === 'not_attending' ? 'Will not attend' : 'No response',
+        'Responded At': r.responded_at ? new Date(r.responded_at).toLocaleString() : '',
+      }))
+      exportToExcel(rows, 'ConfirmationResults')
     },
 
     // ── Helpers ───────────────────────────────────────────────────────────
