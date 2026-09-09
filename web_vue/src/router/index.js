@@ -97,9 +97,6 @@ const routeComponents = {
   // Attendance Confirmation Form (public/web)
   AttendanceFormView: () => import("@/views/web/AttendanceForm.vue"),
 
-  // Attendance Confirmation Form (admin)
-  AttendanceFormAdminView: () => import("@/views/main/attendance/AttendanceFormAdmin.vue"),
-
   // Contact page
   ContactView: () => import("@/views/web/Contact.vue"),
 };
@@ -419,12 +416,6 @@ const routes = [
         path: "/attendance-confirmation",
         name: "AttendanceConfirmation",
         component: routeComponents.AttendanceConfirmationView,
-      },
-
-      {
-        path: "/attendance-form-admin",
-        name: "AttendanceFormAdmin",
-        component: routeComponents.AttendanceFormAdminView,
       },
     ],
   },

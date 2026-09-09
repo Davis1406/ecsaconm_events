@@ -170,6 +170,13 @@
 
         <!-- Right: actions -->
         <div class="flex items-center gap-2.5 flex-shrink-0">
+          <button @click="sendConfirmationEmails"
+            :disabled="sendingConfirmation || !stats.not_registered"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition disabled:opacity-50"
+            style="color: rgb(254,80,103); border-color: rgb(254,80,103);">
+            <EnvelopeIcon class="w-4 h-4" />
+            {{ sendingConfirmation ? 'Sending…' : 'Confirmation Email' }}
+          </button>
           <button @click="activeTab = 'reminders'"
             class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 shadow-sm"
             style="background-color: rgb(254,80,103);">
@@ -184,6 +191,16 @@
             Import
           </button>
         </div>
+      </div>
+
+      <!-- Confirmation Email result -->
+      <div v-if="confirmationResult"
+        class="mt-3 p-3 rounded-xl text-sm bg-green-50 border border-green-200 text-green-800">
+        {{ confirmationResult }}
+      </div>
+      <div v-if="confirmationError"
+        class="mt-3 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700">
+        {{ confirmationError }}
       </div>
 
       <!-- ── Import panel ──────────────────────────────────────────────── -->
@@ -997,7 +1014,7 @@ import axios from 'axios'
 import { saveAs } from 'file-saver'
 import {
   DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
-  ArchiveBoxArrowDownIcon, ArrowPathIcon,
+  ArchiveBoxArrowDownIcon, ArrowPathIcon, EnvelopeIcon,
 } from '@heroicons/vue/24/outline'
 import { PresentationChartBarIcon, BellAlertIcon, ChartPieIcon } from '@heroicons/vue/24/solid'
 
@@ -1048,6 +1065,8 @@ export default {
       // ── Tab 3: Reminders ──────────────────────────────────────────────────
       presenters: [], remindersLoading: false,
       sendingReminders: false, reminderResult: '',
+      // Attendance confirmation form (emailed to unregistered presenters)
+      sendingConfirmation: false, confirmationResult: '', confirmationError: '',
       // Reminder template editor
       reminderTplPreview: false,
       reminderTplLoading: false,
@@ -1499,6 +1518,24 @@ export default {
         this.loadPresenters()
       } catch (e) { this.errorMsg = e.response?.data?.detail || 'Failed to send reminders.' }
       finally { this.sendingReminders = false }
+    },
+
+    // Send the attendance-confirmation form (personal link) to all
+    // unregistered presenters so the secretariat can plan the programme.
+    async sendConfirmationEmails() {
+      this.sendingConfirmation = true
+      this.confirmationResult = ''
+      this.confirmationError = ''
+      try {
+        const res = await axios.post(`${this.apiUrl}/attendance-form/send`, {}, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.confirmationResult = res.data?.message || `Confirmation forms emailed to ${res.data?.sent || 0} presenter(s).`
+      } catch (e) {
+        this.confirmationError = e.response?.data?.detail || 'Failed to send confirmation emails.'
+      } finally {
+        this.sendingConfirmation = false
+      }
     },
 
     async loadReminderTemplate() {
