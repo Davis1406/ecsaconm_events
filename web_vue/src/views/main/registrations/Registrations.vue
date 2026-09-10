@@ -764,7 +764,7 @@ export default {
   methods: {
     async loadEvents() {
       try {
-        const response = await fetchData('events', 0, 200, '')
+        const response = await fetchData('events', 0, 100, '')
         this.events = response.data || []
       } catch (error) {
         console.error('Error fetching events:', error)
