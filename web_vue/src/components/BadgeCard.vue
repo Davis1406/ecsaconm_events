@@ -68,7 +68,7 @@
 
         <!-- Round photo (only when one has been uploaded) -->
         <div v-if="photoUrl" class="mt-2 flex justify-center">
-          <img :src="photoUrl" class="w-12 h-12 rounded-full object-cover border-2"
+          <img :src="photoUrl" class="w-20 h-20 rounded-full object-cover border-2"
             style="border-color: rgba(254,80,103,0.5);" />
         </div>
 

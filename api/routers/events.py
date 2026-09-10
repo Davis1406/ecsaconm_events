@@ -2450,7 +2450,7 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         c.drawString(lx + pin_s + U(4), row2_base, location)
 
     # ── Header: punch hole, logos flanking the title, fading divider ────────
-    top = U(16)
+    top = U(10)
 
     hole_w, hole_h = U(56), U(12)
     c.setFillColorRGB(15 / 255.0, 23 / 255.0, 42 / 255.0)
@@ -2460,7 +2460,7 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.setFillAlpha(0.6)
     c.roundRect(W / 2 - U(20), Y(top + hole_h / 2 + U(1)), U(40), U(2), U(1), fill=1, stroke=0)
     c.restoreState()
-    top += hole_h + U(12)
+    top += hole_h + U(8)
 
     title = _parse_badge_title(p.get("event_name") or "")
     title_h = 20                              # ordinal + org line (leading-none)
@@ -2542,11 +2542,11 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     top = row_top + row_h
 
     # Divider — fades to transparent at both ends (linear-gradient over white)
-    top += U(12)
+    top += U(8)
     _gradient_rect(c, 0, Y(top + U(2)), W, U(2), [
         (0.0, (1, 1, 1)), (0.5, tint(PINK, 0.4)), (1.0, (1, 1, 1)),
     ])
-    top += U(2) + U(4) + U(4) + U(4)   # divider, header pb-1, section pt-1, name mt-1
+    top += U(2) + U(4) + U(4) + U(2)   # divider, header pb-1, section pt-1, name mt-1
 
     # ── Name ────────────────────────────────────────────────────────────────
     full_name = re.sub(
@@ -2554,16 +2554,16 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         f"{p.get('title', '')} {p.get('firstname', '')} {p.get('middle_name', '')} {p.get('lastname', '')}".strip(),
     )
     c.setFillColorRGB(*GRAY_900)
-    c.setFont("Helvetica-Bold", U(24))
-    for line in (wrap(full_name, "Helvetica-Bold", U(24), W - U(40))[:2] or ["—"]):
-        c.drawCentredString(W / 2, line_base(top, 30, 24), line)
-        top += U(30)
+    c.setFont("Helvetica-Bold", U(22))
+    for line in (wrap(full_name, "Helvetica-Bold", U(22), W - U(40))[:2] or ["—"]):
+        c.drawCentredString(W / 2, line_base(top, 27, 22), line)
+        top += U(27)
 
     # Round profile photo between the name and the category bar (if uploaded)
     photo = p.get("photo")
     if photo and os.path.exists(photo):
         top += U(4)
-        photo_size = U(48)
+        photo_size = U(80)
         if _draw_round_photo(c, W / 2, Y(top + photo_size / 2), photo_size, photo):
             top += photo_size + U(8)
 
@@ -2571,8 +2571,8 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
 
     # ── Category bar (navy gradient, white tracked caps) ────────────────────
     bar_x, bar_w = U(20), W - U(40)
-    bar_h, bar_r = U(38), U(8)
-    bar_bottom = Y(top + U(38))
+    bar_h, bar_r = U(32), U(8)
+    bar_bottom = Y(top + U(32))
     c.saveState()
     bar_clip = c.beginPath()
     bar_clip.roundRect(bar_x, bar_bottom, bar_w, bar_h, bar_r)
@@ -2587,20 +2587,20 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.setLineWidth(U(1))
     c.roundRect(bar_x, bar_bottom, bar_w, bar_h, bar_r, fill=0, stroke=1)
     c.restoreState()
-    bar_size = U(20)
+    bar_size = U(19)
     bar_text = (p.get("participation_role") or "Delegate").upper()
     _draw_tracked(c, bar_text, W / 2 - _tracked_width(bar_text, "Helvetica-Bold", bar_size, 0.14) / 2,
                   bar_bottom + bar_h / 2 - bar_size * 0.36, "Helvetica-Bold", bar_size, (1, 1, 1), 0.14)
-    top += U(38) + U(12)   # bar + info mt-3
+    top += U(32) + U(12)   # bar + info mt-3
 
     # ── Designation pill ────────────────────────────────────────────────────
     designation = (p.get("designation") or "").strip()
     if designation:
         d_text = designation.upper()
         d_size = U(12)
-        d_h = U(22)
+        d_h = U(21)
         d_w = stringWidth(d_text, "Helvetica-Bold", d_size) + U(24)
-        d_bottom = Y(top + U(22))
+        d_bottom = Y(top + U(21))
         c.setFillColorRGB(*tint(PINK, 0.06))
         c.setStrokeColorRGB(*tint(PINK, 0.3))
         c.setLineWidth(U(1))
@@ -2616,8 +2616,8 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         c.setFillColorRGB(*GRAY_800)
         c.setFont("Helvetica-Bold", U(14))
         for line in wrap(organisation, "Helvetica-Bold", U(14), W - U(40))[:2]:
-            c.drawCentredString(W / 2, line_base(top, 19, 14), line)
-            top += U(19)
+            c.drawCentredString(W / 2, line_base(top, 18, 14), line)
+            top += U(18)
     country = (p.get("country") or "").strip()
     if country:
         top += U(4)
@@ -2625,23 +2625,23 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         c_w = stringWidth(country, "Helvetica-Bold", c_size)
         pin_s = U(14)
         block_w = pin_s + U(4) + c_w
-        base_c = line_base(top, 16, 12)
+        base_c = line_base(top, 15, 12)
         _draw_pin_icon(c, W / 2 - block_w / 2 + pin_s / 2, base_c + c_size * 0.72, pin_s, PINK)
         c.setFillColorRGB(*GRAY_500)
         c.setFont("Helvetica-Bold", c_size)
         c.drawString(W / 2 - block_w / 2 + pin_s + U(4), base_c, country)
-        top += U(16)
+        top += U(15)
 
     # ── QR code card (bordered, ID printed inside below the code) ───────────
-    top += U(8)   # section py-2
+    top += U(6)   # section py-2
     theme = (p.get("event_theme") or "").strip()
     theme_lines = wrap(f'Theme: "{theme}"', "Helvetica-Oblique", U(11), W - U(40))[:2] if theme else []
-    theme_block = (U(8) + len(theme_lines) * U(14)) if theme_lines else 0
+    theme_block = (U(6) + len(theme_lines) * U(13)) if theme_lines else 0
 
-    card_pad = U(10)
-    id_block = U(20)   # ID label mt-1.5 + line
+    card_pad = U(8)
+    id_block = U(18)   # ID label mt-1.5 + line
     available = (H - footer_h) - top - U(8) - theme_block
-    qr_size = max(U(40), min(U(96), available - card_pad * 2 - id_block))
+    qr_size = max(U(36), min(U(96), available - card_pad * 2 - id_block))
     card_w = qr_size + card_pad * 2
     card_h = qr_size + card_pad * 2 + id_block
     card_x = (W - card_w) / 2
@@ -2669,7 +2669,7 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
 
     # ── Theme ───────────────────────────────────────────────────────────────
     if theme_lines:
-        top += U(8)   # theme mt-2
+        top += U(6)   # theme mt-2
         th_size = U(11)
         for i, line in enumerate(theme_lines):
             base = line_base(top, 14, 11)
@@ -2687,8 +2687,8 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
                 c.setFillColorRGB(*GRAY_500)
                 c.setFont("Helvetica-Oblique", th_size)
                 c.drawCentredString(W / 2, base, line)
-            top += U(14)
-    top += U(8)   # section py-2 bottom
+            top += U(13)
+    top += U(6)   # section py-2 bottom
 
 
 def _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
