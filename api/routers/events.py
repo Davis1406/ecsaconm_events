@@ -1701,17 +1701,16 @@ def _render_qr_flyer(c, event_name, label, title_text, instruction, file_url, lo
     c.setFillColorRGB(*RED)
     c.rect(0, 0, W, 6 * mm, fill=1, stroke=0)
 
-    # ECSA / ECSACONM logos, side by side just below the top bar — same
-    # circle treatment as the badge PDF (ECSA: white w/ pink border; right
-    # logo: solid brand-red circle).
+    # ECSA / ECSACONM logos, pinned to the outer margins just below the top
+    # bar — same circle treatment as the badge PDF (ECSA: white w/ pink
+    # border; right logo: solid brand-red circle).
     logos_reserved = 0
     if logo_left or logo_right:
         logo_d = 26 * mm
-        gap_between = 10 * mm
-        total_w = logo_d * 2 + gap_between
-        left_cx = W / 2 - total_w / 2 + logo_d / 2
-        right_cx = W / 2 + total_w / 2 - logo_d / 2
-        logo_cy = H - 10 * mm - 8 * mm - logo_d / 2
+        margin = 24 * mm
+        left_cx = margin + logo_d / 2
+        right_cx = W - margin - logo_d / 2
+        logo_cy = H - 10 * mm - 6 * mm - logo_d / 2
         img_size = logo_d - 4 * mm
 
         if logo_left:
@@ -1732,7 +1731,7 @@ def _render_qr_flyer(c, event_name, label, title_text, instruction, file_url, lo
             c.drawImage(logo_right, right_cx - img_size / 2, logo_cy - img_size / 2, img_size, img_size,
                         preserveAspectRatio=True, mask="auto")
 
-        logos_reserved = 8 * mm + logo_d + 8 * mm  # gap + logo + gap before the text block
+        logos_reserved = 6 * mm + logo_d + 8 * mm  # gap + logo + gap before the text block
 
     event_name = (event_name or "").strip()
     qr_size = 130 * mm
@@ -1897,6 +1896,47 @@ async def get_onsite_registration_qr_flyer(
         buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{safe_name}_Onsite_Registration_QR.pdf"'},
+    )
+
+
+@router.get("/{event_id}/registration/qr")
+async def get_online_registration_qr_flyer(
+    event_id: int,
+    user: user_dependency,
+    db: Session = Depends(get_db),
+):
+    """A4 flyer PDF with a QR code linking to this event's public online
+    registration form — print/share to drive self-service sign-ups."""
+    event = get_object(event_id, db, Event)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    file_url = f"{CLIENT_ORIGIN}/#/register/{event_id}"
+
+    logo_left = convert_png_to_rgb("assets/logo_left.png")
+    logo_right = convert_png_to_rgb("assets/logo.png")
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _render_qr_flyer(
+        c,
+        getattr(event, "event", None),
+        "Online Registration",
+        "Register for This Event",
+        "Scan with your phone camera to register online:",
+        file_url,
+        logo_left,
+        logo_right,
+    )
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", getattr(event, "event", None) or f"event_{event_id}").strip("_") or f"event_{event_id}"
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}_Registration_QR.pdf"'},
     )
 
 

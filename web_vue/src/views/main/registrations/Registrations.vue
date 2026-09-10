@@ -25,6 +25,13 @@
             <option value="without">Without Proof</option>
             <option value="pending">Proof Pending (not paid)</option>
           </select>
+          <button @click="downloadRegistrationQr" :disabled="!selectedEventId"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border-2 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            style="border-color: rgb(254,80,103); color: rgb(254,80,103);"
+            title="Select an event above, then download a printable QR linking to its online registration form">
+            <QrCodeIcon class="w-4 h-4" />
+            Registration QR
+          </button>
         </div>
       </div>
 
@@ -664,13 +671,14 @@ import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData, fetchDataWithParams, updateItem } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 import { DocumentTextIcon } from '@heroicons/vue/24/outline'
+import { QrCodeIcon } from '@heroicons/vue/24/solid'
 
 const API_URL = import.meta.env.VITE_API_URL
 
 export default {
   name: 'RegistrationsView',
   components: {
-    PaginationComponent, SearchComponent, HeaderView, SpinnerComponent, DocumentTextIcon,
+    PaginationComponent, SearchComponent, HeaderView, SpinnerComponent, DocumentTextIcon, QrCodeIcon,
   },
   data() {
     return {
@@ -866,6 +874,29 @@ export default {
         this.showToast(error.response?.data?.detail || 'Bulk update failed.', 'error')
       } finally {
         this.bulkSaving = false
+      }
+    },
+
+    async downloadRegistrationQr() {
+      // A4 flyer with a QR code linking to the selected event's public
+      // online registration form — print/share to drive self-service sign-ups.
+      if (!this.selectedEventId) return
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.get(`/events/${this.selectedEventId}/registration/qr`, { responseType: 'blob' })
+        const url = window.URL.createObjectURL(res.data)
+        const a = document.createElement('a')
+        a.href = url
+        const eventName = this.events.find(e => e.id === this.selectedEventId)?.event || 'event'
+        a.download = `${String(eventName).replace(/\s+/g, '_')}_Registration_QR.pdf`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.URL.revokeObjectURL(url)
+      } catch (error) {
+        this.showToast(error.response?.data?.detail || 'Failed to generate registration QR.', 'error')
       }
     },
 
