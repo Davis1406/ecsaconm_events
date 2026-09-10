@@ -36,6 +36,9 @@ for arg in "$@"; do
   esac
 done
 
+DRY_LABEL=""
+[ "$DRY_RUN" = "1" ] && DRY_LABEL="[dry-run] "
+
 if [ ! -f "$KEY" ]; then
   echo "Deploy key not found at $KEY" >&2
   echo "Set ECSACONM_DEPLOY_KEY to override, or check the key was downloaded." >&2
@@ -98,7 +101,7 @@ sync_dir() {
 
 deploy_api() {
   check_clean api
-  echo "==> ${DRY_RUN:+[dry-run] }Syncing api/ to $HOST:$REMOTE_ROOT/api/ ..."
+  echo "==> ${DRY_LABEL}Syncing api/ to $HOST:$REMOTE_ROOT/api/ ..."
   sync_dir "$REPO_ROOT/api" "$REMOTE_ROOT/api" 0 \
     venv .env uploads __pycache__ '*.pyc'
 
@@ -122,7 +125,7 @@ deploy_web() {
   echo "==> Building web_vue..."
   (cd "$REPO_ROOT/web_vue" && npm run build)
 
-  echo "==> ${DRY_RUN:+[dry-run] }Syncing web_vue/dist/ to $HOST:$REMOTE_ROOT/web_vue/dist/ ..."
+  echo "==> ${DRY_LABEL}Syncing web_vue/dist/ to $HOST:$REMOTE_ROOT/web_vue/dist/ ..."
   sync_dir "$REPO_ROOT/web_vue/dist" "$REMOTE_ROOT/web_vue/dist" 1
 
   if [ "$DRY_RUN" = "1" ]; then

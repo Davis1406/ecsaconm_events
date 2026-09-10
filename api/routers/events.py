@@ -130,11 +130,16 @@ def format_badge_category(role_key: str) -> str:
 
 
 def convert_png_to_rgb(path):
+    """Load a badge logo for ReportLab, preserving any alpha channel.
+
+    Callers draw with ``mask="auto"``, which embeds a PNG's transparency as a
+    soft mask — so transparent areas let the circle behind the logo show
+    through instead of painting a white box (the ECSACONM logo sits on a solid
+    red circle, where a flattened white background is very visible).
+    """
     img = Image.open(path)
-    if img.mode in ("RGBA", "LA"):
-        background = Image.new("RGB", img.size, (255, 255, 255))
-        background.paste(img, mask=img.split()[3])  # Use alpha channel as mask
-        return ImageReader(background)
+    if img.mode == "P":
+        img = img.convert("RGBA")
     return ImageReader(img)
 
 
