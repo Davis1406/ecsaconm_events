@@ -135,7 +135,7 @@
         <search-component @search="handleSearch" />
 
         <!-- Visual Reports -->
-        <button @click="showReportsModal = true"
+        <button @click="openReports()"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
           <ChartBarIcon class="w-4 h-4" />
@@ -637,6 +637,14 @@
         </div>
 
         <div class="flex-1 overflow-y-auto p-5 space-y-6">
+          <div v-if="reportLoading" class="py-16 text-center">
+            <svg class="animate-spin w-6 h-6 mx-auto text-gray-300" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            <p class="text-xs text-gray-400 mt-2">Loading report…</p>
+          </div>
+          <template v-else>
 
           <!-- Payment Status -->
           <div>
@@ -656,13 +664,13 @@
               </div>
             </div>
             <!-- Bar chart -->
-            <div class="space-y-2" v-if="participants.length > 0">
+            <div class="space-y-2" v-if="reportTotal > 0">
               <div class="flex items-center gap-3">
                 <span class="text-xs text-gray-500 w-16 text-right flex-shrink-0">Paid</span>
                 <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
                   <div class="h-full rounded-full bg-green-500 transition-all duration-500 flex items-center justify-end pr-2"
-                    :style="{ width: (paidCount / participants.length * 100) + '%' }">
-                    <span v-if="paidCount > 0" class="text-white text-xs font-bold">{{ Math.round(paidCount / participants.length * 100) }}%</span>
+                    :style="{ width: (paidCount / reportTotal * 100) + '%' }">
+                    <span v-if="paidCount > 0" class="text-white text-xs font-bold">{{ Math.round(paidCount / reportTotal * 100) }}%</span>
                   </div>
                 </div>
                 <span class="text-xs font-semibold text-gray-600 w-8">{{ paidCount }}</span>
@@ -671,11 +679,11 @@
                 <span class="text-xs text-gray-500 w-16 text-right flex-shrink-0">Pending</span>
                 <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
                   <div class="h-full rounded-full bg-yellow-400 transition-all duration-500 flex items-center justify-end pr-2"
-                    :style="{ width: ((participants.length - paidCount) / participants.length * 100) + '%' }">
-                    <span v-if="(participants.length - paidCount) > 0" class="text-white text-xs font-bold">{{ Math.round((participants.length - paidCount) / participants.length * 100) }}%</span>
+                    :style="{ width: ((reportTotal - paidCount) / reportTotal * 100) + '%' }">
+                    <span v-if="(reportTotal - paidCount) > 0" class="text-white text-xs font-bold">{{ Math.round((reportTotal - paidCount) / reportTotal * 100) }}%</span>
                   </div>
                 </div>
-                <span class="text-xs font-semibold text-gray-600 w-8">{{ participants.length - paidCount }}</span>
+                <span class="text-xs font-semibold text-gray-600 w-8">{{ reportTotal - paidCount }}</span>
               </div>
             </div>
           </div>
@@ -726,7 +734,7 @@
             <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Proof Submitted</p>
             <div class="grid grid-cols-3 gap-3 mb-4">
               <div class="text-center p-3 rounded-xl bg-gray-50">
-                <p class="text-2xl font-bold text-gray-800">{{ participants.length }}</p>
+                <p class="text-2xl font-bold text-gray-800">{{ reportTotal }}</p>
                 <p class="text-xs text-gray-400 mt-0.5">Total</p>
               </div>
               <div class="text-center p-3 rounded-xl bg-blue-50">
@@ -738,13 +746,13 @@
                 <p class="text-xs text-gray-400 mt-0.5">No Proof</p>
               </div>
             </div>
-            <div class="space-y-2" v-if="participants.length > 0">
+            <div class="space-y-2" v-if="reportTotal > 0">
               <div class="flex items-center gap-3">
                 <span class="text-xs text-gray-500 w-20 text-right flex-shrink-0">With proof</span>
                 <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
                   <div class="h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
-                    :style="{ width: (withPaymentProof.length / participants.length * 100) + '%', backgroundColor: 'rgb(254,80,103)' }">
-                    <span v-if="withPaymentProof.length > 0" class="text-white text-xs font-bold">{{ Math.round(withPaymentProof.length / participants.length * 100) }}%</span>
+                    :style="{ width: (withPaymentProof.length / reportTotal * 100) + '%', backgroundColor: 'rgb(254,80,103)' }">
+                    <span v-if="withPaymentProof.length > 0" class="text-white text-xs font-bold">{{ Math.round(withPaymentProof.length / reportTotal * 100) }}%</span>
                   </div>
                 </div>
                 <span class="text-xs font-semibold text-gray-600 w-8">{{ withPaymentProof.length }}</span>
@@ -753,8 +761,8 @@
                 <span class="text-xs text-gray-500 w-20 text-right flex-shrink-0">No proof</span>
                 <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
                   <div class="h-full rounded-full bg-yellow-400 transition-all duration-500 flex items-center justify-end pr-2"
-                    :style="{ width: (withoutPaymentProofCount / participants.length * 100) + '%' }">
-                    <span v-if="withoutPaymentProofCount > 0" class="text-white text-xs font-bold">{{ Math.round(withoutPaymentProofCount / participants.length * 100) }}%</span>
+                    :style="{ width: (withoutPaymentProofCount / reportTotal * 100) + '%' }">
+                    <span v-if="withoutPaymentProofCount > 0" class="text-white text-xs font-bold">{{ Math.round(withoutPaymentProofCount / reportTotal * 100) }}%</span>
                   </div>
                 </div>
                 <span class="text-xs font-semibold text-gray-600 w-8">{{ withoutPaymentProofCount }}</span>
@@ -797,8 +805,8 @@
                 <span class="text-xs text-gray-500 w-28 text-right flex-shrink-0 truncate">{{ cat.label }}</span>
                 <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
                   <div class="h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
-                    :style="{ width: (cat.count / participants.length * 100) + '%', backgroundColor: 'rgb(254,80,103)' }">
-                    <span v-if="cat.count > 0" class="text-white text-xs font-bold">{{ Math.round(cat.count / participants.length * 100) }}%</span>
+                    :style="{ width: (cat.count / reportTotal * 100) + '%', backgroundColor: 'rgb(254,80,103)' }">
+                    <span v-if="cat.count > 0" class="text-white text-xs font-bold">{{ Math.round(cat.count / reportTotal * 100) }}%</span>
                   </div>
                 </div>
                 <span class="text-xs font-semibold text-gray-600 w-8">{{ cat.count }}</span>
@@ -822,6 +830,7 @@
               </div>
             </div>
           </div>
+          </template>
 
         </div>
       </div>
@@ -901,6 +910,8 @@ export default {
       showProofModal: false,
       proofUrl: '',
       showReportsModal: false,
+      reportParticipants: [],
+      reportLoading: false,
       // Tabs
       activeTab: 'participants',
       // Documents
@@ -969,10 +980,10 @@ export default {
       return this.participantsTotal || this.participants.length;
     },
     abstractPresenters() {
-      return this.participants.filter(p => p.is_abstract_presenter);
+      return this.reportParticipants.filter(p => p.is_abstract_presenter);
     },
     regularParticipants() {
-      return this.participants.filter(p => !p.is_abstract_presenter);
+      return this.reportParticipants.filter(p => !p.is_abstract_presenter);
     },
     presenterPaidCount() {
       return this.abstractPresenters.filter(p => this.paidStatus(p.paid || p.event_payment)).length;
@@ -987,10 +998,13 @@ export default {
       return this.regularParticipants.filter(p => !this.paidStatus(p.paid || p.event_payment)).length;
     },
     withPaymentProof() {
-      return this.participants.filter(p => p.payment_proof);
+      return this.reportParticipants.filter(p => p.payment_proof);
     },
     withoutPaymentProofCount() {
-      return this.participants.length - this.withPaymentProof.length;
+      return this.reportParticipants.length - this.withPaymentProof.length;
+    },
+    reportTotal() {
+      return this.reportParticipants.length;
     },
     filteredParticipants() {
       // Search + filter are applied server-side, so the loaded page is already
@@ -1045,7 +1059,7 @@ export default {
     },
     categoryStats() {
       const counts = {};
-      this.participants.forEach(p => {
+      this.reportParticipants.forEach(p => {
         const raw = p.participant_category || p.participation_role || 'Unknown';
         const label = CATEGORY_MAP[raw] || raw || 'Unknown';
         counts[label] = (counts[label] || 0) + 1;
@@ -1056,7 +1070,7 @@ export default {
     },
     countryStats() {
       const counts = {};
-      this.participants.forEach(p => {
+      this.reportParticipants.forEach(p => {
         const c = p.country || 'Unknown';
         counts[c] = (counts[c] || 0) + 1;
       });
@@ -1131,6 +1145,42 @@ export default {
     handleAttendance() {
       this.getEvent();
       exportToExcel(this.attendance, 'AttendanceRegister');
+    },
+    async fetchAllEventParticipants() {
+      // Full event roster (all pages), used by the visual report so its
+      // figures reflect the whole event rather than the current page.
+      const api = axios.create({ baseURL: API_URL });
+      if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+      const pageSize = 200;
+      const collected = [];
+      let skip = 0;
+      while (true) {
+        const res = await api.get(`/events/${this.id}`, {
+          params: {
+            participant_skip: skip,
+            participant_limit: pageSize,
+            participant_filter: 'all',
+            participant_search: '',
+          },
+        });
+        const batch = res.data.participants || [];
+        collected.push(...batch);
+        const total = res.data.participants_total_all ?? collected.length;
+        if (batch.length < pageSize || collected.length >= total) break;
+        skip += pageSize;
+      }
+      return collected;
+    },
+    async openReports() {
+      this.showReportsModal = true;
+      this.reportLoading = true;
+      try {
+        this.reportParticipants = await this.fetchAllEventParticipants();
+      } catch (error) {
+        console.error('Error loading report data:', error);
+      } finally {
+        this.reportLoading = false;
+      }
     },
     filterLabelForExport() {
       const labels = {
