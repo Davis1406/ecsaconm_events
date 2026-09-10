@@ -217,6 +217,23 @@
         </button>
       </div>
 
+      <!-- Badge selection bar -->
+      <div v-if="permissions.includes('PRINT_BADGE') && participantsFilteredTotal > 0"
+        class="flex flex-wrap items-center gap-3 px-5 py-2 border-b border-gray-100 text-xs text-gray-500">
+        <span v-if="selectedBadgeIds.length" class="font-semibold text-gray-700">
+          {{ selectedBadgeIds.length }} selected
+        </span>
+        <span v-else>Select participants to export badges</span>
+        <button v-if="!allFilteredSelected" @click="selectAllAcrossPages" :disabled="selectingAll"
+          class="font-semibold hover:underline disabled:opacity-50" style="color: rgb(254,80,103);">
+          {{ selectingAll ? 'Selecting…' : `Select all ${participantsFilteredTotal} across pages` }}
+        </button>
+        <button v-if="selectedBadgeIds.length" @click="clearBadgeSelection"
+          class="font-semibold text-gray-500 hover:text-gray-700">
+          Clear
+        </button>
+      </div>
+
       <!-- Table header -->
       <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
         <div class="col-span-1 flex items-center gap-2">
@@ -1107,6 +1124,7 @@ export default {
       selectedBadgeIds: [],
       showBulkBadgePreview: false,
       badgesDownloading: false,
+      selectingAll: false,
       showBulkUploadParticipantsModal: false,
       showReceiptModal: false,
       successMsg: "",
@@ -1246,6 +1264,10 @@ export default {
     allPageBadgesSelected() {
       const pageIds = this.pagedParticipants.map(p => p.id);
       return pageIds.length > 0 && pageIds.every(id => this.selectedBadgeIds.includes(id));
+    },
+    allFilteredSelected() {
+      return this.participantsFilteredTotal > 0
+        && this.selectedBadgeIds.length >= this.participantsFilteredTotal;
     },
     selectedBadgeParticipants() {
       return this.participants.filter(p => this.selectedBadgeIds.includes(p.id));
@@ -1667,6 +1689,18 @@ export default {
     },
     clearBadgeSelection() {
       this.selectedBadgeIds = [];
+    },
+    async selectAllAcrossPages() {
+      this.selectingAll = true;
+      try {
+        const all = await this.fetchAllParticipantsForFilter();
+        this.selectedBadgeIds = all.map(p => p.id);
+      } catch (error) {
+        console.error('Select all across pages failed:', error);
+        this.errorMsg = 'Could not select all participants.';
+      } finally {
+        this.selectingAll = false;
+      }
     },
     badgeQrValue(participant) {
       const base = import.meta.env.VITE_APP_URL || window.location.origin;
