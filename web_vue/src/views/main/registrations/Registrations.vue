@@ -761,11 +761,13 @@ export default {
   },
   mounted() {
     const q = this.$route.query
-    this.searchPhrase = q.search || ''
-    this.paidFilter = q.paid || 'all'
-    this.proofFilter = q.proof || 'all'
-    this.selectedEventId = q.event ? String(q.event) : ''
-    this.currentPage = parseInt(q.page, 10) || 1
+    const hasQuery = !!(q.search || q.paid || q.proof || q.event || q.page)
+    const s = hasQuery ? null : this.restoreSession()
+    this.searchPhrase = q.search || s?.search || ''
+    this.paidFilter = q.paid || s?.paid || 'all'
+    this.proofFilter = q.proof || s?.proof || 'all'
+    this.selectedEventId = q.event ? String(q.event) : (s?.event || '')
+    this.currentPage = parseInt(q.page || s?.page, 10) || 1
     this.loadEvents()
     this.loadRegistrations()
     document.addEventListener('click', this.closeMenu)
@@ -790,6 +792,26 @@ export default {
       if (this.selectedEventId) q.event = this.selectedEventId
       if (this.currentPage > 1) q.page = String(this.currentPage)
       this.$router.replace({ query: q })
+      this.persistSession(q)
+    },
+    persistSession(q) {
+      try {
+        sessionStorage.setItem('ecsa_registrations_session', JSON.stringify({
+          search: q.search || '',
+          paid: q.paid || 'all',
+          proof: q.proof || 'all',
+          event: q.event || '',
+          page: q.page || '1',
+        }))
+      } catch (e) { /* ignore */ }
+    },
+    restoreSession() {
+      try {
+        const raw = sessionStorage.getItem('ecsa_registrations_session')
+        return raw ? JSON.parse(raw) : null
+      } catch (e) {
+        return null
+      }
     },
     async loadRegistrations() {
       this.isLoading = true

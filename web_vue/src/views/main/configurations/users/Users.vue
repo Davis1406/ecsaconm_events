@@ -162,8 +162,10 @@ export default {
   },
   mounted() {
     const q = this.$route.query
-    this.searchPhrase = q.search || ''
-    this.currentPage = parseInt(q.page, 10) || 1
+    const hasQuery = !!(q.search || q.page)
+    const s = hasQuery ? null : this.restoreSession()
+    this.searchPhrase = q.search || s?.search || ''
+    this.currentPage = parseInt(q.page || s?.page, 10) || 1
     this.getUsers()
   },
   methods: {
@@ -172,6 +174,23 @@ export default {
       if (this.searchPhrase) q.search = this.searchPhrase
       if (this.currentPage > 1) q.page = String(this.currentPage)
       this.$router.replace({ query: q })
+      this.persistSession(q)
+    },
+    persistSession(q) {
+      try {
+        sessionStorage.setItem('ecsa_users_session', JSON.stringify({
+          search: q.search || '',
+          page: q.page || '1',
+        }))
+      } catch (e) { /* ignore */ }
+    },
+    restoreSession() {
+      try {
+        const raw = sessionStorage.getItem('ecsa_users_session')
+        return raw ? JSON.parse(raw) : null
+      } catch (e) {
+        return null
+      }
     },
     formatDate(dateString) {
       if (!dateString) return '—'
