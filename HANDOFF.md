@@ -41,6 +41,7 @@ Everything below is **committed and deployed** to production unless flagged
 | `d362446` | **Attendance page reworked**: removed the event-day filter so any scan (incl. pre-event test scans) previews; background polling is silent (no spinner flash). Added **admin delete controls** — per-row delete of a participant's records and a "Clear All" button backed by new `DELETE /event_attendance/events/{event_id}/attendance`. Both delete endpoints now require `ADMIN_DASHBOARD`. Deleted stale Aug 21 test record. |
 | `54c66fb` | Attendance table now **lists only scanned participants** (not all registrations) and day columns include any attendance date outside the event range (e.g. 11 Sept test scans), so each person's attended dates show checked. |
 | `ba11771` | Attendance page now **fetches every page of registrations** (event has 664, was capped at 500) so the Registered/Absent stats are correct and scanned participants beyond the first page appear. |
+| `43e2c21` | **List session preserved across navigation** — Registrations & Users lists keep page/search/filters in sessionStorage (in addition to the route query), so returning from a participant's profile restores the exact page reached instead of resetting to page 1. |
 
 ## Production data changes
 
