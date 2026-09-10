@@ -322,32 +322,35 @@ async def scan_registration(
 ):
     """Public — called when a badge QR code is scanned."""
     from datetime import date
-    from sqlalchemy import Date as SADate
-    from models.models import EventAttendance
+    from models.models import EventAttendance, UserProfile
 
-    registration = db.query(Registration).filter(Registration.id == registration_id).first()
+    registration = (
+        db.query(Registration)
+        .options(
+            joinedload(Registration.user).joinedload(User.user_profile).joinedload(UserProfile.country),
+            joinedload(Registration.events),
+        )
+        .filter(Registration.id == registration_id)
+        .first()
+    )
     if not registration:
         raise HTTPException(status_code=404, detail="Registration not found")
 
     user = registration.user
-    event = db.query(Event).filter(Event.id == registration.event_id).first()
+    event = registration.events
     profile = user.user_profile[0] if user and user.user_profile else None
     country = profile.country.country if profile and profile.country else None
 
     today = date.today()
-    today_attendance = (
-        db.query(EventAttendance)
-        .filter(
-            EventAttendance.registration_id == registration_id,
-            EventAttendance.created_at.cast(SADate) == today,
-        )
-        .first()
-    )
     all_attendance = (
         db.query(EventAttendance)
         .filter(EventAttendance.registration_id == registration_id)
-        .order_by(EventAttendance.created_at.desc())
+        .order_by(EventAttendance.attendance_date.desc())
         .all()
+    )
+    today_attendance = next(
+        (a for a in all_attendance if a.created_at and a.created_at.date() == today),
+        None,
     )
     role_key = (
         registration.participation_role.name

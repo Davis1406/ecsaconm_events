@@ -271,8 +271,14 @@ export default {
         })
         this.attendanceSuccess = true
         this.registeredToday = true
-        // Refresh to get updated history
-        setTimeout(() => this.loadScanData(), 1200)
+        // Update the history locally instead of re-fetching (faster at the gate)
+        if (this.scanData.attendance) {
+          this.scanData.attendance.records.push({
+            date: new Date().toISOString().slice(0, 10),
+            id: res.data?.id || Date.now(),
+          })
+          this.scanData.attendance.total_days = this.scanData.attendance.records.length
+        }
       } catch (e) {
         const detail = e.response?.data?.detail || 'Failed to register attendance.'
         if (detail.toLowerCase().includes('already')) {
