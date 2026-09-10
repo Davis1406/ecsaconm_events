@@ -31,6 +31,7 @@ Everything below is **committed and deployed** to production unless flagged
 | `664f809` | **Search session persistence**: Registrations & Users lists write search/page/filters to the route query and restore them on mount — searching, opening a single view, and going back keeps the search. `SearchComponent` accepts a controlled `value` prop. |
 | `df0dfb5` | **Removed the badge "ID #…" label** and enlarged the QR to fill its card: photo badges ~26mm, no-photo ~46mm (max). Preview QR mirrors the print (80px with photo, 120px default). |
 | `56d5b80` | PDF profile photo **centre-cropped to fill the circle** (object-cover, like the preview); QR card padding reduced (~1.6mm) so the QR sits with a small margin — photo badges ~29mm. |
+| `5f9fc02` | **Role-coloured badge category bars**: only the category bar changes per role — delegates keep navy, secretariat=green, media=amber, exhibitor=teal, usher=blue (others default to navy). Mirrored in the preview via `badgeCategoryGradient()`. Added **Media + Usher** to the `ParticipationRole` enum, admin/public role lists, Excel import map and display maps (migration `f1a2b3c4d5e6` extends the MySQL ENUM). |
 
 ## Production data changes
 
