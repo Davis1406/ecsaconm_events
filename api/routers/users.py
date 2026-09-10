@@ -238,6 +238,10 @@ async def get_user(
         "events": [
             {
                 "id": event.events.id,
+                "registration_id": event.id,
+                "participation_role": (
+                    event.participation_role.name if event.participation_role else None
+                ),
                 "event": event.events.event,
                 "country_id": event.events.country_id,
                 "country": event.events.country.country if event.events.country else None,

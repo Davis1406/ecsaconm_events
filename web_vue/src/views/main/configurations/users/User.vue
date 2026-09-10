@@ -34,6 +34,12 @@
               style="background-color: rgb(254,80,103);">
               Edit
             </router-link>
+            <button v-if="permissions.includes('VIEW_REGISTRATIONS') || permissions.includes('ADMIN_DASHBOARD')"
+              @click="openEditParticipant"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium border transition hover:bg-pink-50"
+              style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+              Edit Participant
+            </button>
             <button v-if="canImpersonate"
               @click="impersonateUser"
               :disabled="impersonating"
@@ -164,13 +170,99 @@
 
       </div>
     </div>
+
+    <!-- Edit participant modal -->
+    <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-gray-800">Edit Participant</h3>
+          <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-5 space-y-4">
+          <label v-if="userEvents.length > 1" class="block">
+            <span class="block text-xs font-semibold text-gray-500 mb-1">Event registration</span>
+            <select v-model.number="editForm.registration_id" @change="onRegistrationChange"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400">
+              <option v-for="e in userEvents" :key="e.registration_id" :value="e.registration_id">{{ e.event }}</option>
+            </select>
+          </label>
+
+          <div class="grid sm:grid-cols-2 gap-4">
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Title</span>
+              <input v-model="editForm.title" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">First name</span>
+              <input v-model="editForm.firstname" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Last name</span>
+              <input v-model="editForm.lastname" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Phone</span>
+              <input v-model="editForm.phone" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Designation</span>
+              <input v-model="editForm.designation" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Organisation</span>
+              <input v-model="editForm.organisation" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Country</span>
+              <select v-model.number="editForm.country_id"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400">
+                <option :value="null">—</option>
+                <option v-for="c in editCountries" :key="c.id" :value="c.id">{{ c.country }}</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Participation role</span>
+              <select v-model="editForm.participation_role"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400">
+                <option v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</option>
+              </select>
+            </label>
+          </div>
+
+          <p v-if="editError" class="text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600">{{ editError }}</p>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button @click="showEditModal = false"
+            class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <button @click="saveEditParticipant" :disabled="editSaving"
+            class="px-4 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ editSaving ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import HeaderView from '@/includes/Header.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
-import { fetchItem, createItem, fetchData, deleteItemWithBody, setAuthToken } from '@/services/apiService'
+import { fetchItem, createItem, fetchData, deleteItemWithBody, setAuthToken, updateItem } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -190,6 +282,38 @@ export default {
       message: '',
       messageType: 'success',
       impersonating: false,
+      // Edit participant
+      userEvents: [],
+      showEditModal: false,
+      editSaving: false,
+      editError: '',
+      editCountries: [],
+      editForm: {
+        registration_id: null,
+        title: '',
+        firstname: '',
+        lastname: '',
+        phone: '',
+        designation: '',
+        organisation: '',
+        country_id: null,
+        participation_role: '',
+      },
+      roleOptions: [
+        { value: 'secretariat', label: 'Secretariat' },
+        { value: 'delegate', label: 'Delegate' },
+        { value: 'presenter', label: 'Presenter' },
+        { value: 'speaker', label: 'Speaker' },
+        { value: 'sponsor', label: 'Sponsor' },
+        { value: 'moderator', label: 'Moderator' },
+        { value: 'participant', label: 'Participant' },
+        { value: 'student', label: 'Student' },
+        { value: 'exhibitor', label: 'Exhibitor' },
+        { value: 'world', label: 'International' },
+        { value: 'other_africa', label: 'Other Africa' },
+        { value: 'member_state', label: 'Member State' },
+        { value: 'moh', label: 'Ministry of Health' },
+      ],
     }
   },
   setup() {
@@ -223,6 +347,7 @@ export default {
         const response = await fetchItem('users', this.id)
         this.user = response.user || {}
         this.profile = response.profile || {}
+        this.userEvents = response.events || []
         this.assignedRoles = response.user?.roles || response.roles || []
         const pic = response.profile_picture?.profile_picture
         if (pic) this.profilePictureUrl = `${API_URL}/${pic}`
@@ -280,6 +405,64 @@ export default {
         this.showMessage('Password reset and sent to email.', 'success')
       } catch (error) {
         this.showMessage('Failed to reset password.', 'error')
+      }
+    },
+    async openEditParticipant() {
+      if (!this.userEvents.length) {
+        this.showMessage('This user has no event registration to edit.', 'error')
+        return
+      }
+      const first = this.userEvents[0]
+      this.editForm = {
+        registration_id: first.registration_id,
+        title: this.profile.title || '',
+        firstname: this.user.firstname || '',
+        lastname: this.user.lastname || '',
+        phone: this.user.phone || '',
+        designation: this.profile.designation || '',
+        organisation: this.profile.organisation || '',
+        country_id: this.profile.country_id || null,
+        participation_role: first.participation_role || 'delegate',
+      }
+      this.editError = ''
+      this.showEditModal = true
+      await this.loadEditCountries()
+    },
+    onRegistrationChange() {
+      const ev = this.userEvents.find(e => e.registration_id === this.editForm.registration_id)
+      if (ev) this.editForm.participation_role = ev.participation_role || 'delegate'
+    },
+    async loadEditCountries() {
+      if (this.editCountries.length) return
+      try {
+        const res = await fetchData('countries', 0, 500, '')
+        this.editCountries = res.data || []
+      } catch (error) {
+        console.error('Error fetching countries:', error)
+      }
+    },
+    async saveEditParticipant() {
+      if (!this.editForm.registration_id) return
+      this.editSaving = true
+      this.editError = ''
+      try {
+        await updateItem('registrations', this.editForm.registration_id, {
+          title: this.editForm.title,
+          firstname: this.editForm.firstname,
+          lastname: this.editForm.lastname,
+          phone: this.editForm.phone,
+          designation: this.editForm.designation,
+          organisation: this.editForm.organisation,
+          country_id: this.editForm.country_id,
+          participation_role: this.editForm.participation_role,
+        })
+        this.showEditModal = false
+        await this.getUser()
+        this.showMessage('Participant updated.', 'success')
+      } catch (error) {
+        this.editError = error.response?.data?.detail || 'Failed to update participant. Please try again.'
+      } finally {
+        this.editSaving = false
       }
     },
     showMessage(msg, type = 'success') {
