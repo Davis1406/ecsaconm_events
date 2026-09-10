@@ -179,13 +179,19 @@
           <ArrowDownTrayIcon class="w-4 h-4" />
           Download All Badges (PDF)
         </button>
-        <button @click="downloadOnsiteRegistrationQr"
+        <button @click="onsiteQrUrl = `/events/${id}/onsite_registration/qr`; showOnsiteQrPreview = true"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);"
           title="Printable QR for Finance to register walk-in participants who have paid onsite">
           <QrCodeIcon class="w-4 h-4" />
           Onsite Registration QR
         </button>
+        <PdfPreviewModal
+          v-model:show="showOnsiteQrPreview"
+          title="Onsite Registration QR"
+          :fetch-url="onsiteQrUrl"
+          filename="Onsite_Registration_QR.pdf"
+        />
         <template v-if="permissions.includes('PRINT_BADGE') && selectedBadgeIds.length">
           <button @click="showBulkBadgePreview = true"
             class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
@@ -463,7 +469,7 @@
             style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
             View
           </a>
-          <button @click="downloadDocumentQr(doc)"
+          <button @click="documentQrUrl = `/events/documents/${doc.id}/qr`; showDocumentQrPreview = true"
             class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
             style="background-color: rgb(254,80,103);">
             <QrCodeIcon class="w-4 h-4" />
@@ -482,6 +488,12 @@
         </div>
         <p class="text-gray-400 text-sm">No documents uploaded yet.</p>
       </div>
+      <PdfPreviewModal
+        v-model:show="showDocumentQrPreview"
+        title="Document QR Code"
+        :fetch-url="documentQrUrl"
+        filename="Document_QR.pdf"
+      />
     </div>
 
     <!-- ── Links Tab ────────────────────────────────── -->
@@ -1093,6 +1105,7 @@ import BadgeCard from "@/components/BadgeCard.vue";
 import { buildBadgeEvent } from "@/utils/badgeEvent";
 import BulkUploadParticipantsModal from "@/components/BulkUploadParticipantsModal.vue";
 import ReceiptModal from "@/components/ReceiptModal.vue";
+import PdfPreviewModal from "@/components/PdfPreviewModal.vue";
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -1113,7 +1126,7 @@ export default {
     LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon, QrCodeIcon,
     HeaderView, SpinnerComponent,
     PaginationComponent, SearchComponent, ParticipantModal, DownloadComponent,
-    PaymentModal, BadgeModal, BadgeCard, BulkUploadParticipantsModal, ReceiptModal,
+    PaymentModal, BadgeModal, BadgeCard, BulkUploadParticipantsModal, ReceiptModal, PdfPreviewModal,
   },
   data() {
     return {
@@ -1138,6 +1151,10 @@ export default {
       showBadgeModal: false,
       selectedBadgeIds: [],
       showBulkBadgePreview: false,
+      showOnsiteQrPreview: false,
+      onsiteQrUrl: '',
+      showDocumentQrPreview: false,
+      documentQrUrl: '',
       badgesDownloading: false,
       selectingAll: false,
       showBulkUploadParticipantsModal: false,
@@ -1655,26 +1672,6 @@ export default {
         this.errorMsg = 'Failed to download badges.';
       }
     },
-    async downloadOnsiteRegistrationQr() {
-      // A4 flyer with a QR code linking to this event's public onsite
-      // registration form — for Finance to print at their venue desk.
-      try {
-        const api = axios.create({ baseURL: API_URL });
-        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
-        const res = await api.get(`/events/${this.id}/onsite_registration/qr`, { responseType: 'blob' });
-        const url = window.URL.createObjectURL(res.data);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${String(this.event.event || 'event').replace(/\s+/g, '_')}_Onsite_Registration_QR.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } catch (error) {
-        console.error('Download onsite registration QR failed:', error);
-        this.errorMsg = 'Failed to generate onsite registration QR.';
-      }
-    },
     closeBadgeModal() { this.showBadgeModal = false; },
     async printAllBadges() {
       // Opens the same server-rendered A5 badge PDF used by "Download All
@@ -1830,26 +1827,6 @@ export default {
     },
     docFileUrl(doc) {
       return `${API_URL}/${doc.path || doc.file_path || doc.file}`;
-    },
-    async downloadDocumentQr(doc) {
-      // A4 flyer with a QR code linking straight to the file — print and
-      // hand out / post at the venue so participants can scan for the doc.
-      try {
-        const api = axios.create({ baseURL: API_URL });
-        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
-        const res = await api.get(`/events/documents/${doc.id}/qr`, { responseType: 'blob' });
-        const url = window.URL.createObjectURL(res.data);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${String(doc.name || doc.file_name || 'document').replace(/\s+/g, '_')}_QR.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } catch (error) {
-        console.error('Download document QR failed:', error);
-        this.docError = 'Failed to generate QR code flyer.';
-      }
     },
 
     // ── Links ──────────────────────────────────────────

@@ -686,6 +686,86 @@ def export_abstracts(
     )
 
 
+@router.get("/abstract-book")
+def get_abstract_book(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = None,
+):
+    """Renders the Abstract Book PDF for accepted abstracts whose presenting
+    author has a paid registration for the event — regenerated fresh on every
+    request, so it always reflects current payment status."""
+    auth_dependency.secure_access("EXPORT_ABSTRACTS", current_user["user_id"])
+
+    from utils.abstract_book_generator import generate_abstract_book_pdf
+
+    q = db.query(Abstract).options(
+        joinedload(Abstract.authors), joinedload(Abstract.event),
+    ).filter(Abstract.deleted_at == None, Abstract.status == "accepted")
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+    abstracts = q.order_by(Abstract.track, Abstract.title).all()
+
+    # Presenting-author email -> paid status, same join pattern as /stats:
+    # AbstractAuthor.email -> User -> Registration.is_paid for that event.
+    email_paid_cache: dict = {}
+
+    def presenter_is_paid(abstract) -> bool:
+        presenters = [a for a in abstract.authors if a.is_presenting and a.email]
+        if not presenters:
+            presenters = [a for a in abstract.authors if a.email]
+        for au in presenters:
+            email = au.email.strip().lower()
+            key = (email, abstract.event_id)
+            if key not in email_paid_cache:
+                user = db.query(User).filter(User.email == email).first()
+                paid = False
+                if user:
+                    regs = db.query(Registration).filter(
+                        Registration.user_id == user.id,
+                        Registration.event_id == abstract.event_id,
+                    ).all()
+                    paid = any(r.is_paid for r in regs)
+                email_paid_cache[key] = paid
+            if email_paid_cache[key]:
+                return True
+        return False
+
+    event_name = None
+    payload = []
+    for a in abstracts:
+        if not presenter_is_paid(a):
+            continue
+        event_name = event_name or (a.event.event if a.event else "Conference")
+        authors = sorted(a.authors, key=lambda x: x.author_order)
+        payload.append({
+            "id": a.id,
+            "title": a.title,
+            "track": a.track,
+            "keywords": a.keywords,
+            "presentation_type": a.presentation_type.value if a.presentation_type else "oral",
+            "abstract_text": a.abstract_text,
+            "authors": [
+                {"name": f"{au.firstname} {au.lastname}", "affiliation": au.affiliation, "is_presenting": au.is_presenting}
+                for au in authors
+            ],
+        })
+
+    if not event_name:
+        event = db.query(Event).filter(Event.id == event_id).first() if event_id else None
+        event_name = event.event if event else "Conference"
+
+    pdf_bytes = generate_abstract_book_pdf(event_name, payload)
+
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", event_name).strip("_") or "event"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}_Abstract_Book.pdf"'},
+    )
+
+
 @router.get("/my-submissions")
 @router.get("/my-submissions/")
 def my_submissions(

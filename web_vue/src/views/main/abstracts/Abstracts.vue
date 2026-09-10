@@ -197,8 +197,22 @@
             <ArrowUpTrayIcon class="w-4 h-4" />
             Import
           </button>
+          <button @click="showAbstractBook = true"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 shadow-sm"
+            style="background-color: rgb(254,80,103);"
+            title="Accepted abstracts whose presenter has paid — regenerated live from current payment status">
+            <DocumentTextIcon class="w-4 h-4" />
+            Abstract Book
+          </button>
         </div>
       </div>
+
+      <PdfPreviewModal
+        v-model:show="showAbstractBook"
+        title="Abstract Book — accepted &amp; paid presenters"
+        :fetch-url="abstractBookUrl"
+        filename="Abstract_Book.pdf"
+      />
 
       <!-- ── Import panel ──────────────────────────────────────────────── -->
       <div v-if="showImport" class="bg-surface-container-lowest border border-outline-variant rounded-xl px-6 py-5 space-y-4">
@@ -1217,6 +1231,7 @@ import { useAuthStore } from '@/store/authStore'
 import axios from 'axios'
 import { saveAs } from 'file-saver'
 import { exportToExcel } from '@/utils/exportToExcel'
+import PdfPreviewModal from '@/components/PdfPreviewModal.vue'
 import {
   DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
   ArchiveBoxArrowDownIcon, ArrowPathIcon, EnvelopeIcon,
@@ -1229,7 +1244,7 @@ const REGISTRATION_FILTERS = ['registered', 'not_registered', 'paid']
 export default {
   name: 'AbstractsView',
   components: {
-    HeaderView, SpinnerComponent, PaginationComponent, SearchComponent,
+    HeaderView, SpinnerComponent, PaginationComponent, SearchComponent, PdfPreviewModal,
     DocumentTextIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, EyeIcon, TrashIcon,
     PresentationChartBarIcon, BellAlertIcon, ChartPieIcon, ArchiveBoxArrowDownIcon, ArrowPathIcon,
   },
@@ -1256,6 +1271,8 @@ export default {
       stats: { total: null, oral: null, poster: null, unique_presenters: null, multi_presenters: null },
       showImport: false,
       showFilterMenu: false,
+      showAbstractBook: false,
+      abstractBookUrl: '/abstracts/abstract-book',
       importFile: null, importLoading: false,
       importPreview: null, importResult: null,
 
