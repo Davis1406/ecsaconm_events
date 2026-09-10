@@ -33,6 +33,7 @@ Everything below is **committed and deployed** to production unless flagged
 | `56d5b80` | PDF profile photo **centre-cropped to fill the circle** (object-cover, like the preview); QR card padding reduced (~1.6mm) so the QR sits with a small margin — photo badges ~29mm. |
 | `5f9fc02` | **Role-coloured badge category bars**: only the category bar changes per role — delegates keep navy, secretariat=green, media=amber, exhibitor=teal, usher=blue (others default to navy). Mirrored in the preview via `badgeCategoryGradient()`. Added **Media + Usher** to the `ParticipationRole` enum, admin/public role lists, Excel import map and display maps (migration `f1a2b3c4d5e6` extends the MySQL ENUM). |
 | `a1ccaa4` | **Role dropdowns trimmed to the main five** (Delegate, Secretariat, Media, Exhibitor, Usher): Event "Add Participant" select + Registrations edit form. Legacy fee-based delegate categories (member_state/participant/other_africa/student) normalise to `delegate` on edit, and the public `/#/register/:id` form stores those categories as delegate (fees/labels unchanged). |
+| `b2714b4` | **QR scan auto-records attendance** (no button): the status page POSTs on load and confirms "<name> has been marked for attendance on this date <date> and time <time> for Day N". `GET /events/scan/{id}` now returns `event.event_day` (1-based from start date). Added **Owen Mwandumbya** (`omwandumbya@ecsahc.org`) as Secretariat for the conference (user 734, registration 719). |
 
 ## Production data changes
 
