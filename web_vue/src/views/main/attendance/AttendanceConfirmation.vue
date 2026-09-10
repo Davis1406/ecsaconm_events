@@ -285,8 +285,17 @@ export default {
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
 
-        const res = await api.get(`/registrations/?event_id=${this.selectedEventId}&skip=0&limit=500`)
-        this.registrations = res.data?.data || res.data || []
+        const res = await api.get(`/registrations/?event_id=${this.selectedEventId}&skip=0&limit=1000`)
+        const first = res.data
+        let allRegs = first?.data || first || []
+        const total = first?.total ?? allRegs.length
+        // Fetch every page so the stats and scanned list cover ALL registrations,
+        // not just the first page.
+        for (let skip = 1000; skip < total; skip += 1000) {
+          const page = await api.get(`/registrations/?event_id=${this.selectedEventId}&skip=${skip}&limit=1000`)
+          allRegs = allRegs.concat(page.data?.data || [])
+        }
+        this.registrations = allRegs
 
         const map = {}
         try {
