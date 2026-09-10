@@ -39,6 +39,7 @@ Everything below is **committed and deployed** to production unless flagged
 | `7df8ec9` | **Fixed QR scan attendance** — the scan page sent `attendance_date` as a full ISO datetime, which the API rejects with a 422 (so scans never recorded attendance). Now sends a local `YYYY-MM-DD` date. |
 | `ffe7746` | Attendance Confirmation only counts records on actual **event days** (14–18 Sept) — a stale test scan from another date no longer keeps the page populated, so it stays blank until someone is genuinely scanned for the event. |
 | `d362446` | **Attendance page reworked**: removed the event-day filter so any scan (incl. pre-event test scans) previews; background polling is silent (no spinner flash). Added **admin delete controls** — per-row delete of a participant's records and a "Clear All" button backed by new `DELETE /event_attendance/events/{event_id}/attendance`. Both delete endpoints now require `ADMIN_DASHBOARD`. Deleted stale Aug 21 test record. |
+| `54c66fb` | Attendance table now **lists only scanned participants** (not all registrations) and day columns include any attendance date outside the event range (e.g. 11 Sept test scans), so each person's attended dates show checked. |
 
 ## Production data changes
 
