@@ -92,7 +92,7 @@
 
       <!-- QR + theme -->
       <section class="relative z-10 px-5 py-2 flex flex-col items-center flex-shrink-0">
-        <div class="bg-white p-2.5 rounded-xl flex flex-col items-center" style="border: 1px solid rgba(254,80,103,0.25);">
+        <div class="bg-white p-1.5 rounded-xl flex flex-col items-center" style="border: 1px solid rgba(254,80,103,0.25);">
           <QRCodeVue :value="qrValue" :size="displayQrSize" foreground="#0f172a" background="#ffffff" />
         </div>
 

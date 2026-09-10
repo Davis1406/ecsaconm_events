@@ -2319,12 +2319,20 @@ def _draw_tracked(c, text, x, base_y, font, size, color, tracking_em=0.0):
 
 def _draw_round_photo(c, cx, cy, size, path, border=None, border_w=2):
     """Draw a circular profile photo centred at (cx, cy) with diameter `size`
-    points, clipped to a circle with a brand-pink border. Returns False when
-    the file can't be loaded."""
+    points, clipped to a circle with a brand-pink border. The image is
+    centre-cropped to a square first (like the preview's object-cover) so it
+    fills the circle. Returns False when the file can't be loaded."""
     if not path or not os.path.exists(path):
         return False
     try:
-        im = Image.open(path).convert("RGB")
+        im = Image.open(path)
+        if im.mode != "RGB":
+            im = im.convert("RGB")
+        w, h = im.size
+        s = min(w, h)
+        left = (w - s) // 2
+        top = (h - s) // 2
+        im = im.crop((left, top, left + s, top + s))
     except Exception:
         return False
     r = size / 2.0
@@ -2332,7 +2340,7 @@ def _draw_round_photo(c, cx, cy, size, path, border=None, border_w=2):
     clip = c.beginPath()
     clip.circle(cx, cy, r)
     c.clipPath(clip, stroke=0, fill=0)
-    c.drawImage(ImageReader(im), cx - r, cy - r, size, size, preserveAspectRatio=True, mask="auto")
+    c.drawImage(ImageReader(im), cx - r, cy - r, size, size, preserveAspectRatio=False, mask="auto")
     c.restoreState()
     c.saveState()
     c.setStrokeColorRGB(*(border or (254 / 255.0, 80 / 255.0, 103 / 255.0)))
@@ -2638,7 +2646,7 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     theme_lines = wrap(f'Theme: "{theme}"', "Helvetica-Oblique", U(11), W - U(40))[:2] if theme else []
     theme_block = (U(6) + len(theme_lines) * U(13)) if theme_lines else 0
 
-    card_pad = U(8)
+    card_pad = U(4)
     available = (H - footer_h) - top - U(6) - theme_block
     qr_size = max(U(36), min(U(120), available - card_pad * 2))
     card_w = qr_size + card_pad * 2
