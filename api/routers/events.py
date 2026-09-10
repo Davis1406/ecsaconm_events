@@ -354,7 +354,7 @@ async def scan_registration(
         else str(registration.participation_role)
     )
     return {
-        "registration": {"id": registration.id, "paid": registration.paid, "participation_role": role_key},
+        "registration": {"id": registration.id, "paid": registration.is_paid, "participation_role": role_key},
         "participant": {
             "firstname": user.firstname if user else "",
             "lastname": user.lastname if user else "",
@@ -560,7 +560,7 @@ async def get_event(
                     Registration.event_id == event_id,
                     Registration.deleted_at == None,
                 ).first()
-                if reg and reg.paid:
+                if reg and reg.is_paid:
                     user_access = "paid"
                 else:
                     user_access = "unpaid"
@@ -599,7 +599,7 @@ async def get_event(
             .filter(
                 Registration.event_id == event_id,
                 Registration.deleted_at == None,
-                Registration.paid == True,
+                Registration.is_paid,
             )
             .count()
         )
@@ -609,7 +609,7 @@ async def get_event(
                 Registration.event_id == event_id,
                 Registration.deleted_at == None,
                 Registration.payment_proof.isnot(None),
-                Registration.paid == False,
+                ~Registration.is_paid,
             )
             .count()
         )
@@ -635,13 +635,13 @@ async def get_event(
         }
 
         if participant_filter == "paid":
-            reg_q = reg_q.filter(Registration.paid == True)
+            reg_q = reg_q.filter(Registration.is_paid)
         elif participant_filter == "unpaid":
-            reg_q = reg_q.filter(Registration.paid == False)
+            reg_q = reg_q.filter(~Registration.is_paid)
         elif participant_filter == "proof_pending":
             reg_q = reg_q.filter(
                 Registration.payment_proof.isnot(None),
-                Registration.paid == False,
+                ~Registration.is_paid,
             )
 
         needs_user_join = (
@@ -752,7 +752,7 @@ async def get_event(
                         if r.user and r.user.user_profile
                         else None
                     ),
-                    "paid": getattr(r, "paid", None),
+                    "paid": r.is_paid,
                     "payment_proof": getattr(r, "payment_proof", None),
                     "payment_amount": (
                         float(r.payment.payment_amount)
@@ -897,7 +897,7 @@ async def get_registration_details(
             "user_id": registration.user_id,
             "event_id": registration.event_id,
             "participation_role": registration.participation_role.name,
-            "paid": registration.paid,
+            "paid": registration.is_paid,
             "created_at": registration.created_at,
             "updated_at": registration.updated_at,
         },
@@ -1888,7 +1888,7 @@ async def download_event_participants(
                 "organisation": organisation,
                 "country": country,
                 "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
-                "paid": reg.paid,
+                "paid": reg.is_paid,
                 "registered_at": reg.registered_at,
             }
         )
@@ -2004,8 +2004,8 @@ def list_events_with_user_registration(
                     {
                         "registration_id": registration.id,
                         "participation_role": registration.participation_role,
-                        "paid": registration.paid,
-                        "payment_status": "Paid" if registration.paid else "Not Paid",
+                        "paid": registration.is_paid,
+                        "payment_status": "Paid" if registration.is_paid else "Not Paid",
                         "registered_at": registration.registered_at,
                     }
                     if registration
@@ -2575,7 +2575,7 @@ async def download_participant_badges_pdf(
                 "location": event.location or "",
                 "event_start_date": event.start_date,
                 "event_end_date": event.end_date,
-                "paid": reg.paid,
+                "paid": reg.is_paid,
             }
         )
 
@@ -2680,7 +2680,7 @@ async def download_participant_badge_pdf(
         "location": event.location or "",
         "event_start_date": event.start_date,
         "event_end_date": event.end_date,
-        "paid": reg.paid,
+        "paid": reg.is_paid,
     }
 
     buffer = BytesIO()
@@ -2727,7 +2727,7 @@ async def download_my_badge(
 
     if not reg:
         raise HTTPException(status_code=404, detail="You are not registered for this event")
-    if not reg.paid:
+    if not reg.is_paid:
         raise HTTPException(status_code=403, detail="Badge is only available after payment is confirmed")
 
     user = reg.user
@@ -2762,7 +2762,7 @@ async def download_my_badge(
         "location": event.location or "",
         "event_start_date": event.start_date,
         "event_end_date": event.end_date,
-        "paid": reg.paid,
+        "paid": reg.is_paid,
     }
 
     buffer = BytesIO()
@@ -2824,7 +2824,7 @@ async def get_event_attendance(
             "organisation": profile.organisation if profile else "",
             "country": profile.country.country if profile and profile.country else "",
             "participation_role": reg.participation_role.name if reg else "",
-            "paid": reg.paid if reg else False,
+            "paid": reg.is_paid if reg else False,
         })
 
     return {"total": len(result), "data": result}

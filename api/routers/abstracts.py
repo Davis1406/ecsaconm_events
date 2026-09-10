@@ -257,7 +257,7 @@ def abstract_stats(
         ).all()
         if regs:
             registered_count += 1
-            if any(r.paid for r in regs):
+            if any(r.is_paid for r in regs):
                 paid_count += 1
 
     return {
@@ -447,7 +447,7 @@ def list_abstracts(
                 ).all()
                 if regs:
                     has_registered = True
-                    has_paid = any(r.paid for r in regs)
+                    has_paid = any(r.is_paid for r in regs)
 
             reg_ok = (
                 presenter_registered is None or
@@ -751,7 +751,7 @@ def my_presenter_status(
     # Check: has any paid registration for any event
     has_paid = (
         db.query(Registration)
-        .filter(Registration.user_id == uid, Registration.paid == True)
+        .filter(Registration.user_id == uid, Registration.is_paid)
         .first()
         is not None
     )
@@ -898,7 +898,7 @@ def presenter_registration_status(
             ).first()
             if reg:
                 has_registered = True
-                has_paid = bool(reg.paid)
+                has_paid = bool(reg.is_paid)
 
         key = f"{email}:{ev}"
         status_map[key] = {

@@ -247,7 +247,7 @@ async def get_user(
                 "description": event.events.description,
                 "start_date": event.events.start_date,
                 "end_date": event.events.end_date,
-                "paid": event.paid,
+                "paid": event.is_paid,
             }
             for event in user.registrations
         ],

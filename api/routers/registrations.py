@@ -54,7 +54,7 @@ def _serialize_reg(r: Registration) -> dict:
         "address": profile.address if profile else "",
         "designation": profile.designation if profile else "",
         "participation_role": r.participation_role.name if r.participation_role else "",
-        "paid": r.paid,
+        "paid": r.is_paid,
         "payment_proof": r.payment_proof,
         "registered_at": r.registered_at,
     }
@@ -88,7 +88,7 @@ def participant_status(registration_id: int, db: Session = Depends(get_db)):
             if registration.participation_role
             else None
         ),
-        "paid": registration.paid,
+        "paid": registration.is_paid,
         "user": {
             "id": user.id,
             "firstname": user.firstname,
@@ -141,7 +141,7 @@ async def list_registrations(
         q = q.filter(Registration.event_id == event_id)
 
     if paid != "all":
-        q = q.filter(Registration.paid == (paid == "true"))
+        q = q.filter(Registration.is_paid if paid == "true" else ~Registration.is_paid)
 
     if proof != "all":
         if proof == "with":
@@ -151,7 +151,7 @@ async def list_registrations(
         elif proof == "pending":
             q = q.filter(
                 Registration.payment_proof.isnot(None),
-                Registration.paid == False,
+                ~Registration.is_paid,
             )
 
     if search:
@@ -259,7 +259,7 @@ async def send_payment_reminders(
             joinedload(Registration.user).joinedload(User.user_profile),
             joinedload(Registration.events),
         )
-        .filter(Registration.deleted_at == None, Registration.paid == False)
+        .filter(Registration.deleted_at == None, ~Registration.is_paid)
     )
     if event_id:
         q = q.filter(Registration.event_id == event_id)
@@ -380,7 +380,7 @@ async def export_registrations(
         q = q.filter(Registration.event_id == event_id)
 
     if paid != "all":
-        q = q.filter(Registration.paid == (paid == "true"))
+        q = q.filter(Registration.is_paid if paid == "true" else ~Registration.is_paid)
 
     if proof != "all":
         if proof == "with":
@@ -390,7 +390,7 @@ async def export_registrations(
         elif proof == "pending":
             q = q.filter(
                 Registration.payment_proof.isnot(None),
-                Registration.paid == False,
+                ~Registration.is_paid,
             )
 
     if search:
@@ -444,7 +444,7 @@ async def export_registrations(
             profile.country.country if profile and profile.country else "",
             r.events.event if r.events else "",
             r.participation_role.name if r.participation_role else "",
-            "Yes" if r.paid else "No",
+            "Yes" if r.is_paid else "No",
             r.registered_at.strftime("%d %b %Y %H:%M") if r.registered_at else "",
         ]
         for ci, val in enumerate(row, 1):

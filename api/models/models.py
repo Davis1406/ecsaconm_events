@@ -13,10 +13,12 @@ from sqlalchemy import (
     JSON,
     Enum,
     Index,
+    or_,
 )
 from datetime import datetime
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.hybrid import hybrid_property
 
 
 Base = declarative_base()
@@ -559,6 +561,22 @@ class Registration(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "event_id", name="unique_user_event_registration"),
     )
+
+    @hybrid_property
+    def is_paid(self):
+        """Effective payment status.
+
+        The secretariat attends free of charge, so a secretariat registration
+        always counts as paid regardless of the stored ``paid`` flag.
+        """
+        return bool(self.paid) or self.participation_role == ParticipationRole.secretariat
+
+    @is_paid.expression
+    def is_paid(cls):
+        return or_(
+            cls.paid.is_(True),
+            cls.participation_role == ParticipationRole.secretariat,
+        )
 
     def __repr__(self):
         return f"<Registration user_id={self.user_id} event_id={self.event_id} paid={self.paid}>"
