@@ -29,6 +29,7 @@ Everything below is **committed and deployed** to production unless flagged
 | `8a87d3e` | **Round profile photo** on badges (preview + PDF) when uploaded, between name and category bar; QR shrunk (default 96px). No photo → unchanged layout. |
 | `ed65e05` | Photo enlarged to **5rem/80px**; badge layout compacted (header margins, name 24→22, category bar 38→32, QR floor 40px) so photo + content still fit A5. |
 | `664f809` | **Search session persistence**: Registrations & Users lists write search/page/filters to the route query and restore them on mount — searching, opening a single view, and going back keeps the search. `SearchComponent` accepts a controlled `value` prop. |
+| `df0dfb5` | **Removed the badge "ID #…" label** and enlarged the QR to fill its card: photo badges ~26mm, no-photo ~46mm (max). Preview QR mirrors the print (80px with photo, 120px default). |
 
 ## Production data changes
 
