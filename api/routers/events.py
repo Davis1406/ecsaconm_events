@@ -29,6 +29,7 @@ from PIL import Image
 from reportlab.lib.units import mm
 from reportlab.lib.pagesizes import A5
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 import qrcode
 from fastapi.responses import StreamingResponse
 from reportlab.pdfgen import canvas
@@ -2028,21 +2029,51 @@ def _format_badge_date_range(start_date, end_date) -> str:
     return f"{start_date.strftime('%d %b %Y')} – {end_date.strftime('%d %b %Y')}"
 
 
+def _parse_badge_title(event_name: str) -> dict:
+    """Mirrors web_vue/src/utils/badgeEvent.js::parseBadgeTitle().
+
+    Splits an event title like "17th ECSACONM Biennial Scientific Conference
+    & 8th Quadrennial General Assembly" into the header pieces the badge
+    design uses: a leading ordinal + org name, a subtitle line, and an
+    optional pill line.
+    """
+    name = (event_name or "").strip()
+    if not name:
+        return {"ordinal": "", "org": "ECSACONM", "subtitle": "", "pill": ""}
+    m = re.match(r"^(\d+(?:st|nd|rd|th))\s+(\S+)\s*(.*)$", name, re.IGNORECASE)
+    if not m:
+        return {"ordinal": "", "org": name, "subtitle": "", "pill": ""}
+    ordinal, org, rest = m.group(1), m.group(2), m.group(3)
+    parts = [s.strip() for s in re.split(r"\s*&\s*|\s+and\s+", rest, flags=re.IGNORECASE) if s.strip()]
+    return {
+        "ordinal": ordinal,
+        "org": org,
+        "subtitle": parts[0] if len(parts) > 0 else "",
+        "pill": parts[1] if len(parts) > 1 else "",
+    }
+
+
 def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     """Draw a single A5 badge page onto ReportLab canvas c.
 
     Mirrors the frontend badge preview (BadgeCard.vue, used by BadgeModal /
-    My Badge on both the admin and participant sides): circular ECSA +
-    ECSACONM logos, event title, participant name, a navy "category" bar
+    My Badge on both the admin and participant sides): a punch-hole header
+    with circular ECSA + ECSACONM logos flanking a broken-out event title
+    (ordinal + org, subtitle, pill), participant name, a navy "category" bar
     (Member State / Other Africa / Participant registrations print here as
     "Delegate" — see format_badge_category()), a pink designation pill,
     institution/country, a bordered QR code card with ID inside it, theme,
     and a brand-pink footer block (dates + website, then location).
     """
     width, height = A5
-    NAVY = (30 / 255.0, 58 / 255.0, 69 / 255.0)
-    RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)
-    PINK = (254 / 255.0, 80 / 255.0, 103 / 255.0)  # rgb(254, 80, 103) — brand
+    GRAY_900 = (17 / 255.0, 24 / 255.0, 39 / 255.0)
+    GRAY_800 = (31 / 255.0, 41 / 255.0, 55 / 255.0)
+    GRAY_600 = (75 / 255.0, 85 / 255.0, 99 / 255.0)
+    GRAY_500 = (107 / 255.0, 114 / 255.0, 128 / 255.0)
+    ROSE_800 = (159 / 255.0, 18 / 255.0, 57 / 255.0)
+    NAVY_BAR = (23 / 255.0, 58 / 255.0, 75 / 255.0)  # #173a4b — category bar
+    RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)  # rgb(220,50,75) — brand accent
+    PINK = (254 / 255.0, 80 / 255.0, 103 / 255.0)  # rgb(254,80,103) — brand
 
     # ── White background ─────────────────────────────────────────────────────
     c.setFillColorRGB(1, 1, 1)
@@ -2067,91 +2098,142 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         c.setFont("Helvetica-Bold", 7.5)
         c.drawCentredString(width / 2, footer_h - 10.5 * mm, location)
 
-    # ── Content column (top-down) ────────────────────────────────────────────
-    y = height - 10 * mm
+    # ── Header: punch hole, then logos flanking the title ────────────────────
+    y = height - 6 * mm
 
-    # Logos: ECSA (left) + ECSACONM (right), in circular frames
-    logo_d = 24 * mm
+    hole_w, hole_h = 14 * mm, 3 * mm
+    c.setFillColorRGB(0.06, 0.09, 0.16)
+    c.roundRect(width / 2 - hole_w / 2, y - hole_h, hole_w, hole_h, hole_h / 2, fill=True, stroke=False)
+    y -= hole_h + 4 * mm
+
+    logo_d = 20 * mm
     logo_cy = y - logo_d / 2
-    left_cx = 8 * mm + logo_d / 2
-    right_cx = width - 8 * mm - logo_d / 2
+    left_cx = 10 * mm + logo_d / 2
+    right_cx = width - 10 * mm - logo_d / 2
+
     c.saveState()
     c.setFillColorRGB(1, 1, 1)
-    c.setStrokeColorRGB(*RED)
-    c.setLineWidth(1.2)
+    c.setStrokeColorRGB(*PINK)
+    c.setLineWidth(1.4)
     c.circle(left_cx, logo_cy, logo_d / 2, fill=1, stroke=1)
     c.restoreState()
-    c.drawImage(logo_left, left_cx - logo_d / 2 + 2 * mm, logo_cy - logo_d / 2 + 2 * mm,
-                logo_d - 4 * mm, logo_d - 4 * mm, preserveAspectRatio=True, mask="auto")
+    c.drawImage(logo_left, left_cx - logo_d / 2 + 1.25 * mm, logo_cy - logo_d / 2 + 1.25 * mm,
+                logo_d - 2.5 * mm, logo_d - 2.5 * mm, preserveAspectRatio=True, mask="auto")
+
     c.saveState()
     c.setFillColorRGB(*RED)
     c.circle(right_cx, logo_cy, logo_d / 2, fill=1, stroke=0)
     c.restoreState()
-    c.drawImage(logo_right, right_cx - logo_d / 2 + 3.5 * mm, logo_cy - logo_d / 2 + 3.5 * mm,
-                logo_d - 7 * mm, logo_d - 7 * mm, preserveAspectRatio=True, mask="auto")
-    y -= logo_d + 8 * mm
+    c.drawImage(logo_right, right_cx - logo_d / 2 + 3.1 * mm, logo_cy - logo_d / 2 + 3.1 * mm,
+                logo_d - 6.2 * mm, logo_d - 6.2 * mm, preserveAspectRatio=True, mask="auto")
 
-    # Event title
-    event_name = (p.get("event_name") or "ECSACONM").strip()
-    c.setFillColorRGB(*NAVY)
-    c.setFont("Helvetica-Bold", 15)
-    title_lines = textwrap.wrap(event_name.upper(), width=26)[:2]
-    for line in title_lines:
-        c.drawCentredString(width / 2, y, line)
-        y -= 6 * mm
+    # Title block, centered between the two logos: ordinal + org, subtitle, pill
+    title = _parse_badge_title(p.get("event_name") or "")
+    title_x0 = left_cx + logo_d / 2 + 2 * mm
+    title_x1 = right_cx - logo_d / 2 - 2 * mm
+    title_cx = (title_x0 + title_x1) / 2
+    ty = y - 5 * mm
+
+    ord_font, ord_size = "Helvetica-Bold", 10
+    org_font, org_size = "Helvetica-Bold", 13
+    ord_text = f"{title['ordinal']} " if title["ordinal"] else ""
+    ord_w = stringWidth(ord_text, ord_font, ord_size)
+    org_w = stringWidth(title["org"], org_font, org_size)
+    total_w = ord_w + org_w
+    tx = title_cx - total_w / 2
+    if ord_text:
+        c.setFillColorRGB(*GRAY_800)
+        c.setFont(ord_font, ord_size)
+        c.drawString(tx, ty, ord_text)
+    c.setFillColorRGB(*RED)
+    c.setFont(org_font, org_size)
+    c.drawString(tx + ord_w, ty, title["org"])
+    ty -= 4.5 * mm
+
+    if title["subtitle"]:
+        c.setFillColorRGB(*GRAY_600)
+        c.setFont("Helvetica-Bold", 7)
+        for line in textwrap.wrap(title["subtitle"].upper(), width=30)[:2]:
+            c.drawCentredString(title_cx, ty, line)
+            ty -= 3.2 * mm
+
+    if title["pill"]:
+        pill_text = title["pill"].upper()
+        pill_font, pill_size = "Helvetica-Bold", 6.5
+        pill_w = stringWidth(pill_text, pill_font, pill_size) + 6 * mm
+        pill_h = 4.2 * mm
+        ty -= 1 * mm
+        c.setFillColorRGB(0.996, 0.933, 0.941)
+        c.setStrokeColorRGB(*PINK)
+        c.setLineWidth(0.5)
+        c.roundRect(title_cx - pill_w / 2, ty - pill_h + 1 * mm, pill_w, pill_h, pill_h / 2, fill=True, stroke=True)
+        c.setFillColorRGB(*RED)
+        c.setFont(pill_font, pill_size)
+        c.drawCentredString(title_cx, ty - pill_h / 2 + 1.5 * mm, pill_text)
+        ty -= pill_h
+
+    y -= max(logo_d, y - ty + 3 * mm) + 3 * mm
+
+    # Divider
+    c.setStrokeColorRGB(*PINK)
+    c.setLineWidth(0.5)
+    c.line(6 * mm, y, width - 6 * mm, y)
     y -= 6 * mm
 
     # Participant name
     full_name = f"{p['title']} {p['firstname']} {p['middle_name']} {p['lastname']}".strip()
     full_name = re.sub(r"\s+", " ", full_name)
-    c.setFillColorRGB(*NAVY)
-    c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(width / 2, y, full_name)
-    y -= 13 * mm
+    c.setFillColorRGB(*GRAY_900)
+    c.setFont("Helvetica-Bold", 17)
+    name_lines = textwrap.wrap(full_name, width=26)[:2] or [full_name]
+    for line in name_lines:
+        c.drawCentredString(width / 2, y, line)
+        y -= 6.5 * mm
+    y -= 3 * mm
 
     # Category bar (navy) — "Delegate" for Member State / Other Africa / Participant
-    bar_h = 10 * mm
-    c.setFillColorRGB(*NAVY)
-    c.roundRect(14 * mm, y - bar_h, width - 28 * mm, bar_h, 2.5 * mm, fill=True, stroke=False)
+    bar_h = 9 * mm
+    c.setFillColorRGB(*NAVY_BAR)
+    c.roundRect(14 * mm, y - bar_h, width - 28 * mm, bar_h, 2.2 * mm, fill=True, stroke=False)
     c.setFillColorRGB(1, 1, 1)
     c.setFont("Helvetica-Bold", 12)
-    c.drawCentredString(width / 2, y - bar_h / 2 - 1.5 * mm, (p.get("participation_role") or "Delegate").upper())
-    y -= bar_h + 9 * mm
+    c.drawCentredString(width / 2, y - bar_h / 2 - 1.4 * mm, (p.get("participation_role") or "Delegate").upper())
+    y -= bar_h + 7 * mm
 
-    # Designation pill (pale red)
+    # Designation pill (pale pink, rose text)
     designation = (p.get("designation") or "").strip()
     if designation:
-        pill_h = 8 * mm
-        c.setFillColorRGB(0.99, 0.93, 0.94)
-        c.setStrokeColorRGB(*RED)
+        pill_h = 7 * mm
+        c.setFillColorRGB(0.996, 0.933, 0.941)
+        c.setStrokeColorRGB(*PINK)
         c.setLineWidth(0.6)
         c.roundRect(24 * mm, y - pill_h, width - 48 * mm, pill_h, pill_h / 2, fill=True, stroke=True)
-        c.setFillColorRGB(*RED)
+        c.setFillColorRGB(*ROSE_800)
         c.setFont("Helvetica-Bold", 9)
         c.drawCentredString(width / 2, y - pill_h / 2 - 1.3 * mm, designation.upper())
-        y -= pill_h + 9 * mm
+        y -= pill_h + 7 * mm
 
     # Institution & country
     organisation = (p.get("organisation") or "").strip()
     country = (p.get("country") or "").strip()
     if organisation:
-        c.setFillColorRGB(*NAVY)
-        c.setFont("Helvetica-Bold", 12)
+        c.setFillColorRGB(*GRAY_800)
+        c.setFont("Helvetica-Bold", 11)
         org_lines = textwrap.wrap(organisation, width=32)[:2]
         for line in org_lines:
             c.drawCentredString(width / 2, y, line)
-            y -= 5.5 * mm
-        y -= 3 * mm
+            y -= 5 * mm
+        y -= 2 * mm
     if country:
-        c.setFillColorRGB(*RED)
+        c.setFillColorRGB(*GRAY_500)
         c.setFont("Helvetica-Bold", 9)
         c.drawCentredString(width / 2, y, country)
-        y -= 12 * mm
+        y -= 10 * mm
 
     # ── QR code card: bordered box with ID printed inside, below the QR ──────
-    qr_size = 30 * mm
-    qr_pad = 4 * mm
-    id_h = 7 * mm
+    qr_size = 28 * mm
+    qr_pad = 3.5 * mm
+    id_h = 6.5 * mm
     box_w = qr_size + qr_pad * 2
     box_h = qr_size + qr_pad * 2 + id_h
     box_x = (width - box_w) / 2
@@ -2169,18 +2251,32 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.drawImage(ImageReader(qr_buf), box_x + qr_pad, box_y + id_h + qr_pad / 2, qr_size, qr_size)
 
     c.setFillColorRGB(*RED)
-    c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(width / 2, box_y + id_h / 2 - 1.5 * mm, f"ID #{p['registration_id']}")
-    y = box_y - 6 * mm
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(width / 2, box_y + id_h / 2 - 1.3 * mm, f"ID #{p['registration_id']}")
+    y = box_y - 5 * mm
 
-    # Theme (below ID)
+    # Theme (below ID) — bold "Theme:" label, italic gray quoted text
     theme = (p.get("event_theme") or "").strip()
     if theme:
-        c.setFillColorRGB(*RED)
-        c.setFont("Helvetica-Oblique", 8)
-        wrapped = textwrap.wrap(f'"{theme}"', width=44)
-        for line in wrapped[:2]:
-            c.drawCentredString(width / 2, y, line)
+        wrapped = textwrap.wrap(f'Theme: "{theme}"', width=48)[:2]
+        for i, line in enumerate(wrapped):
+            if i == 0 and line.startswith("Theme:"):
+                label, rest = "Theme:", line[len("Theme:"):]
+                label_font, label_size = "Helvetica-Bold", 7.5
+                rest_font, rest_size = "Helvetica-Oblique", 8
+                label_w = stringWidth(label, label_font, label_size)
+                rest_w = stringWidth(rest, rest_font, rest_size)
+                lx = width / 2 - (label_w + rest_w) / 2
+                c.setFillColorRGB(*RED)
+                c.setFont(label_font, label_size)
+                c.drawString(lx, y, label)
+                c.setFillColorRGB(*GRAY_500)
+                c.setFont(rest_font, rest_size)
+                c.drawString(lx + label_w, y, rest)
+            else:
+                c.setFillColorRGB(*GRAY_500)
+                c.setFont("Helvetica-Oblique", 8)
+                c.drawCentredString(width / 2, y, line)
             y -= 4 * mm
 
     c.showPage()
