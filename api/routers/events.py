@@ -2639,11 +2639,10 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     theme_block = (U(6) + len(theme_lines) * U(13)) if theme_lines else 0
 
     card_pad = U(8)
-    id_block = U(18)   # ID label mt-1.5 + line
-    available = (H - footer_h) - top - U(8) - theme_block
-    qr_size = max(U(36), min(U(96), available - card_pad * 2 - id_block))
+    available = (H - footer_h) - top - U(6) - theme_block
+    qr_size = max(U(36), min(U(120), available - card_pad * 2))
     card_w = qr_size + card_pad * 2
-    card_h = qr_size + card_pad * 2 + id_block
+    card_h = qr_size + card_pad * 2
     card_x = (W - card_w) / 2
     card_bottom = H - top - card_h
 
@@ -2657,14 +2656,8 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     qr_buf = BytesIO()
     qr.save(qr_buf, format="PNG")
     qr_buf.seek(0)
-    c.drawImage(ImageReader(qr_buf), card_x + card_pad,
-                card_bottom + card_pad + id_block, qr_size, qr_size)
+    c.drawImage(ImageReader(qr_buf), card_x + card_pad, card_bottom + card_pad, qr_size, qr_size)
 
-    id_size = U(12)
-    id_text = f"ID #{p['registration_id']}"
-    _draw_tracked(c, id_text, W / 2 - _tracked_width(id_text, "Helvetica-Bold", id_size, 0.05) / 2,
-                  card_bottom + card_pad + U(8) - id_size * 0.36,
-                  "Helvetica-Bold", id_size, RED, 0.05)
     top += card_h
 
     # ── Theme ───────────────────────────────────────────────────────────────

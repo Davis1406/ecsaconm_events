@@ -93,10 +93,7 @@
       <!-- QR + theme -->
       <section class="relative z-10 px-5 py-2 flex flex-col items-center flex-shrink-0">
         <div class="bg-white p-2.5 rounded-xl flex flex-col items-center" style="border: 1px solid rgba(254,80,103,0.25);">
-          <QRCodeVue :value="qrValue" :size="qrSize" foreground="#0f172a" background="#ffffff" />
-          <span class="mt-1.5 text-xs font-extrabold tracking-wider uppercase" style="color: rgb(220,50,75);">
-            ID #{{ registrationId ?? '—' }}
-          </span>
+          <QRCodeVue :value="qrValue" :size="displayQrSize" foreground="#0f172a" background="#ffffff" />
         </div>
 
         <div v-if="event.theme" class="mt-2 px-3 text-center">
@@ -159,7 +156,7 @@ export default {
       default: () => ({ title: { ordinal: '', org: 'ECSACONM', subtitle: '', pill: '' } }),
     },
     qrValue: { type: String, required: true },
-    qrSize: { type: Number, default: 96 },
+    qrSize: { type: Number, default: 120 },
   },
   computed: {
     fullName() { return this.participant.fullName || '' },
@@ -169,6 +166,12 @@ export default {
     registrationId() { return this.participant.registrationId },
     categoryLabel() { return formatBadgeCategory(this.participant.category) },
     titleOrdinalHtml() { return ordinalizeHtml(this.event.title?.ordinal || '') },
+    displayQrSize() {
+      // The printed PDF keeps the QR large for badges without a photo but has
+      // to share the A5 page with the photo when one is present — mirror that
+      // so the preview matches the print.
+      return this.participant.photo ? 80 : (this.qrSize || 120)
+    },
     photoUrl() {
       const photo = this.participant.photo || ''
       if (!photo) return ''
