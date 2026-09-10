@@ -1537,9 +1537,43 @@ def _format_document_type(doc_type) -> str:
     }.get(label, "Document")
 
 
-def _render_document_qr_flyer(c, document, event, file_url):
-    """Draw a one-page A4 flyer: event name, document label, a large QR code
-    linking straight to the uploaded file, and the raw URL as a fallback."""
+def _wrap_by_width(text, font_name, font_size, max_width):
+    """Greedy word-wrap: split `text` into lines that each fit `max_width`
+    at the given font. A single word wider than max_width is kept whole
+    (better to overflow slightly than to break a word mid-letter)."""
+    words = text.split()
+    if not words:
+        return []
+    lines, cur = [], words[0]
+    for w in words[1:]:
+        trial = f"{cur} {w}"
+        if stringWidth(trial, font_name, font_size) <= max_width:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = w
+    lines.append(cur)
+    return lines
+
+
+def _fit_lines(text, font_name, max_width, start_size, min_size=12, max_lines=3):
+    """Pick the largest font size (down to min_size) at which `text` word-wraps
+    into at most `max_lines` lines that all fit max_width — so a long event/
+    document title shrinks and wraps instead of running off the page edge."""
+    size = start_size
+    lines = _wrap_by_width(text, font_name, size, max_width)
+    while size > min_size and (
+        len(lines) > max_lines or any(stringWidth(l, font_name, size) > max_width for l in lines)
+    ):
+        size -= 1
+        lines = _wrap_by_width(text, font_name, size, max_width)
+    return lines, size
+
+
+def _render_document_qr_flyer(c, document, event, file_url, logo_left=None, logo_right=None):
+    """Draw a one-page A4 flyer: ECSA/ECSACONM logos, event name, document
+    label, a large QR code linking straight to the uploaded file, and the
+    raw URL as a fallback."""
     W, H = A4
 
     RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)          # rgb(220,50,75)
@@ -1553,47 +1587,94 @@ def _render_document_qr_flyer(c, document, event, file_url):
     c.setFillColorRGB(*RED)
     c.rect(0, 0, W, 6 * mm, fill=1, stroke=0)
 
+    # ECSA / ECSACONM logos, side by side just below the top bar — same
+    # circle treatment as the badge PDF (ECSA: white w/ pink border; right
+    # logo: solid brand-red circle).
+    logos_reserved = 0
+    if logo_left or logo_right:
+        logo_d = 26 * mm
+        gap_between = 10 * mm
+        total_w = logo_d * 2 + gap_between
+        left_cx = W / 2 - total_w / 2 + logo_d / 2
+        right_cx = W / 2 + total_w / 2 - logo_d / 2
+        logo_cy = H - 10 * mm - 8 * mm - logo_d / 2
+        img_size = logo_d - 4 * mm
+
+        if logo_left:
+            c.saveState()
+            c.setFillColorRGB(1, 1, 1)
+            c.setStrokeColorRGB(*PINK)
+            c.setLineWidth(1.2)
+            c.circle(left_cx, logo_cy, logo_d / 2, fill=1, stroke=1)
+            c.restoreState()
+            c.drawImage(logo_left, left_cx - img_size / 2, logo_cy - img_size / 2, img_size, img_size,
+                        preserveAspectRatio=True, mask="auto")
+
+        if logo_right:
+            c.saveState()
+            c.setFillColorRGB(*RED)
+            c.circle(right_cx, logo_cy, logo_d / 2, fill=1, stroke=0)
+            c.restoreState()
+            c.drawImage(logo_right, right_cx - img_size / 2, logo_cy - img_size / 2, img_size, img_size,
+                        preserveAspectRatio=True, mask="auto")
+
+        logos_reserved = 8 * mm + logo_d + 8 * mm  # gap + logo + gap before the text block
+
     event_name = (getattr(event, "event", None) or "").strip()
     doc_title = document.name or document.file_name or "Document"
     qr_size = 130 * mm
     pad = 7 * mm
+    text_max_width = W - 40 * mm  # 20mm margin either side
 
-    # Stack heights (mm) so the whole block can be centred in the usable
-    # area between the two accent bars, rather than pinned to the top.
-    heading_h = 12 if event_name else 0
-    label_h = 10
-    instruction_h = 10
-    title_h = 14
-    gap_before_qr = 8
-    card_h = qr_size / mm + pad / mm * 2
-    footer_gap = 12
-    footer_h = 14
-    block_h = (heading_h + label_h + instruction_h + title_h + gap_before_qr + card_h + footer_gap + footer_h) * mm
+    heading_font, title_font = "Helvetica-Bold", "Helvetica-Bold"
+    heading_lines, heading_size = ([], 22)
+    if event_name:
+        heading_lines, heading_size = _fit_lines(event_name, heading_font, text_max_width, 22, min_size=14, max_lines=3)
+    title_lines, title_size = _fit_lines(doc_title, title_font, text_max_width, 19, min_size=13, max_lines=2)
 
-    usable_top = H - 16 * mm
+    # Line heights in points (font size * a 1.25 leading factor).
+    heading_line_h = heading_size * 1.25
+    label_h = 10 * mm
+    instruction_h = 10 * mm
+    title_line_h = title_size * 1.25
+    gap_before_qr = 8 * mm
+    card_side = qr_size + pad * 2
+    footer_gap = 12 * mm
+    footer_h = 14 * mm
+
+    heading_block_h = (heading_line_h * len(heading_lines) + 4 * mm) if heading_lines else 0
+    title_block_h = title_line_h * len(title_lines)
+    block_h = heading_block_h + label_h + instruction_h + title_block_h + gap_before_qr + card_side + footer_gap + footer_h
+
+    usable_top = H - 16 * mm - logos_reserved
     usable_bottom = 6 * mm
     top = usable_bottom + (usable_top - usable_bottom + block_h) / 2
+    top = min(top, usable_top)  # never draw text under the logos
 
-    if event_name:
+    if heading_lines:
         c.setFillColorRGB(*GRAY_800)
-        c.setFont("Helvetica-Bold", 22)
-        c.drawCentredString(W / 2, top, event_name)
-        top -= heading_h * mm
+        c.setFont(heading_font, heading_size)
+        for line in heading_lines:
+            c.drawCentredString(W / 2, top, line)
+            top -= heading_line_h
+        top -= 4 * mm
 
     c.setFillColorRGB(*RED)
     c.setFont("Helvetica-Bold", 15)
     c.drawCentredString(W / 2, top, _format_document_type(document.document_type).upper())
-    top -= label_h * mm
+    top -= label_h
 
     c.setFillColorRGB(*GRAY_500)
     c.setFont("Helvetica", 13)
     c.drawCentredString(W / 2, top, "Scan with your phone camera to open:")
-    top -= instruction_h * mm
+    top -= instruction_h
 
     c.setFillColorRGB(*GRAY_800)
-    c.setFont("Helvetica-Bold", 19)
-    c.drawCentredString(W / 2, top, doc_title)
-    top -= (title_h + gap_before_qr) * mm
+    c.setFont(title_font, title_size)
+    for line in title_lines:
+        c.drawCentredString(W / 2, top, line)
+        top -= title_line_h
+    top -= gap_before_qr
 
     qr = qrcode.make(file_url)
     qr_buf = BytesIO()
@@ -1609,7 +1690,7 @@ def _render_document_qr_flyer(c, document, event, file_url):
     c.setLineWidth(1.2)
     c.roundRect(qr_x - pad, qr_y - pad, qr_size + 2 * pad, qr_size + 2 * pad, 6 * mm, fill=1, stroke=1)
     c.drawImage(ImageReader(qr_buf), qr_x, qr_y, qr_size, qr_size)
-    top = qr_y - footer_gap * mm
+    top = qr_y - footer_gap
 
     c.setFillColorRGB(*GRAY_500)
     c.setFont("Helvetica", 11)
@@ -1637,9 +1718,12 @@ async def get_document_qr_flyer(
     path = document.path
     file_url = path if path.startswith("http") else f"{base_url}/{path}"
 
+    logo_left = convert_png_to_rgb("assets/logo_left.png")
+    logo_right = convert_png_to_rgb("assets/logo.png")
+
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    _render_document_qr_flyer(c, document, event, file_url)
+    _render_document_qr_flyer(c, document, event, file_url, logo_left, logo_right)
     c.showPage()
     c.save()
     buffer.seek(0)
