@@ -28,17 +28,17 @@
         </div>
       </div>
 
-      <!-- Registration QR — shown as soon as an event is selected (auto-picked when there's only one) -->
+      <!-- Onsite Registration QR — shown as soon as an event is selected (auto-picked when there's only one) -->
       <div v-if="selectedEventId" class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex items-center gap-4 flex-wrap">
         <div v-if="qrPreviewUrl" class="h-20 w-20 rounded-lg border border-gray-100 flex-shrink-0 overflow-hidden">
-          <img :src="qrPreviewUrl" alt="Online registration QR" class="h-full w-full object-contain" />
+          <img :src="qrPreviewUrl" alt="Onsite registration QR" class="h-full w-full object-contain" />
         </div>
         <div v-else class="h-20 w-20 rounded-lg border border-gray-100 flex items-center justify-center flex-shrink-0 bg-gray-50">
           <QrCodeIcon class="w-8 h-8 text-gray-300" />
         </div>
         <div class="flex-1 min-w-[180px]">
-          <p class="text-sm font-semibold text-gray-800">Online Registration QR</p>
-          <p class="text-xs text-gray-400 mt-0.5">Scan to open the public registration form for this event.</p>
+          <p class="text-sm font-semibold text-gray-800">Onsite Registration QR</p>
+          <p class="text-xs text-gray-400 mt-0.5">For Finance — scan to register walk-in participants who have paid at the venue.</p>
         </div>
         <button @click="downloadRegistrationQr"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border-2 transition"
@@ -824,7 +824,7 @@ export default {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        const res = await api.get(`/events/${this.selectedEventId}/registration/qr_image`, { responseType: 'blob' })
+        const res = await api.get(`/events/${this.selectedEventId}/onsite_registration/qr_image`, { responseType: 'blob' })
         this.qrPreviewUrl = window.URL.createObjectURL(res.data)
       } catch (error) {
         console.error('Error loading registration QR preview:', error)
@@ -918,19 +918,19 @@ export default {
     },
 
     async downloadRegistrationQr() {
-      // A4 flyer with a QR code linking to the selected event's public
-      // online registration form — print/share to drive self-service sign-ups.
+      // A4 flyer with a QR code linking to the selected event's onsite
+      // registration form — for Finance to print at the venue desk.
       if (!this.selectedEventId) return
       try {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        const res = await api.get(`/events/${this.selectedEventId}/registration/qr`, { responseType: 'blob' })
+        const res = await api.get(`/events/${this.selectedEventId}/onsite_registration/qr`, { responseType: 'blob' })
         const url = window.URL.createObjectURL(res.data)
         const a = document.createElement('a')
         a.href = url
         const eventName = this.events.find(e => e.id === this.selectedEventId)?.event || 'event'
-        a.download = `${String(eventName).replace(/\s+/g, '_')}_Registration_QR.pdf`
+        a.download = `${String(eventName).replace(/\s+/g, '_')}_Onsite_Registration_QR.pdf`
         document.body.appendChild(a)
         a.click()
         a.remove()
