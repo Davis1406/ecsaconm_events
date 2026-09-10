@@ -2266,10 +2266,13 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
 
     y -= max(logo_d, y - ty + 3 * mm) + 3 * mm
 
-    # Divider
-    c.setStrokeColorRGB(*PINK)
-    c.setLineWidth(1)
-    c.line(6 * mm, y, width - 6 * mm, y)
+    # Divider — fades to transparent (white) at both ends, like the frontend's
+    # linear-gradient(to right, transparent, rgba(pink,0.4), transparent).
+    divider_h = 0.6 * mm
+    PINK_ON_WHITE = tuple(0.4 * PINK[i] + 0.6 * 1.0 for i in range(3))
+    _gradient_rect(c, 0, y - divider_h / 2, width, divider_h, [
+        (0.0, (1, 1, 1)), (0.5, PINK_ON_WHITE), (1.0, (1, 1, 1)),
+    ])
     y -= 6 * mm
 
     # Participant name
@@ -2317,9 +2320,15 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
             y -= 6 * mm
         y -= 2.5 * mm
     if country:
+        country_font, country_size = "Helvetica-Bold", 11
+        country_w = stringWidth(country, country_font, country_size)
+        icon_s = 3.2 * mm
+        block_w = icon_s + 1.3 * mm + country_w
+        cx0 = width / 2 - block_w / 2
+        _draw_pin_icon(c, cx0 + icon_s / 2, y + icon_s * 0.55, icon_s, PINK)
         c.setFillColorRGB(*GRAY_500)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(width / 2, y, country)
+        c.setFont(country_font, country_size)
+        c.drawString(cx0 + icon_s + 1.3 * mm, y, country)
         y -= 13 * mm
 
     # Theme text, wrapped ahead of time so the QR card can be sized to leave
