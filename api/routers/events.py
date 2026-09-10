@@ -28,7 +28,7 @@ from utils.mailer_util import send_email_with_attachment
 from fastapi import BackgroundTasks
 from PIL import Image
 from reportlab.lib.units import mm
-from reportlab.lib.pagesizes import A5
+from reportlab.lib.pagesizes import A5, A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 import qrcode
@@ -636,6 +636,15 @@ async def get_event(
             )
             .count()
         )
+        badge_exported_total = (
+            db.query(Registration)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.deleted_at == None,
+                Registration.badge_exported_at.isnot(None),
+            )
+            .count()
+        )
 
         filter_counts = {
             "all": base_total,
@@ -644,6 +653,7 @@ async def get_event(
             "proof_pending": proof_pending_total,
             "presenters": presenter_total,
             "secretariat": secretariat_total,
+            "badges_exported": badge_exported_total,
         }
 
         if participant_filter == "paid":
@@ -659,6 +669,8 @@ async def get_event(
             reg_q = reg_q.filter(
                 Registration.participation_role == ParticipationRole.secretariat
             )
+        elif participant_filter == "badges_exported":
+            reg_q = reg_q.filter(Registration.badge_exported_at.isnot(None))
 
         needs_user_join = (
             (participant_filter == "presenters" and presenter_emails)
@@ -770,6 +782,7 @@ async def get_event(
                     ),
                     "paid": r.is_paid,
                     "payment_proof": getattr(r, "payment_proof", None),
+                    "badge_exported_at": r.badge_exported_at,
                     "payment_amount": (
                         float(r.payment.payment_amount)
                         if r.payment and r.payment.payment_amount else 0
@@ -2640,6 +2653,37 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
             top += U(14)
     top += U(8)   # section py-2 bottom
 
+
+def _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
+    """Lay badges out 4-up (2x2) on A4 pages, each scaled from A5 keeping the
+    A5 proportions (so a badge is A6-sized on the sheet)."""
+    a4_w, a4_h = A4
+    a5_w, a5_h = A5
+    cell_w, cell_h = a4_w / 2, a4_h / 2
+    scale = min(cell_w / a5_w, cell_h / a5_h)
+    bw, bh = a5_w * scale, a5_h * scale
+
+    for index, p in enumerate(participants):
+        slot = index % 4
+        if slot == 0 and index:
+            c.showPage()
+        col, row = slot % 2, slot // 2
+        x = col * cell_w + (cell_w - bw) / 2
+        y = a4_h - (row + 1) * cell_h + (cell_h - bh) / 2
+
+        c.saveState()
+        c.translate(x, y)
+        c.scale(scale, scale)
+        _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
+        c.restoreState()
+
+        # faint cut guide around the badge
+        c.saveState()
+        c.setStrokeColorRGB(0.85, 0.85, 0.85)
+        c.setLineWidth(0.4)
+        c.rect(x, y, bw, bh, fill=0, stroke=1)
+        c.restoreState()
+
     c.showPage()
 
 
@@ -2649,6 +2693,7 @@ async def download_participant_badges_pdf(
     event_id: int,
     current_user: user_dependency,
     paid: Literal["all", "true", "false"] = Query("all"),
+    ids: str = Query(""),
     db: Session = Depends(get_db),
     dependency=Depends(get_dependency),
     auth_dependency: Auth = Depends(get_auth_dependency),
@@ -2672,8 +2717,16 @@ async def download_participant_badges_pdf(
     primary_rgb = hex_to_rgb(primary_color)
     secondary_rgb = hex_to_rgb(secondary_color)
 
-    participants = []
+    id_filter = (
+        {int(x) for x in ids.split(",") if x.strip().isdigit()} if ids else None
+    )
+
+    rows = []
     for reg in event.registrations:
+        if reg.deleted_at is not None:
+            continue
+        if id_filter is not None and reg.id not in id_filter:
+            continue
         user = reg.user
         profile = user.user_profile[0] if user.user_profile else None
         country = profile.country.country if profile and profile.country else None
@@ -2683,44 +2736,53 @@ async def download_participant_badges_pdf(
             if hasattr(reg.participation_role, "name")
             else str(reg.participation_role).lower()
         )
-        participants.append(
-            {
-                "registration_id": reg.id,
-                "event_id": event_id,
-                "title": profile.title if profile else "",
-                "firstname": user.firstname,
-                "middle_name": profile.middle_name if profile else "",
-                "lastname": user.lastname,
-                "position": profile.position if profile else "",
-                "designation": profile.designation if profile else "",
-                "organisation": organisation,
-                "country": country,
-                "participation_role": format_badge_category(role_key),
-                "event_name": event.event,
-                "event_theme": event.theme,
-                "location": event.location or "",
-                "event_start_date": event.start_date,
-                "event_end_date": event.end_date,
-                "paid": reg.is_paid,
-            }
+        rows.append(
+            (
+                reg,
+                {
+                    "registration_id": reg.id,
+                    "event_id": event_id,
+                    "title": profile.title if profile else "",
+                    "firstname": user.firstname,
+                    "middle_name": profile.middle_name if profile else "",
+                    "lastname": user.lastname,
+                    "position": profile.position if profile else "",
+                    "designation": profile.designation if profile else "",
+                    "organisation": organisation,
+                    "country": country,
+                    "participation_role": format_badge_category(role_key),
+                    "event_name": event.event,
+                    "event_theme": event.theme,
+                    "location": event.location or "",
+                    "event_start_date": event.start_date,
+                    "event_end_date": event.end_date,
+                    "paid": reg.is_paid,
+                },
+            )
         )
 
     if paid != "all":
         is_paid = paid == "true"
-        participants = [p for p in participants if p["paid"] == is_paid]
+        rows = [(r, p) for r, p in rows if p["paid"] == is_paid]
 
-    if not participants:
+    if not rows:
         raise HTTPException(status_code=404, detail="No participants found")
 
+    participants = [p for _, p in rows]
+    exported_regs = [r for r, _ in rows]
+
     buffer = BytesIO()
-    width, height = A5
-    c = canvas.Canvas(buffer, pagesize=A5)
+    c = canvas.Canvas(buffer, pagesize=A4)
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")
 
-    for p in participants:
-        _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
+    _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb)
+
+    exported_at = datetime.utcnow()
+    for reg in exported_regs:
+        reg.badge_exported_at = exported_at
+    db.commit()
 
     c.save()
     buffer.seek(0)
@@ -2817,6 +2879,10 @@ async def download_participant_badge_pdf(
     logo_right = convert_png_to_rgb("assets/logo.png")
 
     _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
+    c.showPage()
+
+    reg.badge_exported_at = datetime.utcnow()
+    db.commit()
 
     c.save()
     buffer.seek(0)
@@ -2899,6 +2965,10 @@ async def download_my_badge(
     logo_right = convert_png_to_rgb("assets/logo.png")
 
     _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
+    c.showPage()
+
+    reg.badge_exported_at = datetime.utcnow()
+    db.commit()
 
     c.save()
     buffer.seek(0)

@@ -534,6 +534,7 @@ class Registration(Base):
     participation_role = Column(Enum(ParticipationRole), nullable=False)
     paid = Column(Boolean, nullable=False, default=False)
     payment_proof = Column(Text, nullable=True)
+    badge_exported_at = Column(TIMESTAMP(timezone=True), nullable=True)
     registered_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

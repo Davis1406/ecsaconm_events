@@ -179,6 +179,20 @@
           <ArrowDownTrayIcon class="w-4 h-4" />
           Download All Badges (PDF)
         </button>
+        <template v-if="permissions.includes('PRINT_BADGE') && selectedBadgeIds.length">
+          <button @click="showBulkBadgePreview = true"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
+            style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+            <EyeIcon class="w-4 h-4" />
+            Preview Selected ({{ selectedBadgeIds.length }})
+          </button>
+          <button @click="downloadSelectedBadges" :disabled="badgesDownloading"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            <ArrowDownTrayIcon class="w-4 h-4" />
+            {{ badgesDownloading ? 'Preparing…' : `Download Selected (${selectedBadgeIds.length})` }}
+          </button>
+        </template>
         <button v-if="permissions.includes('BULK_UPLOAD')" @click="openBulkUploadParticipantsModal"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
@@ -205,7 +219,11 @@
 
       <!-- Table header -->
       <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
-        <div class="col-span-1">#</div>
+        <div class="col-span-1 flex items-center gap-2">
+          <input type="checkbox" :checked="allPageBadgesSelected" @change="toggleSelectAllBadges"
+            class="rounded border-gray-300" title="Select all on this page" />
+          <span>#</span>
+        </div>
         <div class="col-span-3">Participant</div>
         <div class="col-span-1">Institution</div>
         <div class="col-span-1">Country</div>
@@ -230,7 +248,11 @@
         :class="index % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-white/[0.04]'">
 
         <!-- Row number -->
-        <div class="col-span-1 text-gray-400 text-xs">{{ (localPage - 1) * localPageSize + index + 1 }}</div>
+        <div class="col-span-1 flex items-center gap-2 text-gray-400 text-xs">
+          <input type="checkbox" :checked="isBadgeSelected(participant)" @change="toggleBadgeSelect(participant)"
+            class="rounded border-gray-300" />
+          <span>{{ (localPage - 1) * localPageSize + index + 1 }}</span>
+        </div>
 
         <!-- Name — clickable link to participant profile -->
         <div class="col-span-3">
@@ -250,6 +272,13 @@
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
               title="Accepted abstract presenter">
               Abstract Presenter
+            </span>
+            <!-- Badge exported badge -->
+            <span v-if="participant.badge_exported_at"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700"
+              :title="'Badge exported ' + formatDate(participant.badge_exported_at)">
+              <ArrowDownTrayIcon class="w-3 h-3" />
+              Exported
             </span>
           </div>
         </div>
@@ -780,6 +809,47 @@
             </div>
           </div>
 
+          <!-- Badge Exports -->
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Badge Exports</p>
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="text-center p-3 rounded-xl bg-gray-50">
+                <p class="text-2xl font-bold text-gray-800">{{ reportTotal }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Total</p>
+              </div>
+              <div class="text-center p-3 rounded-xl bg-blue-50">
+                <p class="text-2xl font-bold text-blue-600">{{ badgesExportedCount }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Exported</p>
+              </div>
+              <div class="text-center p-3 rounded-xl bg-yellow-50">
+                <p class="text-2xl font-bold text-yellow-600">{{ badgesNotExportedCount }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">Not Exported</p>
+              </div>
+            </div>
+            <div class="space-y-2" v-if="reportTotal > 0">
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-500 w-20 text-right flex-shrink-0">Exported</span>
+                <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                    :style="{ width: (badgesExportedCount / reportTotal * 100) + '%', backgroundColor: 'rgb(254,80,103)' }">
+                    <span v-if="badgesExportedCount > 0" class="text-white text-xs font-bold">{{ Math.round(badgesExportedCount / reportTotal * 100) }}%</span>
+                  </div>
+                </div>
+                <span class="text-xs font-semibold text-gray-600 w-8">{{ badgesExportedCount }}</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-500 w-20 text-right flex-shrink-0">Not exported</span>
+                <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                  <div class="h-full rounded-full bg-yellow-400 transition-all duration-500 flex items-center justify-end pr-2"
+                    :style="{ width: (badgesNotExportedCount / reportTotal * 100) + '%' }">
+                    <span v-if="badgesNotExportedCount > 0" class="text-white text-xs font-bold">{{ Math.round(badgesNotExportedCount / reportTotal * 100) }}%</span>
+                  </div>
+                </div>
+                <span class="text-xs font-semibold text-gray-600 w-8">{{ badgesNotExportedCount }}</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Participants vs Abstract Presenters -->
           <div>
             <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Participants vs Abstract Presenters</p>
@@ -929,6 +999,42 @@
       </div>
     </div>
 
+    <!-- Bulk badge preview modal -->
+    <div v-if="showBulkBadgePreview" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-gray-800">Badge preview — {{ selectedBadgeIds.length }} selected</h3>
+          <button @click="showBulkBadgePreview = false" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-5 bg-gray-50">
+          <div class="grid sm:grid-cols-2 gap-6 justify-items-center">
+            <badge-card v-for="p in selectedBadgeParticipants" :key="p.id"
+              :participant="toBadgeParticipant(p)" :event="badgeEvent" :qr-value="badgeQrValue(p)" />
+          </div>
+        </div>
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-between items-center">
+          <button @click="clearBadgeSelection" class="text-xs font-semibold text-gray-500 hover:text-gray-700">
+            Clear selection
+          </button>
+          <div class="flex gap-2">
+            <button @click="showBulkBadgePreview = false"
+              class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+              Close
+            </button>
+            <button @click="downloadSelectedBadges" :disabled="badgesDownloading"
+              class="px-4 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(254,80,103);">
+              {{ badgesDownloading ? 'Preparing…' : `Download ${selectedBadgeIds.length} badge(s)` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -939,7 +1045,7 @@ import {
   MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon,
   XCircleIcon, CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon,
   ChartBarIcon, ArrowDownTrayIcon, LinkIcon, FolderOpenIcon,
-  TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon,
+  TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon,
 } from '@heroicons/vue/24/solid';
 
 import HeaderView from '@/includes/Header.vue';
@@ -952,6 +1058,8 @@ import DownloadComponent from '@/components/DownloadComponent.vue';
 import { exportToExcel } from '@/utils/exportToExcel';
 import PaymentModal from "@/components/PaymentModal.vue";
 import BadgeModal from "@/components/BadgeModal.vue";
+import BadgeCard from "@/components/BadgeCard.vue";
+import { buildBadgeEvent } from "@/utils/badgeEvent";
 import BulkUploadParticipantsModal from "@/components/BulkUploadParticipantsModal.vue";
 import ReceiptModal from "@/components/ReceiptModal.vue";
 
@@ -970,10 +1078,10 @@ export default {
   components: {
     MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon, XCircleIcon,
     CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon, ChartBarIcon, ArrowDownTrayIcon,
-    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon,
+    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon,
     HeaderView, SpinnerComponent,
     PaginationComponent, SearchComponent, ParticipantModal, DownloadComponent,
-    PaymentModal, BadgeModal, BulkUploadParticipantsModal, ReceiptModal,
+    PaymentModal, BadgeModal, BadgeCard, BulkUploadParticipantsModal, ReceiptModal,
   },
   data() {
     return {
@@ -996,6 +1104,9 @@ export default {
       message: "",
       UserEventData: { user_id: "", event_id: "" },
       showBadgeModal: false,
+      selectedBadgeIds: [],
+      showBulkBadgePreview: false,
+      badgesDownloading: false,
       showBulkUploadParticipantsModal: false,
       showReceiptModal: false,
       successMsg: "",
@@ -1037,10 +1148,11 @@ export default {
         { key: 'paid', label: 'Paid' },
         { key: 'unpaid', label: 'Unpaid' },
         { key: 'proof_pending', label: 'Proof Submitted, Not Paid' },
+        { key: 'badges_exported', label: 'Badges Exported' },
       ],
       participantsTotal: 0,
       participantsFilteredTotal: 0,
-      filterCounts: { all: 0, presenters: 0, secretariat: 0, paid: 0, unpaid: 0, proof_pending: 0 },
+      filterCounts: { all: 0, presenters: 0, secretariat: 0, paid: 0, unpaid: 0, proof_pending: 0, badges_exported: 0 },
       togglingPaidId: null,
       localPage: 1,
       localPageSize: 25,
@@ -1130,6 +1242,22 @@ export default {
     },
     reportTotal() {
       return this.reportParticipants.length;
+    },
+    allPageBadgesSelected() {
+      const pageIds = this.pagedParticipants.map(p => p.id);
+      return pageIds.length > 0 && pageIds.every(id => this.selectedBadgeIds.includes(id));
+    },
+    selectedBadgeParticipants() {
+      return this.participants.filter(p => this.selectedBadgeIds.includes(p.id));
+    },
+    badgeEvent() {
+      return buildBadgeEvent(this.event);
+    },
+    badgesExportedCount() {
+      return this.reportParticipants.filter(p => p.badge_exported_at).length;
+    },
+    badgesNotExportedCount() {
+      return this.reportParticipants.length - this.badgesExportedCount;
     },
     filteredParticipants() {
       // Search + filter are applied server-side, so the loaded page is already
@@ -1351,6 +1479,7 @@ export default {
         paid: 'Paid',
         unpaid: 'Unpaid',
         proof_pending: 'ProofSubmitted',
+        badges_exported: 'BadgesExported',
       };
       return labels[this.filterPreset] || this.filterPreset;
     },
@@ -1491,6 +1620,7 @@ export default {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+        await this.getEvent(true);
       } catch (error) {
         console.error('Download all badges failed:', error);
         this.errorMsg = 'Failed to download badges.';
@@ -1515,6 +1645,68 @@ export default {
     openReceiptModal(participant) {
       this.participant = participant;
       this.showReceiptModal = true;
+    },
+    isBadgeSelected(participant) {
+      return this.selectedBadgeIds.includes(participant.id);
+    },
+    toggleBadgeSelect(participant) {
+      const id = participant.id;
+      if (this.selectedBadgeIds.includes(id)) {
+        this.selectedBadgeIds = this.selectedBadgeIds.filter(x => x !== id);
+      } else {
+        this.selectedBadgeIds = [...this.selectedBadgeIds, id];
+      }
+    },
+    toggleSelectAllBadges() {
+      const pageIds = this.pagedParticipants.map(p => p.id);
+      if (this.allPageBadgesSelected) {
+        this.selectedBadgeIds = this.selectedBadgeIds.filter(id => !pageIds.includes(id));
+      } else {
+        this.selectedBadgeIds = [...new Set([...this.selectedBadgeIds, ...pageIds])];
+      }
+    },
+    clearBadgeSelection() {
+      this.selectedBadgeIds = [];
+    },
+    badgeQrValue(participant) {
+      const base = import.meta.env.VITE_APP_URL || window.location.origin;
+      return `${base}/#/user-event-status/${participant.id}/${this.id}/`;
+    },
+    toBadgeParticipant(p) {
+      return {
+        fullName: [p.title, p.firstname, p.lastname].filter(Boolean).join(' '),
+        designation: p.designation || '',
+        category: p.participant_category || p.participation_role,
+        institution: p.organisation || p.institution || '',
+        country: p.country || '',
+        registrationId: p.id,
+      };
+    },
+    async downloadSelectedBadges() {
+      if (!this.selectedBadgeIds.length) return;
+      this.badgesDownloading = true;
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        const res = await api.get(`/events/${this.id}/participants/badges`, {
+          params: { ids: this.selectedBadgeIds.join(',') },
+          responseType: 'blob',
+        });
+        const url = window.URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${String(this.event.event || 'event').replace(/\s+/g, '_')}_selected_badges.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        await this.getEvent(true);
+      } catch (error) {
+        console.error('Download selected badges failed:', error);
+        this.errorMsg = 'Failed to download selected badges.';
+      } finally {
+        this.badgesDownloading = false;
+      }
     },
     openBulkUploadParticipantsModal() {
       this.eventID = this.id;
