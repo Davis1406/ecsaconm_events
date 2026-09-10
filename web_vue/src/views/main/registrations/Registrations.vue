@@ -733,13 +733,10 @@ export default {
       },
       editCountries: [],
       participationOptions: [
-        { value: 'member_state', label: 'ECSACONM Member (no arrears)', fee: 'Early Bird: USD 200 | Late Bird: USD 250' },
-        { value: 'participant', label: 'Non-ECSACONM Member from the Region', fee: 'Early Bird: USD 300 | Late Bird: USD 400' },
-        { value: 'other_africa', label: 'Non-ECSACONM Member from Outside the Region', fee: 'Early Bird: USD 400 | Late Bird: USD 600' },
-        { value: 'student', label: 'Student', fee: 'Contact the secretariat for student rates.' },
-        { value: 'exhibitor', label: 'Sponsor / Exhibitor', fee: 'Contact the secretariat for sponsorship packages.' },
+        { value: 'delegate', label: 'Delegate', fee: 'Contact the secretariat for delegate rates.' },
         { value: 'secretariat', label: 'Secretariat / Staff', fee: 'Internal registration — no registration fee.' },
         { value: 'media', label: 'Media', fee: 'Contact the secretariat.' },
+        { value: 'exhibitor', label: 'Sponsor / Exhibitor', fee: 'Contact the secretariat for sponsorship packages.' },
         { value: 'usher', label: 'Usher', fee: 'Internal registration — no registration fee.' },
       ],
     }
@@ -1160,13 +1157,20 @@ export default {
         designation: reg.designation || '',
         designation_other: '',
         organisation: reg.organisation || '',
-        participation_role: reg.participation_role
-          ? reg.participation_role.toLowerCase().replace(/\s+/g, '_')
-          : '',
+        participation_role: this.normalizeParticipationRole(reg.participation_role),
         photo: null,
         photoPreview: '',
       }
       this.loadEditCountries()
+    },
+    normalizeParticipationRole(role) {
+      // The admin edit form only offers the main roles; the fee-based delegate
+      // categories (Member, Region, Outside-Region, Student) all read as
+      // "Delegate" on the badge, so normalise them to delegate.
+      const legacyDelegate = ['member_state', 'participant', 'other_africa', 'student']
+      if (!role) return ''
+      const key = String(role).toLowerCase().replace(/\s+/g, '_')
+      return legacyDelegate.includes(key) ? 'delegate' : key
     },
     closeEditModal() {
       this.editModal.show = false

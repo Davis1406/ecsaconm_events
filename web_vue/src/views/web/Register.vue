@@ -551,10 +551,12 @@ export default {
         }
         await createItem(`users/profile/${userId}`, profileData)
 
-        // Step 3: Register for event
+        // Step 3: Register for event — the fee-based delegate categories
+        // (Member, Region, Outside-Region, Student) all register as "delegate"
+        const delegateRoles = { member_state: 'delegate', participant: 'delegate', other_africa: 'delegate', student: 'delegate' }
         const eventRegData = {
           event_id: parseInt(this.eventId),
-          participation_role: this.form.participation_role,
+          participation_role: delegateRoles[this.form.participation_role] || this.form.participation_role,
         }
         await createItem(`events/registration/${userId}`, eventRegData)
 
