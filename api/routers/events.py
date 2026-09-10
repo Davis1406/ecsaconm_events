@@ -2036,41 +2036,42 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     ECSACONM logos, event title, participant name, a navy "category" bar
     (Member State / Other Africa / Participant registrations print here as
     "Delegate" — see format_badge_category()), a pink designation pill,
-    institution/country, a QR code with accent corner brackets, ID, theme,
-    a navy footer bar (dates + website) and a location strip.
+    institution/country, a bordered QR code card with ID inside it, theme,
+    and a brand-pink footer block (dates + website, then location).
     """
     width, height = A5
     NAVY = (30 / 255.0, 58 / 255.0, 69 / 255.0)
     RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)
+    PINK = (254 / 255.0, 80 / 255.0, 103 / 255.0)  # rgb(254, 80, 103) — brand
 
     # ── White background ─────────────────────────────────────────────────────
     c.setFillColorRGB(1, 1, 1)
     c.rect(0, 0, width, height, fill=True, stroke=False)
 
-    # ── Footer bar (dates + website) & location strip ────────────────────────
-    footer_h = 10 * mm
-    subfooter_h = 8 * mm
-    c.setFillColorRGB(*NAVY)
-    c.rect(0, subfooter_h, width, footer_h, fill=True, stroke=False)
+    # ── Footer block: dates + website, then location ─────────────────────────
+    footer_h = 16 * mm
+    c.setFillColorRGB(*PINK)
+    c.rect(0, 0, width, footer_h, fill=True, stroke=False)
+    c.setStrokeColorRGB(1, 1, 1)
+    c.setLineWidth(0.4)
+    c.line(6 * mm, footer_h - 6 * mm, width - 6 * mm, footer_h - 6 * mm)
+
     c.setFillColorRGB(1, 1, 1)
     c.setFont("Helvetica-Bold", 9)
     date_range = _format_badge_date_range(p.get("event_start_date"), p.get("event_end_date"))
-    c.drawString(8 * mm, subfooter_h + footer_h / 2 - 1.5 * mm, date_range or "")
-    c.drawRightString(width - 8 * mm, subfooter_h + footer_h / 2 - 1.5 * mm, "WWW.ECSACONM.ORG")
+    c.drawString(8 * mm, footer_h - 4.5 * mm, date_range or "")
+    c.drawRightString(width - 8 * mm, footer_h - 4.5 * mm, "WWW.ECSACONM.ORG")
 
     location = (p.get("location") or "").strip()
-    c.setFillColorRGB(0.99, 0.93, 0.94)
-    c.rect(0, 0, width, subfooter_h, fill=True, stroke=False)
     if location:
-        c.setFillColorRGB(*RED)
         c.setFont("Helvetica-Bold", 7.5)
-        c.drawCentredString(width / 2, subfooter_h / 2 - 1 * mm, location)
+        c.drawCentredString(width / 2, footer_h - 10.5 * mm, location)
 
     # ── Content column (top-down) ────────────────────────────────────────────
     y = height - 10 * mm
 
     # Logos: ECSA (left) + ECSACONM (right), in circular frames
-    logo_d = 20 * mm
+    logo_d = 24 * mm
     logo_cy = y - logo_d / 2
     left_cx = 8 * mm + logo_d / 2
     right_cx = width - 8 * mm - logo_d / 2
@@ -2147,36 +2148,30 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         c.drawCentredString(width / 2, y, country)
         y -= 12 * mm
 
-    # ── QR code with accent corner brackets ──────────────────────────────────
-    qr_size = 32 * mm
-    qr_pad = 3 * mm
-    box = qr_size + qr_pad * 2
-    box_x = (width - box) / 2
-    box_y = y - box
-    bracket = 6 * mm
-    c.setStrokeColorRGB(*RED)
-    c.setLineWidth(1.6)
-    for cx, cy, dx, dy in (
-        (box_x, box_y + box, 1, 0), (box_x, box_y + box, 0, -1),
-        (box_x + box, box_y + box, -1, 0), (box_x + box, box_y + box, 0, -1),
-        (box_x, box_y, 1, 0), (box_x, box_y, 0, 1),
-        (box_x + box, box_y, -1, 0), (box_x + box, box_y, 0, 1),
-    ):
-        c.line(cx, cy, cx + dx * bracket, cy + dy * bracket)
+    # ── QR code card: bordered box with ID printed inside, below the QR ──────
+    qr_size = 30 * mm
+    qr_pad = 4 * mm
+    id_h = 7 * mm
+    box_w = qr_size + qr_pad * 2
+    box_h = qr_size + qr_pad * 2 + id_h
+    box_x = (width - box_w) / 2
+    box_y = y - box_h
+    c.setFillColorRGB(1, 1, 1)
+    c.setStrokeColorRGB(*PINK)
+    c.setLineWidth(1)
+    c.roundRect(box_x, box_y, box_w, box_h, 3 * mm, fill=True, stroke=True)
 
     qr_data = f"{CLIENT_ORIGIN}/#/user-event-status/{p['registration_id']}/{p['event_id']}/"
     qr = qrcode.make(qr_data)
     qr_buf = BytesIO()
     qr.save(qr_buf, format="PNG")
     qr_buf.seek(0)
-    c.drawImage(ImageReader(qr_buf), box_x + qr_pad, box_y + qr_pad, qr_size, qr_size)
-    y = box_y - 6 * mm
+    c.drawImage(ImageReader(qr_buf), box_x + qr_pad, box_y + id_h + qr_pad / 2, qr_size, qr_size)
 
-    # Participant ID (below QR)
     c.setFillColorRGB(*RED)
     c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(width / 2, y, f"ID #{p['registration_id']}")
-    y -= 6 * mm
+    c.drawCentredString(width / 2, box_y + id_h / 2 - 1.5 * mm, f"ID #{p['registration_id']}")
+    y = box_y - 6 * mm
 
     # Theme (below ID)
     theme = (p.get("event_theme") or "").strip()

@@ -296,14 +296,14 @@
 
           <div class="mt-4 flex gap-2">
             <button @click="downloadBadge" :disabled="badgeDownloading"
-              class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-              style="background-color: rgb(30,58,69);">
-              <PrinterIcon class="w-4 h-4" />
+              class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-white text-gray-700 transition hover:opacity-80 disabled:opacity-50"
+              style="border: 1px solid rgba(254,80,103,0.3);">
+              <PrinterIcon class="w-4 h-4" style="color: rgb(254,80,103);" />
               {{ badgeDownloading ? 'Preparing…' : 'Print A5 Pass' }}
             </button>
             <button @click="shareBadge(badgeParticipant.registration_id)"
-              class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
-              style="background-color: rgb(220,50,75);">
+              class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-white transition hover:opacity-90"
+              style="background-color: rgb(254,80,103);">
               <ShareIcon class="w-4 h-4" />
               Share ID #{{ badgeParticipant.registration_id }}
             </button>
