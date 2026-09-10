@@ -1940,6 +1940,26 @@ async def get_online_registration_qr_flyer(
     )
 
 
+@router.get("/{event_id}/registration/qr_image")
+async def get_online_registration_qr_image(
+    event_id: int,
+    user: user_dependency,
+    db: Session = Depends(get_db),
+):
+    """Just the raw QR code as a PNG (no flyer chrome) — for an inline
+    on-page preview; the full printable flyer is at .../registration/qr."""
+    event = get_object(event_id, db, Event)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    file_url = f"{CLIENT_ORIGIN}/#/register/{event_id}"
+    qr = qrcode.make(file_url)
+    buf = BytesIO()
+    qr.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
+
+
 @router.post("/add_link/")
 async def add_link(
     request: Request,

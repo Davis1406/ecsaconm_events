@@ -25,14 +25,27 @@
             <option value="without">Without Proof</option>
             <option value="pending">Proof Pending (not paid)</option>
           </select>
-          <button @click="downloadRegistrationQr" :disabled="!selectedEventId"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border-2 transition disabled:opacity-40 disabled:cursor-not-allowed"
-            style="border-color: rgb(254,80,103); color: rgb(254,80,103);"
-            title="Select an event above, then download a printable QR linking to its online registration form">
-            <QrCodeIcon class="w-4 h-4" />
-            Registration QR
-          </button>
         </div>
+      </div>
+
+      <!-- Registration QR — shown as soon as an event is selected (auto-picked when there's only one) -->
+      <div v-if="selectedEventId" class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex items-center gap-4 flex-wrap">
+        <div v-if="qrPreviewUrl" class="h-20 w-20 rounded-lg border border-gray-100 flex-shrink-0 overflow-hidden">
+          <img :src="qrPreviewUrl" alt="Online registration QR" class="h-full w-full object-contain" />
+        </div>
+        <div v-else class="h-20 w-20 rounded-lg border border-gray-100 flex items-center justify-center flex-shrink-0 bg-gray-50">
+          <QrCodeIcon class="w-8 h-8 text-gray-300" />
+        </div>
+        <div class="flex-1 min-w-[180px]">
+          <p class="text-sm font-semibold text-gray-800">Online Registration QR</p>
+          <p class="text-xs text-gray-400 mt-0.5">Scan to open the public registration form for this event.</p>
+        </div>
+        <button @click="downloadRegistrationQr"
+          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border-2 transition"
+          style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+          <ArrowDownTrayIcon class="w-4 h-4" />
+          Download Flyer (PDF)
+        </button>
       </div>
 
       <p v-if="!isLoading" class="text-xs text-gray-400">
@@ -671,14 +684,14 @@ import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData, fetchDataWithParams, updateItem } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 import { DocumentTextIcon } from '@heroicons/vue/24/outline'
-import { QrCodeIcon } from '@heroicons/vue/24/solid'
+import { QrCodeIcon, ArrowDownTrayIcon } from '@heroicons/vue/24/solid'
 
 const API_URL = import.meta.env.VITE_API_URL
 
 export default {
   name: 'RegistrationsView',
   components: {
-    PaginationComponent, SearchComponent, HeaderView, SpinnerComponent, DocumentTextIcon, QrCodeIcon,
+    PaginationComponent, SearchComponent, HeaderView, SpinnerComponent, DocumentTextIcon, QrCodeIcon, ArrowDownTrayIcon,
   },
   data() {
     return {
@@ -698,6 +711,8 @@ export default {
       openMenuId: null,
       selectedIds: new Set(),
       bulkSaving: false,
+      qrPreviewUrl: '',
+      qrPreviewLoading: false,
       reminderModal: {
         show: false, loading: false, saving: false, sending: false,
         recipientCount: 0, deadline: '',
@@ -764,7 +779,7 @@ export default {
     searchPhrase() { this.syncUrl() },
     paidFilter() { this.syncUrl() },
     proofFilter() { this.syncUrl() },
-    selectedEventId() { this.syncUrl() },
+    selectedEventId() { this.syncUrl(); this.loadRegistrationQrPreview() },
     currentPage() { this.syncUrl() },
   },
   mounted() {
@@ -782,14 +797,39 @@ export default {
   },
   beforeUnmount() {
     document.removeEventListener('click', this.closeMenu)
+    if (this.qrPreviewUrl) window.URL.revokeObjectURL(this.qrPreviewUrl)
   },
   methods: {
     async loadEvents() {
       try {
         const response = await fetchData('events', 0, 100, '')
         this.events = response.data || []
+        // Only one event running — default the filter to it and show its
+        // registration QR right away instead of making someone pick it.
+        if (!this.selectedEventId && this.events.length === 1) {
+          this.selectedEventId = this.events[0].id
+          this.handleFilterChange()
+        } else if (this.selectedEventId) {
+          this.loadRegistrationQrPreview()
+        }
       } catch (error) {
         console.error('Error fetching events:', error)
+      }
+    },
+    async loadRegistrationQrPreview() {
+      if (this.qrPreviewUrl) { window.URL.revokeObjectURL(this.qrPreviewUrl); this.qrPreviewUrl = '' }
+      if (!this.selectedEventId) return
+      this.qrPreviewLoading = true
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.get(`/events/${this.selectedEventId}/registration/qr_image`, { responseType: 'blob' })
+        this.qrPreviewUrl = window.URL.createObjectURL(res.data)
+      } catch (error) {
+        console.error('Error loading registration QR preview:', error)
+      } finally {
+        this.qrPreviewLoading = false
       }
     },
     syncUrl() {
