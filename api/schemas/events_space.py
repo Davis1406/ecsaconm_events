@@ -189,6 +189,7 @@ class LinkSchema(BaseModel):
 
 class AttendanceBase(BaseModel):
     registration_id: int
+    attendance_date: Optional[date] = None
 
 
 class AttendanceCreate(AttendanceBase):

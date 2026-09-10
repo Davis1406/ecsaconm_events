@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import Date
@@ -10,7 +10,7 @@ from schemas.events_space import AttendanceCreate
 
 
 def create_attendance(db: Session, data: AttendanceCreate):
-    today = date.today()
+    target_date = data.attendance_date or date.today()
 
     # Check if the registration exists
     registration = (
@@ -19,19 +19,22 @@ def create_attendance(db: Session, data: AttendanceCreate):
     if not registration:
         raise ValueError("User not registered")
 
-    # Check if attendance already exists for this registration today
+    # Check if attendance already exists for this registration on the target date
     existing = (
         db.query(EventAttendance)
         .filter(
             EventAttendance.registration_id == data.registration_id,
-            EventAttendance.created_at.cast(Date) == today,
+            EventAttendance.attendance_date.cast(Date) == target_date,
         )
         .first()
     )
     if existing:
-        raise ValueError("Attendance already recorded for today")
+        raise ValueError("Attendance already recorded for this date")
 
-    attendance = EventAttendance(registration_id=data.registration_id)
+    attendance = EventAttendance(
+        registration_id=data.registration_id,
+        attendance_date=datetime.combine(target_date, time.min),
+    )
     db.add(attendance)
     try:
         db.commit()

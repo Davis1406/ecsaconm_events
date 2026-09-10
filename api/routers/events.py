@@ -349,7 +349,7 @@ async def scan_registration(
         .all()
     )
     today_attendance = next(
-        (a for a in all_attendance if a.created_at and a.created_at.date() == today),
+        (a for a in all_attendance if (a.attendance_date or a.created_at).date() == today),
         None,
     )
     role_key = (

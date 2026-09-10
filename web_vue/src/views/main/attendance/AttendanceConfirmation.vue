@@ -51,7 +51,7 @@
         </svg>
       </div>
       <p class="text-gray-500 text-base font-medium mb-1">Select an event to view attendance</p>
-      <p class="text-gray-400 text-sm">Track confirmed attendance for each registered participant</p>
+      <p class="text-gray-400 text-sm">Confirm attendance for each day of the event</p>
     </div>
 
     <!-- Spinner -->
@@ -74,44 +74,53 @@
         </span>
       </div>
 
-      <!-- Header -->
-      <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
-        <div class="col-span-1">#</div>
-        <div class="col-span-3">Participant</div>
-        <div class="col-span-3">Email</div>
-        <div class="col-span-2">Category</div>
-        <div class="col-span-2">Payment</div>
-        <div class="col-span-1 text-right">Attended</div>
+      <!-- Day legend / select-all per day -->
+      <div v-if="eventDays.length" class="px-5 pt-3 pb-2 flex flex-wrap gap-2 text-xs text-gray-500">
+        <label v-for="d in eventDays" :key="d.date"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-50 cursor-pointer select-none">
+          <input type="checkbox" :checked="dayAllSelected(d)" @change="toggleDayAll(d)" class="rounded border-gray-300" />
+          {{ d.label }}
+          <span class="text-gray-400">({{ dayCount(d) }})</span>
+        </label>
+      </div>
+
+      <!-- Table -->
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+              <th class="px-3 py-3 text-left whitespace-nowrap">#</th>
+              <th class="px-3 py-3 text-left whitespace-nowrap">Participant</th>
+              <th class="px-3 py-3 text-left whitespace-nowrap">Category</th>
+              <th v-for="d in eventDays" :key="d.date" class="px-3 py-3 text-center whitespace-nowrap">{{ d.label }}</th>
+              <th class="px-3 py-3 text-center whitespace-nowrap">Days</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(reg, idx) in filteredRegistrations" :key="reg.id"
+              class="border-b border-gray-50 hover:bg-gray-50">
+              <td class="px-3 py-3 text-gray-400 text-xs">{{ idx + 1 }}</td>
+              <td class="px-3 py-3 font-semibold text-gray-800 whitespace-nowrap">
+                {{ [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ') || '—' }}
+              </td>
+              <td class="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">{{ formatRole(reg.participation_role) }}</td>
+              <td v-for="d in eventDays" :key="d.date" class="px-3 py-3 text-center">
+                <input type="checkbox"
+                  :checked="isPresent(reg, d.date)"
+                  :disabled="toggling === reg.id + ':' + d.date"
+                  @change="toggleDay(reg, d.date)"
+                  class="rounded border-gray-300"
+                  :title="d.label" />
+              </td>
+              <td class="px-3 py-3 text-center text-xs font-semibold text-gray-600">{{ daysAttended(reg) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Empty -->
       <div v-if="filteredRegistrations.length === 0" class="py-16 text-center">
         <p class="text-gray-400 text-sm italic">No registrations found for this event.</p>
-      </div>
-
-      <!-- Rows -->
-      <div v-for="(reg, idx) in filteredRegistrations" :key="reg.id"
-        class="flex sm:grid sm:grid-cols-12 gap-2 items-center px-5 py-3.5 border-b border-gray-50 hover:bg-gray-50 transition text-sm"
-        :class="reg.attended ? 'bg-green-50/30' : ''">
-        <div class="col-span-1 text-gray-400 text-xs hidden sm:block">{{ idx + 1 }}</div>
-        <div class="col-span-3 font-semibold text-gray-800">
-          {{ [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ') || '—' }}
-        </div>
-        <div class="col-span-3 text-gray-500 text-xs truncate">{{ reg.email || '—' }}</div>
-        <div class="col-span-2 text-gray-600 text-xs">{{ formatRole(reg.participation_role) }}</div>
-        <div class="col-span-2">
-          <span v-if="reg.paid" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Paid</span>
-          <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">Unpaid</span>
-        </div>
-        <div class="col-span-1 flex justify-end">
-          <button @click="toggleAttendance(reg)"
-            :disabled="toggling === reg.id"
-            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50"
-            :style="reg.attended ? 'background-color: rgb(254,80,103);' : 'background-color: #d1d5db;'">
-            <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
-              :class="reg.attended ? 'translate-x-6' : 'translate-x-1'"></span>
-          </button>
-        </div>
       </div>
     </div>
 
@@ -150,7 +159,9 @@ export default {
       isLoading: false,
       events: [],
       selectedEventId: '',
-      registrations: [],   // each reg has: ...fields, attended: bool, attendanceId: int|null
+      registrations: [],
+      // registration_id -> { 'YYYY-MM-DD': attendanceId }
+      attendanceMap: {},
       search: '',
       toggling: null,
       toast: { show: false, message: '', type: 'success' },
@@ -161,6 +172,26 @@ export default {
     return { authStore }
   },
   computed: {
+    selectedEvent() {
+      return this.events.find(e => e.id == this.selectedEventId)
+    },
+    eventDays() {
+      const ev = this.selectedEvent
+      if (!ev || !ev.start_date || !ev.end_date) return []
+      const days = []
+      const start = new Date(String(ev.start_date).slice(0, 10) + 'T00:00:00')
+      const end = new Date(String(ev.end_date).slice(0, 10) + 'T00:00:00')
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        days.push({
+          date: `${y}-${m}-${dd}`,
+          label: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+        })
+      }
+      return days
+    },
     filteredRegistrations() {
       if (!this.search.trim()) return this.registrations
       const term = this.search.toLowerCase()
@@ -172,7 +203,7 @@ export default {
     stats() {
       return {
         total: this.registrations.length,
-        attended: this.registrations.filter(r => r.attended).length,
+        attended: this.registrations.filter(r => this.daysAttended(r) > 0).length,
       }
     },
   },
@@ -184,7 +215,6 @@ export default {
       try {
         const res = await fetchData('events', 0, 100, '')
         this.events = res.data || []
-        // Auto-select if only one event exists
         if (this.events.length === 1) {
           this.selectedEventId = this.events[0].id
           this.loadAttendance()
@@ -195,39 +225,27 @@ export default {
     },
 
     async loadAttendance() {
-      if (!this.selectedEventId) { this.registrations = []; return }
+      if (!this.selectedEventId) { this.registrations = []; this.attendanceMap = {}; return }
       this.isLoading = true
       try {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
 
-        // Load registrations for this event
         const res = await api.get(`/registrations/?event_id=${this.selectedEventId}&skip=0&limit=500`)
-        const rawRegs = res.data?.data || res.data || []
+        this.registrations = res.data?.data || res.data || []
 
-        // Load all attendance records; match by registration_id
-        // Store both the boolean AND the attendance record ID (needed for delete/untoggle)
-        let attendanceMap = {}   // registration_id → { attended: true, attendanceId: n }
+        const map = {}
         try {
-          const regIds = new Set(rawRegs.map(r => r.id))
-          const attRes = await api.get(`/event_attendance/events/attendance/?limit=10000`)
-          const attList = attRes.data || []
-          attList
-            .filter(a => regIds.has(a.registration_id))
-            .forEach(a => {
-              // Keep the LATEST record per registration
-              if (!attendanceMap[a.registration_id] || a.id > attendanceMap[a.registration_id].attendanceId) {
-                attendanceMap[a.registration_id] = { attended: true, attendanceId: a.id }
-              }
-            })
-        } catch (e) { /* ignore — attendance fetch failed */ }
-
-        this.registrations = rawRegs.map(r => ({
-          ...r,
-          attended: !!attendanceMap[r.id]?.attended,
-          attendanceId: attendanceMap[r.id]?.attendanceId || null,
-        }))
+          const attRes = await api.get(`/events/${this.selectedEventId}/attendance`)
+          const attList = attRes.data?.data || []
+          attList.forEach(a => {
+            const dateStr = String(a.attendance_date).slice(0, 10)
+            if (!map[a.registration_id]) map[a.registration_id] = {}
+            map[a.registration_id][dateStr] = a.id
+          })
+        } catch (e) { /* ignore */ }
+        this.attendanceMap = map
       } catch (e) {
         console.error('Error loading attendance:', e)
         this.registrations = []
@@ -236,31 +254,53 @@ export default {
       }
     },
 
-    async toggleAttendance(reg) {
-      this.toggling = reg.id
+    isPresent(reg, dateStr) {
+      return !!(this.attendanceMap[reg.id] && this.attendanceMap[reg.id][dateStr])
+    },
+    daysAttended(reg) {
+      return Object.keys(this.attendanceMap[reg.id] || {}).length
+    },
+    dayCount(dateStr) {
+      return this.registrations.filter(r => this.isPresent(r, dateStr)).length
+    },
+    dayAllSelected(dateStr) {
+      const regs = this.filteredRegistrations
+      return regs.length > 0 && regs.every(r => this.isPresent(r, dateStr))
+    },
+    async toggleDayAll(dateStr) {
+      const regs = this.filteredRegistrations
+      const target = this.dayAllSelected(dateStr)
+        ? regs.filter(r => this.isPresent(r, dateStr))   // unmark all
+        : regs.filter(r => !this.isPresent(r, dateStr))  // mark all
+      for (const reg of target) {
+        await this.toggleDay(reg, dateStr)
+      }
+    },
+    async toggleDay(reg, dateStr) {
+      const key = `${reg.id}:${dateStr}`
+      if (this.toggling === key) return
+      this.toggling = key
       try {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
 
-        if (!reg.attended) {
-          // Mark as attended
+        if (this.isPresent(reg, dateStr)) {
+          const attId = this.attendanceMap[reg.id][dateStr]
+          await api.delete(`/event_attendance/events/attendance/${attId}`)
+          delete this.attendanceMap[reg.id][dateStr]
+          this.attendanceMap = { ...this.attendanceMap }
+          this.showToast(`${reg.firstname} removed from ${dateStr}`, 'success')
+        } else {
           const res = await api.post(`/event_attendance/events/${this.selectedEventId}/attendance`, {
             registration_id: reg.id,
             event_id: parseInt(this.selectedEventId),
-            attendance_date: new Date().toISOString(),
+            attendance_date: dateStr,
           })
-          reg.attended = true
-          reg.attendanceId = res.data?.id || null
-          this.showToast(`${reg.firstname} marked as attended`, 'success')
-        } else {
-          // Remove attendance — DELETE the record
-          if (reg.attendanceId) {
-            await api.delete(`/event_attendance/events/attendance/${reg.attendanceId}`)
-          }
-          reg.attended = false
-          reg.attendanceId = null
-          this.showToast(`${reg.firstname} attendance removed`, 'success')
+          if (!this.attendanceMap[reg.id]) this.attendanceMap[reg.id] = {}
+          this.attendanceMap[reg.id][dateStr] = res.data?.id || Date.now()
+          this.attendanceMap = { ...this.attendanceMap }
+          this.showToast(`${reg.firstname} marked present for ${dateStr}`, 'success')
         }
       } catch (e) {
         this.showToast(e.response?.data?.detail || 'Failed to update attendance', 'error')
@@ -270,19 +310,25 @@ export default {
     },
 
     extractAttendance() {
-      const eventName = this.events.find(e => e.id == this.selectedEventId)?.event || 'Event'
-      const rows = this.registrations.map((r, i) => ({
-        '#': i + 1,
-        'Title': r.title || '',
-        'First Name': r.firstname || '',
-        'Last Name': r.lastname || '',
-        'Email': r.email || '',
-        'Organisation': r.organisation || r.institution || '',
-        'Country': r.country || '',
-        'Category': this.formatRole(r.participation_role),
-        'Paid': r.paid ? 'Yes' : 'No',
-        'Attended': r.attended ? 'Yes' : 'No',
-      }))
+      const eventName = this.selectedEvent?.event || 'Event'
+      const rows = this.registrations.map((r, i) => {
+        const row = {
+          '#': i + 1,
+          'Title': r.title || '',
+          'First Name': r.firstname || '',
+          'Last Name': r.lastname || '',
+          'Email': r.email || '',
+          'Organisation': r.organisation || r.institution || '',
+          'Country': r.country || '',
+          'Category': this.formatRole(r.participation_role),
+          'Paid': r.paid ? 'Yes' : 'No',
+          'Days Attended': this.daysAttended(r),
+        }
+        this.eventDays.forEach(d => {
+          row[`${d.label} (${d.date})`] = this.isPresent(r, d.date) ? 'Yes' : 'No'
+        })
+        return row
+      })
       exportToExcel(rows, `Attendance_${eventName}`)
     },
 
