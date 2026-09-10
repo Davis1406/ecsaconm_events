@@ -100,8 +100,29 @@
         <!-- Attendance action -->
         <div class="px-6 py-5">
 
-          <!-- Already registered today -->
-          <div v-if="registeredToday"
+          <!-- Auto-recording on scan -->
+          <div v-if="confirming"
+            class="flex flex-col items-center gap-3 py-4 rounded-2xl text-center"
+            style="background-color: rgba(254,80,103,0.06);">
+            <svg class="animate-spin h-8 w-8" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <p class="text-sm font-semibold" style="color: rgb(254,80,103);">Marking attendance…</p>
+          </div>
+
+          <!-- Error -->
+          <div v-if="attendanceError"
+            class="mb-3 flex items-start gap-2 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">
+            <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            {{ attendanceError }}
+          </div>
+
+          <!-- Attendance status -->
+          <div v-if="registeredToday && !confirming"
             class="flex flex-col items-center gap-3 py-4 rounded-2xl text-center"
             style="background-color: rgba(34,197,94,0.08);">
             <div class="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center">
@@ -110,54 +131,17 @@
               </svg>
             </div>
             <div>
-              <p class="font-bold text-green-700 text-base">Already Registered</p>
-              <p class="text-xs text-green-600 mt-0.5">Attendance recorded for today</p>
+              <p class="font-bold text-green-700 text-base">
+                {{ fullName }} {{ attendanceSuccess ? 'has been marked for attendance' : 'is already marked for attendance today' }}
+              </p>
+              <p class="text-xs text-green-600 mt-1">
+                <template v-if="attendanceSuccess">
+                  on this date {{ todayDate }} and time {{ todayTime }}
+                  <template v-if="eventDayText"> for {{ eventDayText }}</template>
+                </template>
+                <template v-else-if="eventDayText">for {{ eventDayText }}</template>
+              </p>
             </div>
-          </div>
-
-          <!-- Confirm button -->
-          <div v-else>
-            <!-- Success state -->
-            <div v-if="attendanceSuccess"
-              class="flex flex-col items-center gap-3 py-4 rounded-2xl text-center"
-              style="background-color: rgba(34,197,94,0.08);">
-              <div class="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center">
-                <svg class="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-                </svg>
-              </div>
-              <div>
-                <p class="font-bold text-green-700 text-base">Attendance Confirmed!</p>
-                <p class="text-xs text-green-600 mt-0.5">{{ currentTime }}</p>
-              </div>
-            </div>
-
-            <!-- Error -->
-            <div v-if="attendanceError"
-              class="mb-3 flex items-start gap-2 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">
-              <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
-              {{ attendanceError }}
-            </div>
-
-            <!-- Button -->
-            <button v-if="!attendanceSuccess"
-              @click="confirmAttendance"
-              :disabled="confirming"
-              class="w-full py-4 rounded-2xl text-white font-bold text-base transition hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-              style="background-color: rgb(254,80,103);">
-              <svg v-if="confirming" class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-              </svg>
-              <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
-              {{ confirming ? 'Registering…' : 'Register Attendance' }}
-            </button>
           </div>
         </div>
 
@@ -226,6 +210,22 @@ export default {
       const l = (p.lastname || '').charAt(0).toUpperCase()
       return f + l || '?'
     },
+    fullName() {
+      const p = this.scanData.participant || {}
+      return [p.title, p.firstname, p.lastname].filter(Boolean).join(' ') || '—'
+    },
+    todayDate() {
+      return new Date().toLocaleDateString('en-GB', {
+        weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+      })
+    },
+    todayTime() {
+      return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    },
+    eventDayText() {
+      const d = this.scanData.event?.event_day
+      return d ? `Day ${d}` : ''
+    },
   },
   mounted() {
     this.loadScanData()
@@ -251,6 +251,10 @@ export default {
         const res = await axios.get(`${API_URL}/events/scan/${this.registrationId}`)
         this.scanData = res.data
         this.registeredToday = res.data.attendance?.registered_today || false
+        // Record attendance immediately on scan — no button press needed.
+        if (!this.registeredToday) {
+          this.confirmAttendance()
+        }
       } catch (e) {
         if (e.response?.status === 404) {
           this.notFound = true
@@ -264,7 +268,7 @@ export default {
       this.confirming = true
       this.attendanceError = ''
       try {
-        await axios.post(`${API_URL}/event_attendance/events/${this.scanData.event?.id}/attendance`, {
+        const res = await axios.post(`${API_URL}/event_attendance/events/${this.scanData.event?.id}/attendance`, {
           registration_id: parseInt(this.registrationId),
           event_id: parseInt(this.scanData.event?.id),
           attendance_date: new Date().toISOString(),

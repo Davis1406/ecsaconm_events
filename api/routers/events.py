@@ -397,6 +397,11 @@ async def scan_registration(
             "start_date": str(event.start_date) if event and event.start_date else "",
             "end_date": str(event.end_date) if event and event.end_date else "",
             "theme": event.theme if event else "",
+            "event_day": (
+                (date.today() - event.start_date.date()).days + 1
+                if event and event.start_date and (date.today() - event.start_date.date()).days >= 0
+                else None
+            ),
         },
         "attendance": {
             "registered_today": today_attendance is not None,
