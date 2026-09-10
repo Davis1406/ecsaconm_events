@@ -626,12 +626,23 @@ async def get_event(
                 .count()
             )
 
+        secretariat_total = (
+            db.query(Registration)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.deleted_at == None,
+                Registration.participation_role == ParticipationRole.secretariat,
+            )
+            .count()
+        )
+
         filter_counts = {
             "all": base_total,
             "paid": paid_total,
             "unpaid": base_total - paid_total,
             "proof_pending": proof_pending_total,
             "presenters": presenter_total,
+            "secretariat": secretariat_total,
         }
 
         if participant_filter == "paid":
@@ -642,6 +653,10 @@ async def get_event(
             reg_q = reg_q.filter(
                 Registration.payment_proof.isnot(None),
                 ~Registration.is_paid,
+            )
+        elif participant_filter == "secretariat":
+            reg_q = reg_q.filter(
+                Registration.participation_role == ParticipationRole.secretariat
             )
 
         needs_user_join = (

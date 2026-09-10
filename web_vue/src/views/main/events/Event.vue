@@ -940,13 +940,14 @@ export default {
       filterOptions: [
         { key: 'all', label: 'All' },
         { key: 'presenters', label: 'Abstract Presenters' },
+        { key: 'secretariat', label: 'Secretariat' },
         { key: 'paid', label: 'Paid' },
         { key: 'unpaid', label: 'Unpaid' },
         { key: 'proof_pending', label: 'Proof Submitted, Not Paid' },
       ],
       participantsTotal: 0,
       participantsFilteredTotal: 0,
-      filterCounts: { all: 0, presenters: 0, paid: 0, unpaid: 0, proof_pending: 0 },
+      filterCounts: { all: 0, presenters: 0, secretariat: 0, paid: 0, unpaid: 0, proof_pending: 0 },
       togglingPaidId: null,
       localPage: 1,
       localPageSize: 25,
@@ -1186,6 +1187,7 @@ export default {
       const labels = {
         all: 'All',
         presenters: 'Presenters',
+        secretariat: 'Secretariat',
         paid: 'Paid',
         unpaid: 'Unpaid',
         proof_pending: 'ProofSubmitted',
