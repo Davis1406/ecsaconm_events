@@ -62,3 +62,23 @@ def delete_attendance(db: Session, attendance_id: int):
         db.commit()
         return True
     return False
+
+
+def delete_all_attendance(db: Session, event_id: int):
+    """Delete every attendance record belonging to an event's registrations.
+    Returns the number of records removed."""
+    reg_ids = [
+        r.id
+        for r in db.query(Registration)
+        .filter(Registration.event_id == event_id)
+        .all()
+    ]
+    if not reg_ids:
+        return 0
+    count = (
+        db.query(EventAttendance)
+        .filter(EventAttendance.registration_id.in_(reg_ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return count

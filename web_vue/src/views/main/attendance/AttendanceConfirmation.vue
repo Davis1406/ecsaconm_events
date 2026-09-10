@@ -37,6 +37,16 @@
             </svg>
             Export
           </button>
+          <!-- Clear all attendance -->
+          <button v-if="hasAttendance" @click="clearAllAttendance"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
+            style="background-color: rgb(239,68,68);">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Clear All
+          </button>
         </div>
       </div>
     </div>
@@ -94,6 +104,7 @@
               <th class="px-3 py-3 text-left whitespace-nowrap">Category</th>
               <th v-for="d in eventDays" :key="d.date" class="px-3 py-3 text-center whitespace-nowrap">{{ d.label }}</th>
               <th class="px-3 py-3 text-center whitespace-nowrap">Days</th>
+              <th class="px-3 py-3 text-center whitespace-nowrap"></th>
             </tr>
           </thead>
           <tbody>
@@ -113,6 +124,16 @@
                   :title="d.label" />
               </td>
               <td class="px-3 py-3 text-center text-xs font-semibold text-gray-600">{{ daysAttended(reg) }}</td>
+              <td class="px-3 py-3 text-center">
+                <button v-if="daysAttended(reg) > 0" @click="clearParticipant(reg)"
+                  title="Delete this participant's attendance records"
+                  class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -210,18 +231,17 @@ export default {
       }
     },
     hasAttendance() {
-      const daySet = new Set(this.eventDays.map(d => d.date))
       return Object.keys(this.attendanceMap).some(regId =>
-        Object.keys(this.attendanceMap[regId] || {}).some(d => daySet.has(d)))
+        Object.keys(this.attendanceMap[regId] || {}).length > 0)
     },
   },
   mounted() {
     this.loadEvents()
     this.pollTimer = setInterval(() => {
-      // Keep the gate screen live: reload attendance so scans picked up by the
-      // QR page appear here without a manual refresh.
+      // Keep the gate screen live: reload silently so QR scans appear without a
+      // manual refresh and without flashing the loading spinner.
       if (this.selectedEventId && !this.isLoading && !this.toggling) {
-        this.loadAttendance()
+        this.loadAttendance(true)
       }
     }, 10000)
   },
@@ -242,9 +262,9 @@ export default {
       }
     },
 
-    async loadAttendance() {
+    async loadAttendance(silent = false) {
       if (!this.selectedEventId) { this.registrations = []; this.attendanceMap = {}; return }
-      this.isLoading = true
+      if (!silent) this.isLoading = true
       try {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
@@ -257,13 +277,8 @@ export default {
         try {
           const attRes = await api.get(`/events/${this.selectedEventId}/attendance`)
           const attList = attRes.data?.data || []
-          // Only records that fall on an actual event day count — anything else
-          // (e.g. an old test scan) is ignored so the page stays blank until
-          // someone is genuinely scanned for this event.
-          const daySet = new Set(this.eventDays.map(d => d.date))
           attList.forEach(a => {
             const dateStr = String(a.attendance_date).slice(0, 10)
-            if (!daySet.has(dateStr)) return
             if (!map[a.registration_id]) map[a.registration_id] = {}
             map[a.registration_id][dateStr] = a.id
           })
@@ -273,7 +288,7 @@ export default {
         console.error('Error loading attendance:', e)
         this.registrations = []
       } finally {
-        this.isLoading = false
+        if (!silent) this.isLoading = false
       }
     },
 
@@ -327,6 +342,48 @@ export default {
         }
       } catch (e) {
         this.showToast(e.response?.data?.detail || 'Failed to update attendance', 'error')
+      } finally {
+        this.toggling = null
+      }
+    },
+
+    async clearParticipant(reg) {
+      const name = [reg.firstname, reg.lastname].filter(Boolean).join(' ') || 'this participant'
+      const dates = Object.keys(this.attendanceMap[reg.id] || {})
+      if (!dates.length) return
+      if (!window.confirm(`Delete all attendance records for ${name}?`)) return
+      const token = this.authStore.accessToken
+      const api = axios.create({ baseURL: API_URL })
+      if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      this.toggling = 'clear'
+      try {
+        for (const dateStr of dates) {
+          const attId = this.attendanceMap[reg.id][dateStr]
+          await api.delete(`/event_attendance/events/attendance/${attId}`)
+        }
+        delete this.attendanceMap[reg.id]
+        this.attendanceMap = { ...this.attendanceMap }
+        this.showToast(`${name}'s attendance cleared`, 'success')
+      } catch (e) {
+        this.showToast(e.response?.data?.detail || 'Failed to clear attendance', 'error')
+      } finally {
+        this.toggling = null
+      }
+    },
+
+    async clearAllAttendance() {
+      if (!this.hasAttendance) return
+      if (!window.confirm('Delete ALL attendance records for this event? This cannot be undone.')) return
+      const token = this.authStore.accessToken
+      const api = axios.create({ baseURL: API_URL })
+      if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      this.toggling = 'clear-all'
+      try {
+        const res = await api.delete(`/event_attendance/events/${this.selectedEventId}/attendance`)
+        this.attendanceMap = {}
+        this.showToast(res.data?.detail || 'All attendance cleared', 'success')
+      } catch (e) {
+        this.showToast(e.response?.data?.detail || 'Failed to clear attendance', 'error')
       } finally {
         this.toggling = null
       }
