@@ -125,7 +125,13 @@
 
       <!-- Toolbar -->
       <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-        <h2 class="text-sm font-bold text-gray-700 flex-1">Participants</h2>
+        <h2 class="text-sm font-bold text-gray-700 flex-1 flex items-center gap-2">
+          Participants
+          <svg v-if="participantsLoading" class="animate-spin w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+        </h2>
         <search-component @search="handleSearch" />
 
         <!-- Visual Reports -->
@@ -137,11 +143,15 @@
         </button>
 
         <!-- Extract Report (Excel) -->
-        <button @click="extractReport"
-          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
+        <button @click="extractReport" :disabled="exporting"
+          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           style="background-color: rgb(254,80,103);">
-          <ArrowDownTrayIcon class="w-4 h-4" />
-          Extract Report
+          <svg v-if="exporting" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <ArrowDownTrayIcon v-else class="w-4 h-4" />
+          {{ exporting ? 'Preparing…' : 'Extract Report' }}
         </button>
 
         <DownloadComponent v-if="permissions.includes('DOWNLOAD_PARTICIPANT_LIST')"
@@ -305,7 +315,7 @@
 
       <div class="px-5 pb-2 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-2 text-sm text-gray-500">
-          <span>Showing {{ rowStart }}–{{ rowEnd }} of {{ participantsTotal }}</span>
+          <span>Showing {{ rowStart }}–{{ rowEnd }} of {{ participantsFilteredTotal }}</span>
           <select v-model.number="localPageSize"
             title="Entries per page"
             class="border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-600 bg-white focus:outline-none">
@@ -612,11 +622,11 @@
             <h3 class="font-bold text-gray-800">Registration Reports</h3>
           </div>
           <div class="flex items-center gap-3">
-            <button @click="extractReport"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+            <button @click="extractReport" :disabled="exporting"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
               style="background-color: rgb(254,80,103);">
               <ArrowDownTrayIcon class="w-3.5 h-3.5" />
-              Export Excel
+              {{ exporting ? 'Preparing…' : 'Export Excel' }}
             </button>
             <button @click="showReportsModal = false" class="text-gray-400 hover:text-gray-600 transition">
               <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -924,21 +934,26 @@ export default {
         { key: 'proof_pending', label: 'Proof Submitted, Not Paid' },
       ],
       participantsTotal: 0,
+      participantsFilteredTotal: 0,
       filterCounts: { all: 0, presenters: 0, paid: 0, unpaid: 0, proof_pending: 0 },
       togglingPaidId: null,
       localPage: 1,
       localPageSize: 25,
       pageSizeOptions: [25, 50, 100],
+      participantsLoading: false,
+      exporting: false,
     };
   },
   mounted() {
     this.getEvent();
   },
   watch: {
-    filterPreset() { this.localPage = 1; this.getEvent(); },
-    searchPhrase() { this.localPage = 1; this.getEvent(); },
-    localPageSize() { this.localPage = 1; this.getEvent(); },
-    localPage() { this.getEvent(); },
+    // Reload silently (no full-page spinner) so the search box keeps focus
+    // while typing — same behaviour as the Registrations page.
+    filterPreset() { this.localPage = 1; this.getEvent(true); },
+    searchPhrase() { this.localPage = 1; this.getEvent(true); },
+    localPageSize() { this.localPage = 1; this.getEvent(true); },
+    localPage() { this.getEvent(true); },
   },
   setup() {
     const authStore = useAuthStore();
@@ -983,14 +998,14 @@ export default {
       return this.participants;
     },
     localTotalPages() {
-      return Math.max(1, Math.ceil(this.participantsTotal / this.localPageSize));
+      return Math.max(1, Math.ceil(this.participantsFilteredTotal / this.localPageSize));
     },
     rowStart() {
-      if (this.participantsTotal === 0) return 0;
+      if (this.participantsFilteredTotal === 0) return 0;
       return (this.localPage - 1) * this.localPageSize + 1;
     },
     rowEnd() {
-      return Math.min(this.localPage * this.localPageSize, this.participantsTotal || 0);
+      return Math.min(this.localPage * this.localPageSize, this.participantsFilteredTotal || 0);
     },
     pagedParticipants() {
       // The server already returns one page — don't slice again, or pages
@@ -1054,6 +1069,7 @@ export default {
   methods: {
     async getEvent(silent = false) {
       if (!silent) this.isLoading = true;
+      else this.participantsLoading = true;
       try {
         const api = axios.create({ baseURL: API_URL });
         if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
@@ -1072,11 +1088,13 @@ export default {
         this.documents = response.documents || [];
         this.links = response.links || [];
         this.participantsTotal = response.participants_total_all ?? this.participants.length;
+        this.participantsFilteredTotal = response.participants_total ?? this.participants.length;
         if (response.filter_counts) this.filterCounts = response.filter_counts;
       } catch (error) {
         console.error("Error fetching event:", error);
       } finally {
         this.isLoading = false;
+        this.participantsLoading = false;
       }
     },
     handleSearch(searchQuery) {
@@ -1114,23 +1132,69 @@ export default {
       this.getEvent();
       exportToExcel(this.attendance, 'AttendanceRegister');
     },
-    extractReport() {
-      const rows = this.participants.map(p => ({
-        'ID': p.id,
-        'Title': p.title || '',
-        'First Name': p.firstname || '',
-        'Last Name': p.lastname || '',
-        'Designation': p.designation || '',
-        'Email': p.email || '',
-        'Phone': p.phone || '',
-        'Organisation': p.organisation || p.institution || '',
-        'Country': p.country || '',
-        'Category': CATEGORY_MAP[p.participant_category || p.participation_role] || p.participant_category || p.participation_role || '',
-        'Paid': this.paidStatus(p.paid || p.event_payment) ? 'Yes' : 'No',
-        'Payment Proof': p.payment_proof ? 'Yes' : 'No',
-        'Registered': p.confirm_attendance ? 'Yes' : 'No',
-      }));
-      exportToExcel(rows, `EventReport_${this.event.event || this.id}`);
+    filterLabelForExport() {
+      const labels = {
+        all: 'All',
+        presenters: 'Presenters',
+        paid: 'Paid',
+        unpaid: 'Unpaid',
+        proof_pending: 'ProofSubmitted',
+      };
+      return labels[this.filterPreset] || this.filterPreset;
+    },
+    async fetchAllParticipantsForFilter() {
+      // Pull every participant matching the current filter (and search), not
+      // just the page on screen, so the exported report is complete.
+      const api = axios.create({ baseURL: API_URL });
+      if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+      const pageSize = 200;
+      const collected = [];
+      let skip = 0;
+      while (true) {
+        const res = await api.get(`/events/${this.id}`, {
+          params: {
+            participant_skip: skip,
+            participant_limit: pageSize,
+            participant_filter: this.filterPreset,
+            participant_search: this.searchPhrase || '',
+          },
+        });
+        const batch = res.data.participants || [];
+        collected.push(...batch);
+        const total = res.data.participants_total ?? collected.length;
+        if (batch.length < pageSize || collected.length >= total) break;
+        skip += pageSize;
+      }
+      return collected;
+    },
+    async extractReport() {
+      if (this.exporting) return;
+      this.exporting = true;
+      try {
+        const participants = await this.fetchAllParticipantsForFilter();
+        const rows = participants.map(p => ({
+          'ID': p.id,
+          'Title': p.title || '',
+          'First Name': p.firstname || '',
+          'Last Name': p.lastname || '',
+          'Designation': p.designation || '',
+          'Email': p.email || '',
+          'Phone': p.phone || '',
+          'Organisation': p.organisation || p.institution || '',
+          'Country': p.country || '',
+          'Category': CATEGORY_MAP[p.participant_category || p.participation_role] || p.participant_category || p.participation_role || '',
+          'Paid': this.paidStatus(p.paid || p.event_payment) ? 'Yes' : 'No',
+          'Payment Proof': p.payment_proof ? 'Yes' : 'No',
+          'Registered': p.confirm_attendance ? 'Yes' : 'No',
+        }));
+        exportToExcel(rows, `EventReport_${this.filterLabelForExport()}_${this.event.event || this.id}`);
+      } catch (error) {
+        console.error('Error extracting report:', error);
+        this.errorMsg = 'Could not generate the report. Please try again.';
+        setTimeout(() => { this.errorMsg = ''; }, 4000);
+      } finally {
+        this.exporting = false;
+      }
     },
     paymentModal(userID) {
       this.userID = userID;
