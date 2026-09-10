@@ -80,7 +80,7 @@
         <input v-model="search" type="text" placeholder="Search participant…"
           class="flex-1 sm:max-w-xs border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
         <span class="text-xs text-gray-400 font-medium hidden sm:block">
-          {{ filteredRegistrations.length }} of {{ registrations.length }} shown
+          {{ filteredRegistrations.length }} of {{ scannedRegistrations.length }} scanned shown
         </span>
       </div>
 
@@ -141,7 +141,7 @@
 
       <!-- Empty -->
       <div v-if="filteredRegistrations.length === 0" class="py-16 text-center">
-        <p class="text-gray-400 text-sm italic">No registrations found for this event.</p>
+        <p class="text-gray-400 text-sm italic">No scanned participants match your search.</p>
       </div>
     </div>
 
@@ -201,25 +201,40 @@ export default {
     },
     eventDays() {
       const ev = this.selectedEvent
-      if (!ev || !ev.start_date || !ev.end_date) return []
       const days = []
-      const start = new Date(String(ev.start_date).slice(0, 10) + 'T00:00:00')
-      const end = new Date(String(ev.end_date).slice(0, 10) + 'T00:00:00')
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const y = d.getFullYear()
-        const m = String(d.getMonth() + 1).padStart(2, '0')
-        const dd = String(d.getDate()).padStart(2, '0')
+      const seen = new Set()
+      const pushDay = (dateStr) => {
+        if (seen.has(dateStr)) return
+        seen.add(dateStr)
+        const d = new Date(dateStr + 'T00:00:00')
         days.push({
-          date: `${y}-${m}-${dd}`,
+          date: dateStr,
           label: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
         })
       }
-      return days
+      if (ev && ev.start_date && ev.end_date) {
+        const start = new Date(String(ev.start_date).slice(0, 10) + 'T00:00:00')
+        const end = new Date(String(ev.end_date).slice(0, 10) + 'T00:00:00')
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const y = d.getFullYear()
+          const m = String(d.getMonth() + 1).padStart(2, '0')
+          const dd = String(d.getDate()).padStart(2, '0')
+          pushDay(`${y}-${m}-${dd}`)
+        }
+      }
+      // Include any attendance dates outside the event range (e.g. pre-event
+      // test scans) so their checkboxes are visible too.
+      Object.values(this.attendanceMap).forEach(m => Object.keys(m).forEach(pushDay))
+      return days.sort((a, b) => a.date.localeCompare(b.date))
+    },
+    scannedRegistrations() {
+      return this.registrations.filter(r => this.daysAttended(r) > 0)
     },
     filteredRegistrations() {
-      if (!this.search.trim()) return this.registrations
+      const base = this.scannedRegistrations
+      if (!this.search.trim()) return base
       const term = this.search.toLowerCase()
-      return this.registrations.filter(r => {
+      return base.filter(r => {
         const name = `${r.firstname || ''} ${r.lastname || ''}`.toLowerCase()
         return name.includes(term) || (r.email || '').toLowerCase().includes(term)
       })
