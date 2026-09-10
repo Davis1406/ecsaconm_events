@@ -14,7 +14,7 @@
             <option v-for="event in events" :key="event.id" :value="event.id">{{ event.event }}</option>
           </select>
         </div>
-        <div v-if="selectedEventId" class="flex items-end gap-2 flex-wrap">
+        <div v-if="selectedEventId && hasAttendance" class="flex items-end gap-2 flex-wrap">
           <div class="bg-gray-50 rounded-xl px-4 py-2 text-center">
             <p class="text-xl font-bold text-gray-800">{{ stats.total }}</p>
             <p class="text-xs text-gray-400 uppercase tracking-wide">Registered</p>
@@ -62,8 +62,8 @@
       </svg>
     </div>
 
-    <!-- Attendance table -->
-    <div v-else class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <!-- Attendance table (only once someone has been scanned) -->
+    <div v-else-if="hasAttendance" class="bg-white rounded-2xl shadow-sm overflow-hidden">
 
       <!-- Search -->
       <div class="px-5 py-4 border-b border-gray-50 flex items-center gap-3">
@@ -123,6 +123,9 @@
         <p class="text-gray-400 text-sm italic">No registrations found for this event.</p>
       </div>
     </div>
+
+    <!-- Blank until someone has been scanned -->
+    <div v-else class="flex-1 min-h-[50vh]"></div>
 
     <!-- Toast -->
     <transition name="fade">
@@ -206,9 +209,23 @@ export default {
         attended: this.registrations.filter(r => this.daysAttended(r) > 0).length,
       }
     },
+    hasAttendance() {
+      return Object.keys(this.attendanceMap).some(regId =>
+        Object.keys(this.attendanceMap[regId] || {}).length > 0)
+    },
   },
   mounted() {
     this.loadEvents()
+    this.pollTimer = setInterval(() => {
+      // Keep the gate screen live: reload attendance so scans picked up by the
+      // QR page appear here without a manual refresh.
+      if (this.selectedEventId && !this.isLoading && !this.toggling) {
+        this.loadAttendance()
+      }
+    }, 10000)
+  },
+  beforeUnmount() {
+    if (this.pollTimer) clearInterval(this.pollTimer)
   },
   methods: {
     async loadEvents() {
