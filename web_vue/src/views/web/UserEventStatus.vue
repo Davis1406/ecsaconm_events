@@ -268,17 +268,20 @@ export default {
       this.confirming = true
       this.attendanceError = ''
       try {
+        const now = new Date()
+        // The API expects a plain YYYY-MM-DD date — a full ISO datetime is rejected.
+        const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
         const res = await axios.post(`${API_URL}/event_attendance/events/${this.scanData.event?.id}/attendance`, {
           registration_id: parseInt(this.registrationId),
           event_id: parseInt(this.scanData.event?.id),
-          attendance_date: new Date().toISOString(),
+          attendance_date: localDate,
         })
         this.attendanceSuccess = true
         this.registeredToday = true
         // Update the history locally instead of re-fetching (faster at the gate)
         if (this.scanData.attendance) {
           this.scanData.attendance.records.push({
-            date: new Date().toISOString().slice(0, 10),
+            date: localDate,
             id: res.data?.id || Date.now(),
           })
           this.scanData.attendance.total_days = this.scanData.attendance.records.length
