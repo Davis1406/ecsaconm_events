@@ -2053,6 +2053,81 @@ def _parse_badge_title(event_name: str) -> dict:
     }
 
 
+def _interp_rgb(stops, t):
+    """Linear-interpolate an RGB color at position t (0..1) across `stops`,
+    a list of (position, (r,g,b)) pairs sorted by position."""
+    for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+        if t0 <= t <= t1:
+            f = (t - t0) / (t1 - t0) if t1 > t0 else 0
+            return tuple(c0[i] + (c1[i] - c0[i]) * f for i in range(3))
+    return stops[-1][1]
+
+
+def _gradient_rect(c, x, y, w, h, stops, steps=48):
+    """Approximate a left-to-right CSS linear-gradient with vertical bands."""
+    band_w = w / steps + 0.6
+    for i in range(steps):
+        t = i / (steps - 1) if steps > 1 else 0
+        c.setFillColorRGB(*_interp_rgb(stops, t))
+        c.rect(x + (i / steps) * w, y, band_w, h, fill=True, stroke=False)
+
+
+def _draw_diamond_pattern(c, x, y, w, h, color, tile, alpha=0.16):
+    """Repeating outlined-diamond motif, mirrors the footer's SVG pattern."""
+    c.saveState()
+    clip = c.beginPath()
+    clip.rect(x, y, w, h)
+    c.clipPath(clip, stroke=0, fill=0)
+    c.setStrokeColorRGB(*color)
+    c.setStrokeAlpha(alpha)
+    c.setLineWidth(0.4)
+    half = tile / 2
+    cols = int(w / tile) + 2
+    rows = int(h / tile) + 2
+    for row in range(-1, rows):
+        for col in range(-1, cols):
+            cx, cy = x + col * tile, y + row * tile
+            d = c.beginPath()
+            d.moveTo(cx, cy + half)
+            d.lineTo(cx + half, cy)
+            d.lineTo(cx, cy - half)
+            d.lineTo(cx - half, cy)
+            d.close()
+            c.drawPath(d, fill=0, stroke=1)
+    c.restoreState()
+
+
+def _draw_calendar_icon(c, x, y, s, color):
+    """Small calendar glyph; (x, y) is its bottom-left corner, s its width."""
+    c.saveState()
+    c.setStrokeColorRGB(*color)
+    c.setLineWidth(0.35)
+    body_h = s * 0.82
+    c.roundRect(x, y, s, body_h, s * 0.12, fill=0, stroke=1)
+    c.line(x, y + body_h * 0.62, x + s, y + body_h * 0.62)
+    c.line(x + s * 0.22, y + body_h, x + s * 0.22, y + body_h + s * 0.22)
+    c.line(x + s * 0.78, y + body_h, x + s * 0.78, y + body_h + s * 0.22)
+    c.restoreState()
+
+
+def _draw_pin_icon(c, cx, top_y, s, color):
+    """Small map-pin glyph; (cx, top_y) is its top-center point, s its height."""
+    c.saveState()
+    c.setFillColorRGB(*color)
+    r = s * 0.34
+    circle_cy = top_y - r
+    c.circle(cx, circle_cy, r, fill=1, stroke=0)
+    tip = c.beginPath()
+    tip.moveTo(cx - r * 0.85, circle_cy - r * 0.35)
+    tip.lineTo(cx + r * 0.85, circle_cy - r * 0.35)
+    tip.lineTo(cx, top_y - s)
+    tip.close()
+    c.drawPath(tip, fill=1, stroke=0)
+    c.setFillColorRGB(1, 1, 1)
+    c.circle(cx, circle_cy, r * 0.4, fill=1, stroke=0)
+    c.restoreState()
+
+
 def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     """Draw a single A5 badge page onto ReportLab canvas c.
 
@@ -2079,24 +2154,41 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.setFillColorRGB(1, 1, 1)
     c.rect(0, 0, width, height, fill=True, stroke=False)
 
-    # ── Footer block: dates + website, then location ─────────────────────────
-    footer_h = 16 * mm
-    c.setFillColorRGB(*PINK)
-    c.rect(0, 0, width, footer_h, fill=True, stroke=False)
-    c.setStrokeColorRGB(1, 1, 1)
-    c.setLineWidth(0.4)
-    c.line(6 * mm, footer_h - 6 * mm, width - 6 * mm, footer_h - 6 * mm)
+    # ── Footer block: brand gradient + motif, dates + website, then location ─
+    footer_h = 20 * mm
+    _gradient_rect(c, 0, 0, width, footer_h, [
+        (0.0, RED), (0.5, PINK), (1.0, (214 / 255.0, 44 / 255.0, 68 / 255.0)),
+    ])
+    _draw_diamond_pattern(c, 0, 0, width, footer_h, (1, 1, 1), tile=7 * mm)
 
+    c.saveState()
+    c.setStrokeColorRGB(1, 1, 1)
+    c.setStrokeAlpha(0.45)
+    c.setLineWidth(0.5)
+    c.line(6 * mm, footer_h - 8 * mm, width - 6 * mm, footer_h - 8 * mm)
+    c.restoreState()
+
+    row1_y = footer_h - 6 * mm
+    icon_s = 3 * mm
     c.setFillColorRGB(1, 1, 1)
+    _draw_calendar_icon(c, 7 * mm, row1_y - 0.5 * mm, icon_s, (1, 1, 1))
     c.setFont("Helvetica-Bold", 9)
     date_range = _format_badge_date_range(p.get("event_start_date"), p.get("event_end_date"))
-    c.drawString(8 * mm, footer_h - 4.5 * mm, date_range or "")
-    c.drawRightString(width - 8 * mm, footer_h - 4.5 * mm, "WWW.ECSACONM.ORG")
+    c.drawString(7 * mm + icon_s + 1.6 * mm, row1_y, date_range or "")
+    c.drawRightString(width - 7 * mm, row1_y, "WWW.ECSACONM.ORG")
 
     location = (p.get("location") or "").strip()
     if location:
-        c.setFont("Helvetica-Bold", 7.5)
-        c.drawCentredString(width / 2, footer_h - 10.5 * mm, location)
+        row2_y = footer_h - 14 * mm
+        loc_font, loc_size = "Helvetica-Bold", 8.5
+        loc_w = stringWidth(location, loc_font, loc_size)
+        icon_s2 = 3 * mm
+        block_w = icon_s2 + 1.3 * mm + loc_w
+        lx = width / 2 - block_w / 2
+        _draw_pin_icon(c, lx + icon_s2 / 2, row2_y + icon_s2 * 0.8, icon_s2, (1, 1, 1))
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont(loc_font, loc_size)
+        c.drawString(lx + icon_s2 + 1.3 * mm, row2_y, location)
 
     # ── Header: punch hole, then logos flanking the title ────────────────────
     y = height - 6 * mm
@@ -2106,10 +2198,10 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.roundRect(width / 2 - hole_w / 2, y - hole_h, hole_w, hole_h, hole_h / 2, fill=True, stroke=False)
     y -= hole_h + 4 * mm
 
-    logo_d = 20 * mm
+    logo_d = 25 * mm
     logo_cy = y - logo_d / 2
-    left_cx = 10 * mm + logo_d / 2
-    right_cx = width - 10 * mm - logo_d / 2
+    left_cx = 8 * mm + logo_d / 2
+    right_cx = width - 8 * mm - logo_d / 2
 
     c.saveState()
     c.setFillColorRGB(1, 1, 1)
@@ -2158,7 +2250,7 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
             ty -= 3.2 * mm
 
     if title["pill"]:
-        pill_text = title["pill"].upper()
+        pill_text = title["pill"]
         pill_font, pill_size = "Helvetica-Bold", 6.5
         pill_w = stringWidth(pill_text, pill_font, pill_size) + 6 * mm
         pill_h = 4.2 * mm
@@ -2184,64 +2276,71 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     full_name = f"{p['title']} {p['firstname']} {p['middle_name']} {p['lastname']}".strip()
     full_name = re.sub(r"\s+", " ", full_name)
     c.setFillColorRGB(*GRAY_900)
-    c.setFont("Helvetica-Bold", 17)
-    name_lines = textwrap.wrap(full_name, width=26)[:2] or [full_name]
+    c.setFont("Helvetica-Bold", 21)
+    name_lines = textwrap.wrap(full_name, width=22)[:2] or [full_name]
     for line in name_lines:
         c.drawCentredString(width / 2, y, line)
-        y -= 6.5 * mm
-    y -= 3 * mm
+        y -= 8 * mm
+    y -= 5 * mm
 
     # Category bar (navy) — "Delegate" for Member State / Other Africa / Participant
-    bar_h = 9 * mm
+    bar_h = 12 * mm
     c.setFillColorRGB(*NAVY_BAR)
-    c.roundRect(14 * mm, y - bar_h, width - 28 * mm, bar_h, 2.2 * mm, fill=True, stroke=False)
+    c.roundRect(14 * mm, y - bar_h, width - 28 * mm, bar_h, 2.8 * mm, fill=True, stroke=False)
     c.setFillColorRGB(1, 1, 1)
-    c.setFont("Helvetica-Bold", 12)
-    c.drawCentredString(width / 2, y - bar_h / 2 - 1.4 * mm, (p.get("participation_role") or "Delegate").upper())
-    y -= bar_h + 7 * mm
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(width / 2, y - bar_h / 2 - 1.9 * mm, (p.get("participation_role") or "Delegate").upper())
+    y -= bar_h + 9 * mm
 
     # Designation pill (pale pink, rose text)
     designation = (p.get("designation") or "").strip()
     if designation:
-        pill_h = 7 * mm
+        pill_h = 8.5 * mm
         c.setFillColorRGB(0.996, 0.933, 0.941)
         c.setStrokeColorRGB(*PINK)
         c.setLineWidth(0.6)
-        c.roundRect(24 * mm, y - pill_h, width - 48 * mm, pill_h, pill_h / 2, fill=True, stroke=True)
+        c.roundRect(20 * mm, y - pill_h, width - 40 * mm, pill_h, pill_h / 2, fill=True, stroke=True)
         c.setFillColorRGB(*ROSE_800)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(width / 2, y - pill_h / 2 - 1.3 * mm, designation.upper())
-        y -= pill_h + 7 * mm
+        c.setFont("Helvetica-Bold", 11)
+        c.drawCentredString(width / 2, y - pill_h / 2 - 1.7 * mm, designation.upper())
+        y -= pill_h + 9 * mm
 
     # Institution & country
     organisation = (p.get("organisation") or "").strip()
     country = (p.get("country") or "").strip()
     if organisation:
         c.setFillColorRGB(*GRAY_800)
-        c.setFont("Helvetica-Bold", 11)
-        org_lines = textwrap.wrap(organisation, width=32)[:2]
+        c.setFont("Helvetica-Bold", 14)
+        org_lines = textwrap.wrap(organisation, width=28)[:2]
         for line in org_lines:
             c.drawCentredString(width / 2, y, line)
-            y -= 5 * mm
-        y -= 2 * mm
+            y -= 6 * mm
+        y -= 2.5 * mm
     if country:
         c.setFillColorRGB(*GRAY_500)
-        c.setFont("Helvetica-Bold", 9)
+        c.setFont("Helvetica-Bold", 11)
         c.drawCentredString(width / 2, y, country)
-        y -= 10 * mm
+        y -= 13 * mm
+
+    # Theme text, wrapped ahead of time so the QR card can be sized to leave
+    # it (and the ID label) room above the footer without ever overlapping it.
+    theme = (p.get("event_theme") or "").strip()
+    theme_wrapped = textwrap.wrap(f'Theme: "{theme}"', width=42)[:2] if theme else []
 
     # ── QR code card: bordered box with ID printed inside, below the QR ──────
-    qr_size = 28 * mm
-    qr_pad = 3.5 * mm
-    id_h = 6.5 * mm
+    qr_pad = 4.5 * mm
+    id_h = 8 * mm
+    reserve_below = 7 * mm + (len(theme_wrapped) * 5 * mm if theme_wrapped else 0) + 4 * mm
+    available = y - footer_h - reserve_below
+    qr_size = max(22 * mm, min(34 * mm, available - qr_pad * 2 - id_h))
     box_w = qr_size + qr_pad * 2
     box_h = qr_size + qr_pad * 2 + id_h
     box_x = (width - box_w) / 2
     box_y = y - box_h
     c.setFillColorRGB(1, 1, 1)
     c.setStrokeColorRGB(*PINK)
-    c.setLineWidth(1)
-    c.roundRect(box_x, box_y, box_w, box_h, 3 * mm, fill=True, stroke=True)
+    c.setLineWidth(1.2)
+    c.roundRect(box_x, box_y, box_w, box_h, 3.5 * mm, fill=True, stroke=True)
 
     qr_data = f"{CLIENT_ORIGIN}/#/user-event-status/{p['registration_id']}/{p['event_id']}/"
     qr = qrcode.make(qr_data)
@@ -2251,19 +2350,18 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.drawImage(ImageReader(qr_buf), box_x + qr_pad, box_y + id_h + qr_pad / 2, qr_size, qr_size)
 
     c.setFillColorRGB(*RED)
-    c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(width / 2, box_y + id_h / 2 - 1.3 * mm, f"ID #{p['registration_id']}")
-    y = box_y - 5 * mm
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(width / 2, box_y + id_h / 2 - 1.6 * mm, f"ID #{p['registration_id']}")
+    y = box_y - 7 * mm
 
     # Theme (below ID) — bold "Theme:" label, italic gray quoted text
-    theme = (p.get("event_theme") or "").strip()
-    if theme:
-        wrapped = textwrap.wrap(f'Theme: "{theme}"', width=48)[:2]
+    if theme_wrapped:
+        wrapped = theme_wrapped
         for i, line in enumerate(wrapped):
             if i == 0 and line.startswith("Theme:"):
                 label, rest = "Theme:", line[len("Theme:"):]
-                label_font, label_size = "Helvetica-Bold", 7.5
-                rest_font, rest_size = "Helvetica-Oblique", 8
+                label_font, label_size = "Helvetica-Bold", 9
+                rest_font, rest_size = "Helvetica-Oblique", 9.5
                 label_w = stringWidth(label, label_font, label_size)
                 rest_w = stringWidth(rest, rest_font, rest_size)
                 lx = width / 2 - (label_w + rest_w) / 2
@@ -2275,9 +2373,9 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
                 c.drawString(lx + label_w, y, rest)
             else:
                 c.setFillColorRGB(*GRAY_500)
-                c.setFont("Helvetica-Oblique", 8)
+                c.setFont("Helvetica-Oblique", 9.5)
                 c.drawCentredString(width / 2, y, line)
-            y -= 4 * mm
+            y -= 5 * mm
 
     c.showPage()
 
