@@ -456,6 +456,12 @@
             style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
             View
           </a>
+          <button @click="downloadDocumentQr(doc)"
+            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+            style="background-color: rgb(254,80,103);">
+            <QrCodeIcon class="w-4 h-4" />
+            QR Code
+          </button>
           <button @click="deleteDocument(doc.id)"
             class="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition">
             <TrashIcon class="w-4 h-4" />
@@ -1063,6 +1069,7 @@ import {
   XCircleIcon, CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon,
   ChartBarIcon, ArrowDownTrayIcon, LinkIcon, FolderOpenIcon,
   TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon,
+  QrCodeIcon,
 } from '@heroicons/vue/24/solid';
 
 import HeaderView from '@/includes/Header.vue';
@@ -1096,7 +1103,7 @@ export default {
   components: {
     MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon, XCircleIcon,
     CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon, ChartBarIcon, ArrowDownTrayIcon,
-    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon,
+    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon, QrCodeIcon,
     HeaderView, SpinnerComponent,
     PaginationComponent, SearchComponent, ParticipantModal, DownloadComponent,
     PaymentModal, BadgeModal, BadgeCard, BulkUploadParticipantsModal, ReceiptModal,
@@ -1796,6 +1803,26 @@ export default {
     },
     docFileUrl(doc) {
       return `${API_URL}/${doc.path || doc.file_path || doc.file}`;
+    },
+    async downloadDocumentQr(doc) {
+      // A4 flyer with a QR code linking straight to the file — print and
+      // hand out / post at the venue so participants can scan for the doc.
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        const res = await api.get(`/events/documents/${doc.id}/qr`, { responseType: 'blob' });
+        const url = window.URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${String(doc.name || doc.file_name || 'document').replace(/\s+/g, '_')}_QR.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download document QR failed:', error);
+        this.docError = 'Failed to generate QR code flyer.';
+      }
     },
 
     // ── Links ──────────────────────────────────────────

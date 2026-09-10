@@ -1525,6 +1525,133 @@ async def delete_document(
     return {"status": "success", "message": f"Document and folder deleted successfully"}
 
 
+def _format_document_type(doc_type) -> str:
+    label = doc_type.value if hasattr(doc_type, "value") else str(doc_type or "")
+    return {
+        "ProgrammeBooklet": "Programme Booklet",
+        "Presentation": "Presentation",
+        "Photo": "Photo",
+        "Advert": "Advert",
+        "Guidelines": "Guidelines",
+        "Other": "Document",
+    }.get(label, "Document")
+
+
+def _render_document_qr_flyer(c, document, event, file_url):
+    """Draw a one-page A4 flyer: event name, document label, a large QR code
+    linking straight to the uploaded file, and the raw URL as a fallback."""
+    W, H = A4
+
+    RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)          # rgb(220,50,75)
+    PINK = (254 / 255.0, 80 / 255.0, 103 / 255.0)        # rgb(254,80,103)
+    GRAY_800 = (31 / 255.0, 41 / 255.0, 55 / 255.0)
+    GRAY_500 = (107 / 255.0, 114 / 255.0, 128 / 255.0)
+
+    # Top / bottom accent bars
+    c.setFillColorRGB(*PINK)
+    c.rect(0, H - 10 * mm, W, 10 * mm, fill=1, stroke=0)
+    c.setFillColorRGB(*RED)
+    c.rect(0, 0, W, 6 * mm, fill=1, stroke=0)
+
+    event_name = (getattr(event, "event", None) or "").strip()
+    doc_title = document.name or document.file_name or "Document"
+    qr_size = 130 * mm
+    pad = 7 * mm
+
+    # Stack heights (mm) so the whole block can be centred in the usable
+    # area between the two accent bars, rather than pinned to the top.
+    heading_h = 12 if event_name else 0
+    label_h = 10
+    instruction_h = 10
+    title_h = 14
+    gap_before_qr = 8
+    card_h = qr_size / mm + pad / mm * 2
+    footer_gap = 12
+    footer_h = 14
+    block_h = (heading_h + label_h + instruction_h + title_h + gap_before_qr + card_h + footer_gap + footer_h) * mm
+
+    usable_top = H - 16 * mm
+    usable_bottom = 6 * mm
+    top = usable_bottom + (usable_top - usable_bottom + block_h) / 2
+
+    if event_name:
+        c.setFillColorRGB(*GRAY_800)
+        c.setFont("Helvetica-Bold", 22)
+        c.drawCentredString(W / 2, top, event_name)
+        top -= heading_h * mm
+
+    c.setFillColorRGB(*RED)
+    c.setFont("Helvetica-Bold", 15)
+    c.drawCentredString(W / 2, top, _format_document_type(document.document_type).upper())
+    top -= label_h * mm
+
+    c.setFillColorRGB(*GRAY_500)
+    c.setFont("Helvetica", 13)
+    c.drawCentredString(W / 2, top, "Scan with your phone camera to open:")
+    top -= instruction_h * mm
+
+    c.setFillColorRGB(*GRAY_800)
+    c.setFont("Helvetica-Bold", 19)
+    c.drawCentredString(W / 2, top, doc_title)
+    top -= (title_h + gap_before_qr) * mm
+
+    qr = qrcode.make(file_url)
+    qr_buf = BytesIO()
+    qr.save(qr_buf, format="PNG")
+    qr_buf.seek(0)
+
+    qr_x = (W - qr_size) / 2
+    qr_y = top - qr_size
+
+    border_tint = tuple(0.75 * ch + 0.25 for ch in PINK)  # PINK lightened ~75% toward white
+    c.setFillColorRGB(1, 1, 1)
+    c.setStrokeColorRGB(*border_tint)
+    c.setLineWidth(1.2)
+    c.roundRect(qr_x - pad, qr_y - pad, qr_size + 2 * pad, qr_size + 2 * pad, 6 * mm, fill=1, stroke=1)
+    c.drawImage(ImageReader(qr_buf), qr_x, qr_y, qr_size, qr_size)
+    top = qr_y - footer_gap * mm
+
+    c.setFillColorRGB(*GRAY_500)
+    c.setFont("Helvetica", 11)
+    c.drawCentredString(W / 2, top, "ECSACONM Events — events.ecsaconm.org")
+    top -= 6 * mm
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawCentredString(W / 2, top, file_url)
+
+
+@router.get("/documents/{document_id}/qr")
+async def get_document_qr_flyer(
+    document_id: int,
+    user: user_dependency,
+    db: Session = Depends(get_db),
+):
+    """A4 flyer PDF with a QR code pointing straight at the uploaded document,
+    so secretariat can print and hand it out / post it at the venue."""
+    document = get_object(document_id, db, Document)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    event = db.query(Event).filter(Event.id == document.event_id).first()
+
+    base_url = os.getenv("BASE_URL", "http://localhost:8001")
+    path = document.path
+    file_url = path if path.startswith("http") else f"{base_url}/{path}"
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _render_document_qr_flyer(c, document, event, file_url)
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", document.name or document.file_name or f"document_{document.id}").strip("_") or f"document_{document.id}"
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}_QR.pdf"'},
+    )
+
+
 @router.post("/add_link/")
 async def add_link(
     request: Request,
