@@ -27,6 +27,7 @@ from utils.mailer_util import send_email_with_attachment
 from fastapi import BackgroundTasks
 from PIL import Image
 from reportlab.lib.units import mm
+from reportlab.lib.pagesizes import A5
 from reportlab.lib.utils import ImageReader
 import qrcode
 from fastapi.responses import StreamingResponse
@@ -93,6 +94,38 @@ PARTICIPATION_ROLE_MAP = {
     "student": "Student",
     "exibitor": "Sponsor/Exhibitor",
 }
+
+# Badge "category bar" labels — keep in sync with
+# web_vue/src/utils/badgeCategory.js::formatBadgeCategory().
+# Member States, Other Africa and general Participant registrations are all
+# printed on the badge simply as "Delegate"; everything else keeps its own
+# distinct label.
+_BADGE_DELEGATE_ROLE_KEYS = {"member_state", "other_africa", "participant"}
+_BADGE_ROLE_LABELS = {
+    "world": "International",
+    "student": "Student",
+    "exhibitor": "Exhibitor",
+    "exibitor": "Exhibitor",
+    "secretariat": "Secretariat",
+    "delegate": "Delegate",
+    "presenter": "Presenter",
+    "speaker": "Speaker",
+    "sponsor": "Sponsor",
+    "moderator": "Moderator",
+    "moh": "Ministry of Health",
+    "member": "Member",
+}
+
+
+def format_badge_category(role_key: str) -> str:
+    key = (role_key or "").strip().lower()
+    if not key:
+        return "Delegate"
+    if key in _BADGE_DELEGATE_ROLE_KEYS:
+        return "Delegate"
+    if key in _BADGE_ROLE_LABELS:
+        return _BADGE_ROLE_LABELS[key]
+    return " ".join(w.capitalize() for w in re.split(r"[_\s]+", key) if w)
 
 
 def convert_png_to_rgb(path):
@@ -1984,107 +2017,176 @@ def hex_to_rgb(hex_color: str):
     return tuple(int(hex_color[i: i + 2], 16) / 255.0 for i in (0, 2, 4))
 
 
-def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
-    """Draw a single badge page onto ReportLab canvas c.
+def _format_badge_date_range(start_date, end_date) -> str:
+    """Mirrors web_vue/src/utils/badgeEvent.js::formatBadgeDateRange()."""
+    if not start_date:
+        return ""
+    if not end_date or start_date.date() == end_date.date():
+        return start_date.strftime("%d %b %Y")
+    if (start_date.year, start_date.month) == (end_date.year, end_date.month):
+        return f"{start_date.strftime('%d')} – {end_date.strftime('%d %b %Y')}"
+    return f"{start_date.strftime('%d %b %Y')} – {end_date.strftime('%d %b %Y')}"
 
-    Mirrors the frontend badge preview (BadgeModal / My Badge): ECSACONM pink
-    theme with top/bottom bars, ECSA + ECSACONM logos, participant name,
-    designation bar, institution/country, QR code, ID, theme and the
-    www.ecsaconm.org footer.
+
+def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
+    """Draw a single A5 badge page onto ReportLab canvas c.
+
+    Mirrors the frontend badge preview (BadgeCard.vue, used by BadgeModal /
+    My Badge on both the admin and participant sides): circular ECSA +
+    ECSACONM logos, event title, participant name, a navy "category" bar
+    (Member State / Other Africa / Participant registrations print here as
+    "Delegate" — see format_badge_category()), a pink designation pill,
+    institution/country, a QR code with accent corner brackets, ID, theme,
+    a navy footer bar (dates + website) and a location strip.
     """
-    width, height = (100 * mm, 140 * mm)
-    PINK = (254 / 255.0, 80 / 255.0, 103 / 255.0)  # rgb(254, 80, 103)
+    width, height = A5
+    NAVY = (30 / 255.0, 58 / 255.0, 69 / 255.0)
+    RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)
 
     # ── White background ─────────────────────────────────────────────────────
     c.setFillColorRGB(1, 1, 1)
     c.rect(0, 0, width, height, fill=True, stroke=False)
 
-    # ── Top & bottom pink bars ───────────────────────────────────────────────
-    c.setFillColorRGB(*PINK)
-    c.setStrokeColorRGB(*PINK)
-    c.rect(0, height - 6 * mm, width, 6 * mm, fill=True, stroke=False)
-    c.rect(0, 0, width, 2.5 * mm, fill=True, stroke=False)
+    # ── Footer bar (dates + website) & location strip ────────────────────────
+    footer_h = 10 * mm
+    subfooter_h = 8 * mm
+    c.setFillColorRGB(*NAVY)
+    c.rect(0, subfooter_h, width, footer_h, fill=True, stroke=False)
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica-Bold", 9)
+    date_range = _format_badge_date_range(p.get("event_start_date"), p.get("event_end_date"))
+    c.drawString(8 * mm, subfooter_h + footer_h / 2 - 1.5 * mm, date_range or "")
+    c.drawRightString(width - 8 * mm, subfooter_h + footer_h / 2 - 1.5 * mm, "WWW.ECSACONM.ORG")
 
-    # ── Logos: ECSA (left) + ECSACONM (right) ────────────────────────────────
-    logo_size = 18 * mm
-    logo_y = height - logo_size - 8 * mm
-    c.drawImage(
-        logo_left, 8 * mm, logo_y, logo_size, logo_size, preserveAspectRatio=True
-    )
-    c.drawImage(
-        logo_right,
-        width - logo_size - 8 * mm,
-        logo_y,
-        logo_size,
-        logo_size,
-        preserveAspectRatio=True,
-    )
+    location = (p.get("location") or "").strip()
+    c.setFillColorRGB(0.99, 0.93, 0.94)
+    c.rect(0, 0, width, subfooter_h, fill=True, stroke=False)
+    if location:
+        c.setFillColorRGB(*RED)
+        c.setFont("Helvetica-Bold", 7.5)
+        c.drawCentredString(width / 2, subfooter_h / 2 - 1 * mm, location)
 
-    # ── Participant name ─────────────────────────────────────────────────────
-    full_name = (
-        f"{p['title']} {p['firstname']} {p['middle_name']} {p['lastname']}".strip()
-    )
-    c.setFillColorRGB(0.15, 0.15, 0.15)
-    c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(width / 2, 108 * mm, full_name)
+    # ── Content column (top-down) ────────────────────────────────────────────
+    y = height - 10 * mm
 
-    # ── Designation bar (pink pill) ──────────────────────────────────────────
+    # Logos: ECSA (left) + ECSACONM (right), in circular frames
+    logo_d = 20 * mm
+    logo_cy = y - logo_d / 2
+    left_cx = 8 * mm + logo_d / 2
+    right_cx = width - 8 * mm - logo_d / 2
+    c.saveState()
+    c.setFillColorRGB(1, 1, 1)
+    c.setStrokeColorRGB(*RED)
+    c.setLineWidth(1.2)
+    c.circle(left_cx, logo_cy, logo_d / 2, fill=1, stroke=1)
+    c.restoreState()
+    c.drawImage(logo_left, left_cx - logo_d / 2 + 2 * mm, logo_cy - logo_d / 2 + 2 * mm,
+                logo_d - 4 * mm, logo_d - 4 * mm, preserveAspectRatio=True, mask="auto")
+    c.saveState()
+    c.setFillColorRGB(*RED)
+    c.circle(right_cx, logo_cy, logo_d / 2, fill=1, stroke=0)
+    c.restoreState()
+    c.drawImage(logo_right, right_cx - logo_d / 2 + 3.5 * mm, logo_cy - logo_d / 2 + 3.5 * mm,
+                logo_d - 7 * mm, logo_d - 7 * mm, preserveAspectRatio=True, mask="auto")
+    y -= logo_d + 8 * mm
+
+    # Event title
+    event_name = (p.get("event_name") or "ECSACONM").strip()
+    c.setFillColorRGB(*NAVY)
+    c.setFont("Helvetica-Bold", 15)
+    title_lines = textwrap.wrap(event_name.upper(), width=26)[:2]
+    for line in title_lines:
+        c.drawCentredString(width / 2, y, line)
+        y -= 6 * mm
+    y -= 6 * mm
+
+    # Participant name
+    full_name = f"{p['title']} {p['firstname']} {p['middle_name']} {p['lastname']}".strip()
+    full_name = re.sub(r"\s+", " ", full_name)
+    c.setFillColorRGB(*NAVY)
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(width / 2, y, full_name)
+    y -= 13 * mm
+
+    # Category bar (navy) — "Delegate" for Member State / Other Africa / Participant
+    bar_h = 10 * mm
+    c.setFillColorRGB(*NAVY)
+    c.roundRect(14 * mm, y - bar_h, width - 28 * mm, bar_h, 2.5 * mm, fill=True, stroke=False)
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(width / 2, y - bar_h / 2 - 1.5 * mm, (p.get("participation_role") or "Delegate").upper())
+    y -= bar_h + 9 * mm
+
+    # Designation pill (pale red)
     designation = (p.get("designation") or "").strip()
     if designation:
-        bar_h = 9 * mm
-        bar_y = 95 * mm
-        c.setFillColorRGB(*PINK)
-        c.setStrokeColorRGB(*PINK)
-        c.roundRect(12 * mm, bar_y, width - 24 * mm, bar_h, 2.5 * mm, fill=True, stroke=False)
-        c.setFillColorRGB(1, 1, 1)
+        pill_h = 8 * mm
+        c.setFillColorRGB(0.99, 0.93, 0.94)
+        c.setStrokeColorRGB(*RED)
+        c.setLineWidth(0.6)
+        c.roundRect(24 * mm, y - pill_h, width - 48 * mm, pill_h, pill_h / 2, fill=True, stroke=True)
+        c.setFillColorRGB(*RED)
         c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(width / 2, bar_y + 2.5 * mm, designation)
+        c.drawCentredString(width / 2, y - pill_h / 2 - 1.3 * mm, designation.upper())
+        y -= pill_h + 9 * mm
 
-    # ── Institution & country ────────────────────────────────────────────────
+    # Institution & country
     organisation = (p.get("organisation") or "").strip()
     country = (p.get("country") or "").strip()
     if organisation:
-        c.setFillColorRGB(0.15, 0.15, 0.15)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(width / 2, 85 * mm, organisation)
+        c.setFillColorRGB(*NAVY)
+        c.setFont("Helvetica-Bold", 12)
+        org_lines = textwrap.wrap(organisation, width=32)[:2]
+        for line in org_lines:
+            c.drawCentredString(width / 2, y, line)
+            y -= 5.5 * mm
+        y -= 3 * mm
     if country:
-        c.setFillColorRGB(0.45, 0.45, 0.45)
-        c.setFont("Helvetica", 10)
-        c.drawCentredString(width / 2, 77 * mm, country)
+        c.setFillColorRGB(*RED)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(width / 2, y, country)
+        y -= 12 * mm
 
-    # ── QR code (links to the participant badge/status page) ─────────────────
-    qr_size = 28 * mm
-    qr_y = 46 * mm
-    qr_data = (
-        f"{CLIENT_ORIGIN}/#/user-event-status/{p['registration_id']}/{p['event_id']}/"
-    )
+    # ── QR code with accent corner brackets ──────────────────────────────────
+    qr_size = 32 * mm
+    qr_pad = 3 * mm
+    box = qr_size + qr_pad * 2
+    box_x = (width - box) / 2
+    box_y = y - box
+    bracket = 6 * mm
+    c.setStrokeColorRGB(*RED)
+    c.setLineWidth(1.6)
+    for cx, cy, dx, dy in (
+        (box_x, box_y + box, 1, 0), (box_x, box_y + box, 0, -1),
+        (box_x + box, box_y + box, -1, 0), (box_x + box, box_y + box, 0, -1),
+        (box_x, box_y, 1, 0), (box_x, box_y, 0, 1),
+        (box_x + box, box_y, -1, 0), (box_x + box, box_y, 0, 1),
+    ):
+        c.line(cx, cy, cx + dx * bracket, cy + dy * bracket)
+
+    qr_data = f"{CLIENT_ORIGIN}/#/user-event-status/{p['registration_id']}/{p['event_id']}/"
     qr = qrcode.make(qr_data)
     qr_buf = BytesIO()
     qr.save(qr_buf, format="PNG")
     qr_buf.seek(0)
-    c.drawImage(ImageReader(qr_buf), (width - qr_size) / 2, qr_y, qr_size, qr_size)
+    c.drawImage(ImageReader(qr_buf), box_x + qr_pad, box_y + qr_pad, qr_size, qr_size)
+    y = box_y - 6 * mm
 
-    # ── Participant ID (below QR) ────────────────────────────────────────────
-    c.setFillColorRGB(0.55, 0.55, 0.55)
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(width / 2, 41 * mm, f"ID #{p['registration_id']}")
+    # Participant ID (below QR)
+    c.setFillColorRGB(*RED)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(width / 2, y, f"ID #{p['registration_id']}")
+    y -= 6 * mm
 
-    # ── Theme (below ID, like the preview) ───────────────────────────────────
+    # Theme (below ID)
     theme = (p.get("event_theme") or "").strip()
     if theme:
-        c.setFillColorRGB(0.45, 0.45, 0.45)
-        c.setFont("Helvetica-Oblique", 7)
-        theme_text = f"Theme: {theme}"
-        wrapped = textwrap.wrap(theme_text, width=46)
-        theme_y = 36 * mm
+        c.setFillColorRGB(*RED)
+        c.setFont("Helvetica-Oblique", 8)
+        wrapped = textwrap.wrap(f'"{theme}"', width=44)
         for line in wrapped[:2]:
-            c.drawCentredString(width / 2, theme_y, line)
-            theme_y -= 3 * mm
-
-    # ── Website footer ───────────────────────────────────────────────────────
-    c.setFillColorRGB(0.6, 0.6, 0.6)
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(width / 2, 6 * mm, "www.ecsaconm.org")
+            c.drawCentredString(width / 2, y, line)
+            y -= 4 * mm
 
     c.showPage()
 
@@ -2141,10 +2243,12 @@ async def download_participant_badges_pdf(
                 "designation": profile.designation if profile else "",
                 "organisation": organisation,
                 "country": country,
-                "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
+                "participation_role": format_badge_category(role_key),
                 "event_name": event.event,
                 "event_theme": event.theme,
                 "location": event.location or "",
+                "event_start_date": event.start_date,
+                "event_end_date": event.end_date,
                 "paid": reg.paid,
             }
         )
@@ -2157,8 +2261,8 @@ async def download_participant_badges_pdf(
         raise HTTPException(status_code=404, detail="No participants found")
 
     buffer = BytesIO()
-    width, height = (100 * mm, 140 * mm)
-    c = canvas.Canvas(buffer, pagesize=(width, height))
+    width, height = A5
+    c = canvas.Canvas(buffer, pagesize=A5)
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")
@@ -2244,16 +2348,18 @@ async def download_participant_badge_pdf(
         "designation": profile.designation if profile else "",
         "organisation": organisation,
         "country": country,
-        "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
+        "participation_role": format_badge_category(role_key),
         "event_name": event.event,
         "event_theme": event.theme,
         "location": event.location or "",
+        "event_start_date": event.start_date,
+        "event_end_date": event.end_date,
         "paid": reg.paid,
     }
 
     buffer = BytesIO()
-    width, height = (100 * mm, 140 * mm)
-    c = canvas.Canvas(buffer, pagesize=(width, height))
+    width, height = A5
+    c = canvas.Canvas(buffer, pagesize=A5)
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")
@@ -2324,16 +2430,18 @@ async def download_my_badge(
         "designation": profile.designation if profile else "",
         "organisation": organisation,
         "country": country,
-        "participation_role": PARTICIPATION_ROLE_MAP.get(role_key, role_key),
+        "participation_role": format_badge_category(role_key),
         "event_name": event.event,
         "event_theme": event.theme,
         "location": event.location or "",
+        "event_start_date": event.start_date,
+        "event_end_date": event.end_date,
         "paid": reg.paid,
     }
 
     buffer = BytesIO()
-    width, height = (100 * mm, 140 * mm)
-    c = canvas.Canvas(buffer, pagesize=(width, height))
+    width, height = A5
+    c = canvas.Canvas(buffer, pagesize=A5)
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")

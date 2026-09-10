@@ -147,7 +147,7 @@
         <DownloadComponent v-if="permissions.includes('DOWNLOAD_PARTICIPANT_LIST')"
           @participants="handleParticipants" @paid="handlePaid" @notPaid="handleNotPaid"
           @attendance="handleAttendance" />
-        <button v-if="permissions.includes('PRINT_BADGE')" @click="openPrintBadgesModal"
+        <button v-if="permissions.includes('PRINT_BADGE')" @click="printAllBadges"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
           style="background-color: rgb(254,80,103);">
           <IdentificationIcon class="w-4 h-4" />
@@ -567,8 +567,6 @@
     <payment-modal :show="showPaymentModal" @paid="confirmPayment" @cancel="cancelPaymentModal"
       :userID="userID" :eventID="eventID" />
     <badge-modal :show="showBadgeModal" @close="closeBadgeModal" :participant="participant" :event_id="id" :event="event" />
-    <print-badges-modal :show="showPrintBadgesModal" @close="closePrintBadgesModal"
-      :participants="participants" :event_id="id" />
     <bulk-upload-participants-modal :show="showBulkUploadParticipantsModal" @close="closeBulkUploadParticipantsModal"
       :eventID="eventID" />
     <receipt-modal :show="showReceiptModal" @close="showReceiptModal = false"
@@ -842,7 +840,6 @@ import DownloadComponent from '@/components/DownloadComponent.vue';
 import { exportToExcel } from '@/utils/exportToExcel';
 import PaymentModal from "@/components/PaymentModal.vue";
 import BadgeModal from "@/components/BadgeModal.vue";
-import PrintBadgesModal from "@/components/PrintBadgesModal.vue";
 import BulkUploadParticipantsModal from "@/components/BulkUploadParticipantsModal.vue";
 import ReceiptModal from "@/components/ReceiptModal.vue";
 
@@ -864,7 +861,7 @@ export default {
     LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon,
     HeaderView, SpinnerComponent,
     PaginationComponent, SearchComponent, ParticipantModal, DownloadComponent,
-    PaymentModal, BadgeModal, PrintBadgesModal, BulkUploadParticipantsModal, ReceiptModal,
+    PaymentModal, BadgeModal, BulkUploadParticipantsModal, ReceiptModal,
   },
   data() {
     return {
@@ -887,7 +884,6 @@ export default {
       message: "",
       UserEventData: { user_id: "", event_id: "" },
       showBadgeModal: false,
-      showPrintBadgesModal: false,
       showBulkUploadParticipantsModal: false,
       showReceiptModal: false,
       successMsg: "",
@@ -1225,8 +1221,21 @@ export default {
       }
     },
     closeBadgeModal() { this.showBadgeModal = false; },
-    openPrintBadgesModal() { this.showPrintBadgesModal = true; },
-    closePrintBadgesModal() { this.showPrintBadgesModal = false; },
+    async printAllBadges() {
+      // Opens the same server-rendered A5 badge PDF used by "Download All
+      // Badges" in a new tab so the browser's print dialog can be used —
+      // guarantees the printed badge always matches the downloaded one.
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        const res = await api.get(`/events/${this.id}/participants/badges`, { responseType: 'blob' });
+        const url = window.URL.createObjectURL(res.data);
+        window.open(url, '_blank');
+      } catch (error) {
+        console.error('Print badges failed:', error);
+        this.errorMsg = 'Failed to open badges for printing.';
+      }
+    },
     openReceiptModal(participant) {
       this.participant = participant;
       this.showReceiptModal = true;

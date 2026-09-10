@@ -11,77 +11,30 @@
         </button>
       </div>
 
-      <!-- Badge card -->
+      <!-- Badge card (A5) -->
       <div class="p-5 flex-1">
-        <div class="border border-gray-200 rounded-xl overflow-hidden">
+        <badge-card :participant="badgeParticipant" :event="badgeEvent" :qr-value="qrValue" />
 
-          <!-- Top bar -->
-          <div class="h-5" style="background-color: rgb(254,80,103);"></div>
-
-          <!-- Logo row — far left / far right -->
-          <div class="flex items-center justify-between px-5 py-4 bg-white">
-            <div class="h-14 w-14 flex-shrink-0 flex items-center justify-start">
-              <img src="@/assets/images/ecsalogo.png" class="max-h-14 max-w-full object-contain" alt="ECSA" />
-            </div>
-            <div class="h-14 flex-shrink-0 flex items-center justify-end">
-              <img src="@/assets/images/logo.png" class="h-14 object-contain" alt="ECSACONM" />
-            </div>
-          </div>
-
-          <!-- Pink divider -->
-          <div class="h-0.5 mx-5" style="background-color: rgb(254,80,103);"></div>
-
-          <!-- Name -->
-          <div class="px-6 pt-5 pb-3 text-center">
-            <p class="text-2xl font-bold text-gray-900 leading-tight">
-              {{ [participant.title, participant.firstname, participant.lastname].filter(Boolean).join(' ') || '—' }}
-            </p>
-          </div>
-
-          <!-- Designation bar (replaces role) -->
-          <div class="mx-5 py-2 text-center text-white font-bold text-sm rounded-lg"
-            style="background-color: rgb(254,80,103);">
-            {{ participant.designation || formatCategory(participant.participant_category || participant.participation_role) }}
-          </div>
-
-          <!-- Institution & Country -->
-          <div class="px-6 py-4 text-center space-y-1">
-            <p class="text-sm font-semibold text-gray-800">{{ participant.institution || participant.organisation || '—' }}</p>
-            <p class="text-xs text-gray-500">{{ participant.country || '—' }}</p>
-          </div>
-
-          <!-- QR Code -->
-          <div class="flex flex-col items-center pb-2 gap-1">
-            <QRCodeVue :value="qrValue" :size="110" foreground="#000000" background="#ffffff" />
-            <p class="text-xs text-gray-400 mt-1">ID #{{ participant.id }}</p>
-            <!-- Theme below ID -->
-            <p v-if="eventTheme" class="text-xs text-gray-500 text-center px-6 mt-0.5 leading-snug">
-              <span class="font-semibold not-italic">Theme:</span>
-              <span class="italic"> {{ eventTheme }}</span>
-            </p>
-          </div>
-
-          <!-- Website -->
-          <div class="text-center py-3">
-            <p class="text-xs text-gray-400">www.ecsaconm.org</p>
-          </div>
-
-          <!-- Bottom bar -->
-          <div class="h-5" style="background-color: rgb(254,80,103);"></div>
+        <!-- Actions -->
+        <div class="mt-4 flex gap-2">
+          <button @click="downloadPdf" :disabled="downloading"
+            class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(30,58,69);">
+            <svg v-if="downloading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <PrinterIcon v-else class="w-4 h-4" />
+            {{ downloading ? 'Preparing…' : 'Print A5 Pass' }}
+          </button>
+          <button @click="share"
+            class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
+            style="background-color: rgb(220,50,75);">
+            <ShareIcon class="w-4 h-4" />
+            Share ID #{{ participant.id }}
+          </button>
         </div>
-
-        <!-- Download button -->
-        <button @click="downloadPdf" :disabled="downloading"
-          class="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
-          <svg v-if="downloading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-          </svg>
-          <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-          {{ downloading ? 'Preparing PDF…' : 'Download Badge (PDF)' }}
-        </button>
+        <p v-if="shareMsg" class="mt-2 text-xs text-center text-gray-500">{{ shareMsg }}</p>
       </div>
 
     </div>
@@ -90,14 +43,16 @@
 
 <script>
 import axios from 'axios'
-import QRCodeVue from 'qrcode.vue'
+import { PrinterIcon, ShareIcon } from '@heroicons/vue/24/solid'
+import BadgeCard from '@/components/BadgeCard.vue'
 import { useAuthStore } from '@/store/authStore'
+import { buildBadgeEvent } from '@/utils/badgeEvent'
 
 const API_URL = import.meta.env.VITE_API_URL
 
 export default {
   name: 'BadgeModal',
-  components: { QRCodeVue },
+  components: { BadgeCard, PrinterIcon, ShareIcon },
   props: {
     show: { type: Boolean, required: true },
     participant: { type: Object, required: true },
@@ -107,6 +62,7 @@ export default {
   data() {
     return {
       downloading: false,
+      shareMsg: '',
     }
   },
   computed: {
@@ -114,20 +70,31 @@ export default {
       const base = import.meta.env.VITE_APP_URL || window.location.origin
       return `${base}/#/user-event-status/${this.participant.id}/${this.event_id}/`
     },
-    eventTheme() {
-      return this.event?.theme || ''
+    badgeEvent() {
+      return buildBadgeEvent(this.event)
+    },
+    badgeParticipant() {
+      const p = this.participant
+      return {
+        fullName: [p.title, p.firstname, p.lastname].filter(Boolean).join(' '),
+        designation: p.designation || '',
+        category: p.participant_category || p.participation_role,
+        institution: p.institution || p.organisation || '',
+        country: p.country || '',
+        registrationId: p.id,
+      }
     },
   },
   methods: {
     close() { this.$emit('close') },
-    formatCategory(cat) {
-      const map = {
-        member_state: 'Member State', participant: 'Participant', other_africa: 'Other Africa',
-        world: 'International', student: 'Student', exhibitor: 'Exhibitor',
-        secretariat: 'Secretariat', delegate: 'Delegate', presenter: 'Presenter',
-        speaker: 'Speaker', sponsor: 'Sponsor', moderator: 'Moderator', moh: 'Ministry of Health',
+    async share() {
+      try {
+        await navigator.clipboard.writeText(this.qrValue)
+        this.shareMsg = 'Badge link copied to clipboard.'
+      } catch (e) {
+        this.shareMsg = this.qrValue
       }
-      return map[cat] || cat || 'Participant'
+      setTimeout(() => { this.shareMsg = '' }, 4000)
     },
     async downloadPdf() {
       this.downloading = true

@@ -432,70 +432,36 @@
 
     <!-- ═══ BADGE MODAL ══════════════════════════════════════════════════════ -->
     <div v-if="showBadgeModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[95vh] overflow-y-auto flex flex-col">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[95vh] overflow-y-auto flex flex-col">
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 class="font-semibold text-gray-800">My Badge</h3>
-          <div class="flex items-center gap-2">
-            <button @click="downloadBadge"
-              :disabled="badgeDownloading"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-              style="background-color: rgb(34,197,94);">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              {{ badgeDownloading ? 'Downloading…' : 'Download PDF' }}
-            </button>
-            <button @click="showBadgeModal = false" class="text-gray-400 hover:text-gray-600">
-              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <button @click="showBadgeModal = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        <!-- Badge preview -->
+        <!-- Badge preview (A5) -->
         <div class="p-5">
-          <div class="border border-gray-200 rounded-xl overflow-hidden">
-            <div class="h-5" style="background-color: rgb(254,80,103);"></div>
-            <div class="flex items-center justify-center px-6 py-4 bg-white">
-              <img src="@/assets/images/logo.png" class="h-14 object-contain" alt="ECSACONM" />
-            </div>
-            <div class="h-0.5 mx-6" style="background-color: rgb(254,80,103);"></div>
-            <div class="px-6 py-5 text-center">
-              <p class="text-2xl font-bold text-gray-900">
-                {{ badgeParticipant.fullName || '—' }}
-              </p>
-              <p v-if="badgeParticipant.designation" class="text-sm font-medium mt-1" style="color: rgb(254,80,103);">
-                {{ badgeParticipant.designation }}
-              </p>
-            </div>
-            <div class="mx-6 py-2 text-center text-white font-bold text-sm rounded-lg"
-              style="background-color: rgb(254,80,103);">
-              {{ formatRole(badgeParticipant.participation_role) }}
-            </div>
-            <div class="px-6 py-4 text-center space-y-1">
-              <p class="text-base font-semibold text-gray-800">{{ badgeParticipant.organisation || '—' }}</p>
-              <p class="text-sm text-gray-500">{{ badgeParticipant.country || '—' }}</p>
-            </div>
-            <div class="flex flex-col items-center pb-4 gap-1">
-              <QRCodeVue
-                :value="badgeQrValue"
-                :size="100"
-                foreground="#000000"
-                background="#ffffff" />
-              <p class="text-xs text-gray-400">ID #{{ badgeParticipant.registration_id }}</p>
-              <p v-if="badgeParticipant.eventTheme" class="text-xs text-gray-500 text-center px-6 mt-0.5 leading-snug">
-                <span class="font-semibold not-italic">Theme:</span>
-                <span class="italic"> {{ badgeParticipant.eventTheme }}</span>
-              </p>
-            </div>
-            <div class="text-center pb-3">
-              <p class="text-xs text-gray-400">www.ecsaconm.org</p>
-            </div>
-            <div class="h-5" style="background-color: rgb(254,80,103);"></div>
+          <badge-card :participant="badgeParticipantCard" :event="badgeEventCard" :qr-value="badgeQrValue" />
+
+          <div class="mt-4 flex gap-2">
+            <button @click="downloadBadge" :disabled="badgeDownloading"
+              class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(30,58,69);">
+              <PrinterIcon class="w-4 h-4" />
+              {{ badgeDownloading ? 'Preparing…' : 'Print A5 Pass' }}
+            </button>
+            <button @click="shareBadge"
+              class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
+              style="background-color: rgb(220,50,75);">
+              <ShareIcon class="w-4 h-4" />
+              Share ID #{{ badgeParticipant.registration_id }}
+            </button>
           </div>
+          <p v-if="badgeShareMsg" class="mt-2 text-xs text-center text-gray-500">{{ badgeShareMsg }}</p>
           <p v-if="badgeError" class="mt-3 text-xs text-red-500 text-center">{{ badgeError }}</p>
         </div>
       </div>
@@ -505,15 +471,18 @@
 
 <script>
 import axios from 'axios'
-import QRCodeVue from 'qrcode.vue'
+import { PrinterIcon, ShareIcon } from '@heroicons/vue/24/solid'
+import BadgeCard from '@/components/BadgeCard.vue'
 import { fetchItem, fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
+import { formatBadgeCategory } from '@/utils/badgeCategory'
+import { buildBadgeEvent } from '@/utils/badgeEvent'
 
 const API_URL = import.meta.env.VITE_API_URL
 
 export default {
   name: 'MyEventView',
-  components: { QRCodeVue },
+  components: { BadgeCard, PrinterIcon, ShareIcon },
   setup() {
     const authStore = useAuthStore()
     return { currentUser: authStore.loginUser, authStore }
@@ -534,6 +503,7 @@ export default {
       badgeEventId: null,
       badgeDownloading: false,
       badgeError: '',
+      badgeShareMsg: '',
       registrationId: null,
     }
   },
@@ -624,6 +594,20 @@ export default {
       const base = import.meta.env.VITE_APP_URL || window.location.origin
       return `${base}/#/user-event-status/${this.badgeParticipant.registration_id || ''}/${this.badgeEventId || ''}/`
     },
+    badgeParticipantCard() {
+      const b = this.badgeParticipant
+      return {
+        fullName: b.fullName,
+        designation: b.designation,
+        category: b.participation_role,
+        institution: b.organisation,
+        country: b.country,
+        registrationId: b.registration_id,
+      }
+    },
+    badgeEventCard() {
+      return buildBadgeEvent(this.event)
+    },
   },
   async mounted() {
     try {
@@ -657,23 +641,16 @@ export default {
       this.openLogistics = this.openLogistics === i ? -1 : i
     },
     formatRole(role) {
-      const map = {
-        member_state: 'Member State',
-        participant: 'Participant',
-        other_africa: 'Other Africa',
-        world: 'International',
-        student: 'Student',
-        exhibitor: 'Exhibitor/Sponsor',
-        secretariat: 'Secretariat',
-        delegate: 'Delegate',
-        presenter: 'Presenter',
-        speaker: 'Speaker',
-        sponsor: 'Sponsor',
-        moderator: 'Moderator',
-        moh: 'Ministry of Health',
-        member: 'Member',
+      return formatBadgeCategory(role)
+    },
+    async shareBadge() {
+      try {
+        await navigator.clipboard.writeText(this.badgeQrValue)
+        this.badgeShareMsg = 'Badge link copied to clipboard.'
+      } catch (e) {
+        this.badgeShareMsg = this.badgeQrValue
       }
-      return map[role] || role || 'Participant'
+      setTimeout(() => { this.badgeShareMsg = '' }, 4000)
     },
 
     async ensureRegistrationId() {
