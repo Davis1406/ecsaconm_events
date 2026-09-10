@@ -210,8 +210,9 @@ export default {
       }
     },
     hasAttendance() {
+      const daySet = new Set(this.eventDays.map(d => d.date))
       return Object.keys(this.attendanceMap).some(regId =>
-        Object.keys(this.attendanceMap[regId] || {}).length > 0)
+        Object.keys(this.attendanceMap[regId] || {}).some(d => daySet.has(d)))
     },
   },
   mounted() {
@@ -256,8 +257,13 @@ export default {
         try {
           const attRes = await api.get(`/events/${this.selectedEventId}/attendance`)
           const attList = attRes.data?.data || []
+          // Only records that fall on an actual event day count — anything else
+          // (e.g. an old test scan) is ignored so the page stays blank until
+          // someone is genuinely scanned for this event.
+          const daySet = new Set(this.eventDays.map(d => d.date))
           attList.forEach(a => {
             const dateStr = String(a.attendance_date).slice(0, 10)
+            if (!daySet.has(dateStr)) return
             if (!map[a.registration_id]) map[a.registration_id] = {}
             map[a.registration_id][dateStr] = a.id
           })
