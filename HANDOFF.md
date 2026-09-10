@@ -36,6 +36,7 @@ Everything below is **committed and deployed** to production unless flagged
 | `b2714b4` | **QR scan auto-records attendance** (no button): the status page POSTs on load and confirms "<name> has been marked for attendance on this date <date> and time <time> for Day N". `GET /events/scan/{id}` now returns `event.event_day` (1-based from start date). Added **Owen Mwandumbya** (`omwandumbya@ecsahc.org`) as Secretariat for the conference (user 734, registration 719). |
 | `4ac56ff` | User page **"Edit Participant" popup role list trimmed** to the main five (Delegate, Secretariat, Media, Exhibitor, Usher), matching the add form; legacy delegate categories normalise to `delegate`. Created a **Finance role** (VIEW_EVENT, VIEW_REGISTRATIONS, VIEW_USER) assigned to **Diana Kaiza** (user 732, info@cosecsa.org) — she sees Events, Registrations, Users (+ Configurations/Sent Emails, both VIEW_USER-gated). She must re-login for the new permissions. |
 | `e8c7cb6` | **Attendance Confirmation page stays blank until someone is scanned** — stats and the participant table only render once at least one attendance record exists; polls every 10s so QR scans appear automatically. |
+| `7df8ec9` | **Fixed QR scan attendance** — the scan page sent `attendance_date` as a full ISO datetime, which the API rejects with a 422 (so scans never recorded attendance). Now sends a local `YYYY-MM-DD` date. |
 
 ## Production data changes
 
