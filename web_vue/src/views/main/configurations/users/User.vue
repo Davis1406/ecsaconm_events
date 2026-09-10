@@ -300,21 +300,11 @@ export default {
         participation_role: '',
       },
       roleOptions: [
-        { value: 'secretariat', label: 'Secretariat' },
         { value: 'delegate', label: 'Delegate' },
-        { value: 'presenter', label: 'Presenter' },
-        { value: 'speaker', label: 'Speaker' },
-        { value: 'sponsor', label: 'Sponsor' },
-        { value: 'moderator', label: 'Moderator' },
-        { value: 'participant', label: 'Participant' },
-        { value: 'student', label: 'Student' },
-        { value: 'exhibitor', label: 'Exhibitor' },
-        { value: 'world', label: 'International' },
+        { value: 'secretariat', label: 'Secretariat' },
         { value: 'media', label: 'Media' },
+        { value: 'exhibitor', label: 'Exhibitor' },
         { value: 'usher', label: 'Usher' },
-        { value: 'other_africa', label: 'Other Africa' },
-        { value: 'member_state', label: 'Member State' },
-        { value: 'moh', label: 'Ministry of Health' },
       ],
     }
   },
@@ -424,7 +414,7 @@ export default {
         designation: this.profile.designation || '',
         organisation: this.profile.organisation || '',
         country_id: this.profile.country_id || null,
-        participation_role: first.participation_role || 'delegate',
+        participation_role: this.normalizeParticipationRole(first.participation_role),
       }
       this.editError = ''
       this.showEditModal = true
@@ -432,7 +422,16 @@ export default {
     },
     onRegistrationChange() {
       const ev = this.userEvents.find(e => e.registration_id === this.editForm.registration_id)
-      if (ev) this.editForm.participation_role = ev.participation_role || 'delegate'
+      if (ev) this.editForm.participation_role = this.normalizeParticipationRole(ev.participation_role)
+    },
+    normalizeParticipationRole(role) {
+      // The edit popup only offers the main roles; the fee-based delegate
+      // categories (Member, Region, Outside-Region, Student) all read as
+      // "Delegate", so normalise them to delegate.
+      const legacyDelegate = ['member_state', 'participant', 'other_africa', 'student']
+      if (!role) return 'delegate'
+      const key = String(role).toLowerCase().replace(/\s+/g, '_')
+      return legacyDelegate.includes(key) ? 'delegate' : key
     },
     async loadEditCountries() {
       if (this.editCountries.length) return
