@@ -148,7 +148,7 @@ const ROLE_MAP = {
   member_state: 'Member State', participant: 'Participant', other_africa: 'Other Africa',
   world: 'International', student: 'Student', exhibitor: 'Exhibitor', secretariat: 'Secretariat',
   delegate: 'Delegate', presenter: 'Presenter', speaker: 'Speaker',
-  moh: 'Ministry of Health', moderator: 'Moderator',
+  moh: 'Ministry of Health', moderator: 'Moderator', media: 'Media', usher: 'Usher',
 }
 
 export default {

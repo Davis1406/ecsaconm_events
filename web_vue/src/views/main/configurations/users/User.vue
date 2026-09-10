@@ -310,6 +310,8 @@ export default {
         { value: 'student', label: 'Student' },
         { value: 'exhibitor', label: 'Exhibitor' },
         { value: 'world', label: 'International' },
+        { value: 'media', label: 'Media' },
+        { value: 'usher', label: 'Usher' },
         { value: 'other_africa', label: 'Other Africa' },
         { value: 'member_state', label: 'Member State' },
         { value: 'moh', label: 'Ministry of Health' },

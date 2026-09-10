@@ -189,6 +189,7 @@ const ROLE_MAP = {
   world: 'International', student: 'Student', exhibitor: 'Exhibitor',
   secretariat: 'Secretariat', delegate: 'Delegate', presenter: 'Presenter',
   speaker: 'Speaker', sponsor: 'Sponsor', moderator: 'Moderator', moh: 'Ministry of Health',
+  media: 'Media', usher: 'Usher',
 }
 
 export default {

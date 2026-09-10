@@ -739,6 +739,8 @@ export default {
         { value: 'student', label: 'Student', fee: 'Contact the secretariat for student rates.' },
         { value: 'exhibitor', label: 'Sponsor / Exhibitor', fee: 'Contact the secretariat for sponsorship packages.' },
         { value: 'secretariat', label: 'Secretariat / Staff', fee: 'Internal registration — no registration fee.' },
+        { value: 'media', label: 'Media', fee: 'Contact the secretariat.' },
+        { value: 'usher', label: 'Usher', fee: 'Internal registration — no registration fee.' },
       ],
     }
   },
@@ -1118,6 +1120,8 @@ export default {
         sponsor: 'Sponsor',
         moderator: 'Moderator',
         moh: 'Ministry of Health',
+        media: 'Media',
+        usher: 'Usher',
         member: 'Member',
         non_member_member_state: 'Non-Member (Member State)',
         non_member_other: 'Non-Member (Other)',

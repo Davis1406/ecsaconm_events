@@ -25,7 +25,8 @@
             <option value="Delegate">Delegate</option>
             <option value="Presenter">Presenter</option>
             <option value="Exhibitor">Exhibitor</option>
-            <option value="Presenter">Usher</option>
+            <option value="Media">Media</option>
+            <option value="Usher">Usher</option>
             <option value="Secretariat">Secretariat</option>
 
           </select>

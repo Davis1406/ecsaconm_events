@@ -73,7 +73,7 @@
         </div>
 
         <div class="mt-2 py-2 rounded-lg flex items-center justify-center relative overflow-hidden"
-          style="background: linear-gradient(to right, #173a4b, #1d4659, #173a4b); border: 1px solid rgba(43,93,115,0.4);">
+          :style="{ background: categoryGradient.background, border: `1px solid ${categoryGradient.border}` }">
           <span class="text-xl font-black tracking-[0.14em] text-white uppercase leading-none">{{ categoryLabel }}</span>
         </div>
 
@@ -141,7 +141,7 @@
 <script>
 import QRCodeVue from 'qrcode.vue'
 import { MapPinIcon, CalendarIcon } from '@heroicons/vue/24/solid'
-import { formatBadgeCategory } from '@/utils/badgeCategory'
+import { formatBadgeCategory, badgeCategoryGradient } from '@/utils/badgeCategory'
 import { ordinalizeHtml } from '@/utils/badgeEvent'
 
 export default {
@@ -165,6 +165,7 @@ export default {
     country() { return this.participant.country || '' },
     registrationId() { return this.participant.registrationId },
     categoryLabel() { return formatBadgeCategory(this.participant.category) },
+    categoryGradient() { return badgeCategoryGradient(this.participant.category) },
     titleOrdinalHtml() { return ordinalizeHtml(this.event.title?.ordinal || '') },
     displayQrSize() {
       // The printed PDF keeps the QR large for badges without a photo but has

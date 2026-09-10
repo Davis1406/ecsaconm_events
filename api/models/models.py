@@ -72,6 +72,8 @@ class ParticipationRole(PyEnum):
     participant = "participant"
     student = "student"
     exhibitor = "exhibitor"
+    media = "media"
+    usher = "usher"
     world = "world"
     other_africa = "other_africa"
     member_state = "member_state"

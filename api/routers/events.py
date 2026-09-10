@@ -115,6 +115,8 @@ _BADGE_ROLE_LABELS = {
     "sponsor": "Sponsor",
     "moderator": "Moderator",
     "moh": "Ministry of Health",
+    "media": "Media",
+    "usher": "Usher",
     "member": "Member",
 }
 
@@ -128,6 +130,26 @@ def format_badge_category(role_key: str) -> str:
     if key in _BADGE_ROLE_LABELS:
         return _BADGE_ROLE_LABELS[key]
     return " ".join(w.capitalize() for w in re.split(r"[_\s]+", key) if w)
+
+
+# Category-bar gradient per role — (dark, light, edge) hex triplets. Delegates
+# (and everything without an override) keep the navy bar; staff/event teams get
+# their own colour so badges are instantly distinguishable at a glance.
+_BADGE_CATEGORY_GRADIENTS = {
+    "secretariat": ("#14532d", "#166534", "#22c55e"),   # green
+    "media": ("#78350f", "#92400e", "#f59e0b"),         # amber
+    "exhibitor": ("#134e4a", "#0f766e", "#14b8a6"),     # teal
+    "usher": ("#1e3a8a", "#1d4ed8", "#3b82f6"),         # blue
+}
+_BADGE_DEFAULT_GRADIENT = ("#173a4b", "#1d4659", "#2b5d73")  # navy
+
+
+def badge_category_gradient(role_key: str) -> tuple:
+    """Return the (dark, light, edge) hex triplets for a role's category bar."""
+    key = (role_key or "").strip().lower()
+    if key in _BADGE_DELEGATE_ROLE_KEYS:
+        key = "delegate"
+    return _BADGE_CATEGORY_GRADIENTS.get(key, _BADGE_DEFAULT_GRADIENT)
 
 
 def convert_png_to_rgb(path):
@@ -1665,6 +1687,8 @@ _ROLE_IMPORT_MAP = {
     "international": "world",
     "moh": "moh",
     "ministry of health": "moh",
+    "media": "media",
+    "usher": "usher",
 }
 
 
@@ -2391,9 +2415,6 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     GRAY_600 = (75 / 255.0, 85 / 255.0, 99 / 255.0)
     GRAY_500 = (107 / 255.0, 114 / 255.0, 128 / 255.0)
     ROSE_800 = (159 / 255.0, 18 / 255.0, 57 / 255.0)
-    NAVY_DARK = (23 / 255.0, 58 / 255.0, 75 / 255.0)   # #173a4b
-    NAVY_LIGHT = (29 / 255.0, 70 / 255.0, 89 / 255.0)  # #1d4659
-    NAVY_EDGE = (43 / 255.0, 93 / 255.0, 115 / 255.0)
     RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)        # rgb(220,50,75)
     PINK = (254 / 255.0, 80 / 255.0, 103 / 255.0)      # rgb(254,80,103)
     FOOTER_END = (214 / 255.0, 44 / 255.0, 68 / 255.0)
@@ -2577,20 +2598,23 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
 
     top += U(8)   # category bar mt-2
 
-    # ── Category bar (navy gradient, white tracked caps) ────────────────────
+    # ── Category bar (role-coloured gradient, white tracked caps) ───────────
     bar_x, bar_w = U(20), W - U(40)
     bar_h, bar_r = U(32), U(8)
     bar_bottom = Y(top + U(32))
+    role_key = (p.get("participation_role") or "delegate").strip().lower()
+    bar_dark, bar_light, bar_edge = badge_category_gradient(role_key)
+    bar_dark_rgb, bar_light_rgb, bar_edge_rgb = hex_to_rgb(bar_dark), hex_to_rgb(bar_light), hex_to_rgb(bar_edge)
     c.saveState()
     bar_clip = c.beginPath()
     bar_clip.roundRect(bar_x, bar_bottom, bar_w, bar_h, bar_r)
     c.clipPath(bar_clip, stroke=0, fill=0)
     _gradient_rect(c, bar_x, bar_bottom, bar_w, bar_h, [
-        (0.0, NAVY_DARK), (0.5, NAVY_LIGHT), (1.0, NAVY_DARK),
+        (0.0, bar_dark_rgb), (0.5, bar_light_rgb), (1.0, bar_dark_rgb),
     ])
     c.restoreState()
     c.saveState()
-    c.setStrokeColorRGB(*NAVY_EDGE)
+    c.setStrokeColorRGB(*bar_edge_rgb)
     c.setStrokeAlpha(0.4)
     c.setLineWidth(U(1))
     c.roundRect(bar_x, bar_bottom, bar_w, bar_h, bar_r, fill=0, stroke=1)

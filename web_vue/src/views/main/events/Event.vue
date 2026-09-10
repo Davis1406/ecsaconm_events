@@ -1088,6 +1088,7 @@ const CATEGORY_MAP = {
   world: 'International', student: 'Student', exhibitor: 'Exhibitor',
   secretariat: 'Secretariat', delegate: 'Delegate', presenter: 'Presenter',
   speaker: 'Speaker', sponsor: 'Sponsor', moderator: 'Moderator', moh: 'Ministry of Health',
+  media: 'Media', usher: 'Usher',
 };
 
 export default {
@@ -1207,6 +1208,8 @@ export default {
         { value: 'other_africa', label: 'Other Africa' },
         { value: 'member_state', label: 'Member State' },
         { value: 'moh', label: 'Ministry of Health' },
+        { value: 'media', label: 'Media' },
+        { value: 'usher', label: 'Usher' },
       ],
     };
   },
