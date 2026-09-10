@@ -8,6 +8,7 @@ from io import BytesIO
 from typing import Literal
 from fastapi.responses import JSONResponse
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from fastapi import status, HTTPException, File, Form, UploadFile
 from typing import Annotated
 from core.database import get_db
@@ -21,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from models.models import Event, User, Registration, Document, Link, Payment, UserProfile, Country, UserPhoto, UserRole
 from models.models import ParticipationRole, PaymentStatus, PaymentMethod, Abstract, AbstractAuthor
 from utils.mailer_util import hash_password
-from schemas.events_space import EventSchema, EventUpdateSchema, RegistrationSchema, LinkSchema, SendReceiptSchema
+from schemas.events_space import EventSchema, EventUpdateSchema, RegistrationSchema, LinkSchema, SendReceiptSchema, AddParticipantSchema
 from utils.receipt_generator import generate_receipt_pdf
 from utils.mailer_util import send_email_with_attachment
 from fastapi import BackgroundTasks
@@ -997,6 +998,116 @@ async def event_registration(
     return {
         "message": "Registration successful",
         "registration_id": new_registration.id,
+    }
+
+
+@router.post("/{event_id}/participants")
+async def add_event_participant(
+    request: Request,
+    event_id: int,
+    data: AddParticipantSchema,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    dependency: Dependency = Depends(get_dependency),
+    auth_dependency: Auth = Depends(get_auth_dependency),
+):
+    """Admin: quickly add a single participant to an event.
+
+    Finds or creates the user account by email, fills in their profile, and
+    creates (or restores) their event registration. New accounts get the
+    standard temporary password and the default "User" role.
+    """
+    auth_dependency.secure_access("BULK_UPLOAD", current_user["user_id"])
+
+    event = get_object(event_id, db, Event)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    try:
+        role = ParticipationRole(data.participation_role)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid participation_role: {data.participation_role}",
+        )
+
+    email = (data.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        phone = (data.phone or "").strip()
+        if not phone:
+            base = f"9{abs(hash(email)) % 10**9:09d}"[:20]
+            phone, suffix = base, 0
+            while db.query(User).filter(User.phone == phone).first():
+                suffix += 1
+                phone = f"{base[:18]}{suffix:02d}"
+        user = User(
+            firstname=(data.firstname or "").strip(),
+            lastname=(data.lastname or "").strip(),
+            email=email,
+            phone=phone,
+            hashed_password=hash_password("Ecsaconm@2025"),
+            verified=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=6))
+    else:
+        if data.firstname:
+            user.firstname = data.firstname.strip()
+        if data.lastname:
+            user.lastname = data.lastname.strip()
+        if data.phone:
+            user.phone = data.phone.strip()
+
+    profile = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == user.id, UserProfile.deleted_at == None)
+        .first()
+    )
+    if not profile:
+        profile = UserProfile(
+            user_id=user.id, title="", middle_name="", gender="", position="",
+            organisation="", profession="", designation="", certificate_name="", address="",
+        )
+        db.add(profile)
+    if data.title is not None:
+        profile.title = data.title
+    if data.designation is not None:
+        profile.designation = data.designation
+    if data.organisation is not None:
+        profile.organisation = data.organisation
+    if data.country_id is not None:
+        profile.country_id = data.country_id
+
+    reg = (
+        db.query(Registration)
+        .filter(Registration.user_id == user.id, Registration.event_id == event_id)
+        .first()
+    )
+    if not reg:
+        reg = Registration(
+            user_id=user.id, event_id=event_id, participation_role=role, paid=False
+        )
+        db.add(reg)
+    else:
+        reg.deleted_at = None
+        reg.participation_role = role
+
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Could not add participant: {e.orig}")
+
+    db.refresh(reg)
+    return {
+        "message": "Participant added",
+        "registration_id": reg.id,
+        "user_id": user.id,
     }
 
 

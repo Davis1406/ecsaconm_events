@@ -145,6 +145,18 @@ class RegistrationSchema(BaseModel):
     participation_role: str
 
 
+class AddParticipantSchema(BaseModel):
+    firstname: str
+    lastname: str
+    email: str
+    phone: Optional[str] = None
+    title: Optional[str] = None
+    designation: Optional[str] = None
+    organisation: Optional[str] = None
+    country_id: Optional[int] = None
+    participation_role: str = "delegate"
+
+
 class OrganisationSchema(BaseModel):
     country_id: int
     organisation: str

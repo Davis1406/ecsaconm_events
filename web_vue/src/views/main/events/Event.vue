@@ -134,6 +134,16 @@
         </h2>
         <search-component @search="handleSearch" />
 
+        <!-- Add participant -->
+        <button v-if="permissions.includes('BULK_UPLOAD') || permissions.includes('ADMIN_DASHBOARD')"
+          @click="openAddParticipant" title="Add participant"
+          class="inline-flex items-center justify-center w-9 h-9 rounded-xl text-white transition hover:opacity-90"
+          style="background-color: rgb(254,80,103);">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+
         <!-- Visual Reports -->
         <button @click="openReports()"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
@@ -836,12 +846,95 @@
       </div>
     </div>
 
+    <!-- Add participant modal -->
+    <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-gray-800">Add Participant</h3>
+          <button @click="showAddModal = false" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-5 space-y-4">
+          <div class="grid sm:grid-cols-2 gap-4">
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Title</span>
+              <input v-model="addForm.title" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">First name <span class="text-red-500">*</span></span>
+              <input v-model="addForm.firstname" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Last name <span class="text-red-500">*</span></span>
+              <input v-model="addForm.lastname" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Email <span class="text-red-500">*</span></span>
+              <input v-model="addForm.email" type="email"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Phone</span>
+              <input v-model="addForm.phone" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Designation</span>
+              <input v-model="addForm.designation" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Organisation</span>
+              <input v-model="addForm.organisation" type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400" />
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Country</span>
+              <select v-model.number="addForm.country_id"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400">
+                <option :value="null">—</option>
+                <option v-for="c in addCountries" :key="c.id" :value="c.id">{{ c.country }}</option>
+              </select>
+            </label>
+            <label class="block sm:col-span-2">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Participation role</span>
+              <select v-model="addForm.participation_role"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400">
+                <option v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</option>
+              </select>
+            </label>
+          </div>
+
+          <p v-if="addError" class="text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600">{{ addError }}</p>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button @click="showAddModal = false"
+            class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <button @click="saveAddParticipant" :disabled="addSaving"
+            class="px-4 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ addSaving ? 'Saving…' : 'Add Participant' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script>
 import axios from 'axios';
-import { createItem } from "@/services/apiService";
+import { createItem, fetchData } from "@/services/apiService";
 import {
   MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon,
   XCircleIcon, CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon,
@@ -954,6 +1047,37 @@ export default {
       pageSizeOptions: [25, 50, 100],
       participantsLoading: false,
       exporting: false,
+      // Add participant
+      showAddModal: false,
+      addSaving: false,
+      addError: '',
+      addCountries: [],
+      addForm: {
+        title: '',
+        firstname: '',
+        lastname: '',
+        email: '',
+        phone: '',
+        designation: '',
+        organisation: '',
+        country_id: null,
+        participation_role: 'delegate',
+      },
+      roleOptions: [
+        { value: 'delegate', label: 'Delegate' },
+        { value: 'secretariat', label: 'Secretariat' },
+        { value: 'presenter', label: 'Presenter' },
+        { value: 'speaker', label: 'Speaker' },
+        { value: 'sponsor', label: 'Sponsor' },
+        { value: 'moderator', label: 'Moderator' },
+        { value: 'participant', label: 'Participant' },
+        { value: 'student', label: 'Student' },
+        { value: 'exhibitor', label: 'Exhibitor' },
+        { value: 'world', label: 'International' },
+        { value: 'other_africa', label: 'Other Africa' },
+        { value: 'member_state', label: 'Member State' },
+        { value: 'moh', label: 'Ministry of Health' },
+      ],
     };
   },
   mounted() {
@@ -1181,6 +1305,42 @@ export default {
         console.error('Error loading report data:', error);
       } finally {
         this.reportLoading = false;
+      }
+    },
+    async openAddParticipant() {
+      this.addForm = {
+        title: '', firstname: '', lastname: '', email: '', phone: '',
+        designation: '', organisation: '', country_id: null,
+        participation_role: 'delegate',
+      };
+      this.addError = '';
+      this.showAddModal = true;
+      if (!this.addCountries.length) {
+        try {
+          const res = await fetchData('countries', 0, 500, '');
+          this.addCountries = res.data || [];
+        } catch (error) {
+          console.error('Error fetching countries:', error);
+        }
+      }
+    },
+    async saveAddParticipant() {
+      if (!this.addForm.firstname || !this.addForm.lastname || !this.addForm.email) {
+        this.addError = 'First name, last name and email are required.';
+        return;
+      }
+      this.addSaving = true;
+      this.addError = '';
+      try {
+        await createItem(`events/${this.id}/participants`, { ...this.addForm });
+        this.showAddModal = false;
+        await this.getEvent(true);
+        this.successMsg = 'Participant added.';
+        setTimeout(() => { this.successMsg = ''; }, 3000);
+      } catch (error) {
+        this.addError = error.response?.data?.detail || 'Failed to add participant. Please try again.';
+      } finally {
+        this.addSaving = false;
       }
     },
     filterLabelForExport() {
