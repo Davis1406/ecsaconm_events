@@ -21,6 +21,7 @@ const routeComponents = {
   WebEventView: () => import("@/views/web/WebEvent.vue"),
   UserEventStatusView: () => import("@/views/web/UserEventStatus.vue"),
   AttendanceView: () => import("@/views/web/Attendance.vue"),
+  OnsiteRegistrationView: () => import("@/views/web/OnsiteRegistration.vue"),
 
   EventsView: () => import("@/views/main/events/Events.vue"),
   AddEventView: () => import("@/views/main/events/Add.vue"),
@@ -152,6 +153,11 @@ const routes = [
         path: "/attendance/:eventId/",
         name: "Attendance",
         component: routeComponents.AttendanceView,
+      },
+      {
+        path: "/onsite-registration/:eventId",
+        name: "OnsiteRegistration",
+        component: routeComponents.OnsiteRegistrationView,
       },
       {
         path: "/abstract-submission/:eventId",

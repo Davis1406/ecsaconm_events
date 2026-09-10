@@ -179,6 +179,13 @@
           <ArrowDownTrayIcon class="w-4 h-4" />
           Download All Badges (PDF)
         </button>
+        <button @click="downloadOnsiteRegistrationQr"
+          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
+          style="border-color: rgb(254,80,103); color: rgb(254,80,103);"
+          title="Printable QR for Finance to register walk-in participants who have paid onsite">
+          <QrCodeIcon class="w-4 h-4" />
+          Onsite Registration QR
+        </button>
         <template v-if="permissions.includes('PRINT_BADGE') && selectedBadgeIds.length">
           <button @click="showBulkBadgePreview = true"
             class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
@@ -1646,6 +1653,26 @@ export default {
       } catch (error) {
         console.error('Download all badges failed:', error);
         this.errorMsg = 'Failed to download badges.';
+      }
+    },
+    async downloadOnsiteRegistrationQr() {
+      // A4 flyer with a QR code linking to this event's public onsite
+      // registration form — for Finance to print at their venue desk.
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        const res = await api.get(`/events/${this.id}/onsite_registration/qr`, { responseType: 'blob' });
+        const url = window.URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${String(this.event.event || 'event').replace(/\s+/g, '_')}_Onsite_Registration_QR.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download onsite registration QR failed:', error);
+        this.errorMsg = 'Failed to generate onsite registration QR.';
       }
     },
     closeBadgeModal() { this.showBadgeModal = false; },

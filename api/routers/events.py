@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from models.models import Event, User, Registration, Document, Link, Payment, UserProfile, Country, UserPhoto, UserRole
 from models.models import ParticipationRole, PaymentStatus, PaymentMethod, Abstract, AbstractAuthor
 from utils.mailer_util import hash_password
-from schemas.events_space import EventSchema, EventUpdateSchema, RegistrationSchema, LinkSchema, SendReceiptSchema, AddParticipantSchema
+from schemas.events_space import EventSchema, EventUpdateSchema, RegistrationSchema, LinkSchema, SendReceiptSchema, AddParticipantSchema, OnsiteRegistrationSchema
 from utils.receipt_generator import generate_receipt_pdf
 from utils.mailer_util import send_email_with_attachment
 from fastapi import BackgroundTasks
@@ -1154,6 +1154,118 @@ async def add_event_participant(
     }
 
 
+@router.post("/{event_id}/onsite_registration")
+async def onsite_register_participant(
+    event_id: int,
+    data: OnsiteRegistrationSchema,
+    db: Session = Depends(get_db),
+):
+    """Public, no-login walk-in check-in for people who have already paid at
+    the venue — reached by scanning a printed QR at the Finance desk. Email
+    is optional; the phone number is the identifying field, and a placeholder
+    @onsite.ecsaconm.org email is generated when none is given so the User
+    row's NOT NULL/unique email constraint still holds.
+    """
+    event = get_object(event_id, db, Event)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    try:
+        role = ParticipationRole(data.participation_role or "delegate")
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid participation_role: {data.participation_role}",
+        )
+
+    phone = (data.phone or "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+
+    email = (data.email or "").strip().lower()
+    generated_email = not email
+    if generated_email:
+        digits = re.sub(r"\D", "", phone) or uuid.uuid4().hex[:9]
+        email = f"{digits}@onsite.ecsaconm.org"
+
+    # Walk-ins are identified by phone first (that's the field guaranteed to
+    # be filled in); only fall back to email if a real one was supplied.
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user and not generated_email:
+        user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        # Placeholder emails are built from phone digits — vanishingly
+        # unlikely to collide, but guard against it instead of a 500.
+        while db.query(User).filter(User.email == email).first():
+            email = f"{email.split('@')[0]}{uuid.uuid4().hex[:4]}@onsite.ecsaconm.org"
+        user = User(
+            firstname=(data.firstname or "").strip(),
+            lastname=(data.lastname or "").strip(),
+            email=email,
+            phone=phone,
+            hashed_password=hash_password("Ecsaconm@2025"),
+            verified=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=6))
+    else:
+        if data.firstname:
+            user.firstname = data.firstname.strip()
+        if data.lastname:
+            user.lastname = data.lastname.strip()
+
+    profile = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == user.id, UserProfile.deleted_at == None)
+        .first()
+    )
+    if not profile:
+        profile = UserProfile(
+            user_id=user.id, title="", middle_name="", gender="", position="",
+            organisation="", profession="", designation="", certificate_name="", address="",
+        )
+        db.add(profile)
+    if data.title is not None:
+        profile.title = data.title
+    if data.designation is not None:
+        profile.designation = data.designation
+    if data.organisation is not None:
+        profile.organisation = data.organisation
+    if data.country_id is not None:
+        profile.country_id = data.country_id
+
+    reg = (
+        db.query(Registration)
+        .filter(Registration.user_id == user.id, Registration.event_id == event_id)
+        .first()
+    )
+    if not reg:
+        # Onsite = already paid at the venue by definition.
+        reg = Registration(user_id=user.id, event_id=event_id, participation_role=role, paid=True)
+        db.add(reg)
+    else:
+        reg.deleted_at = None
+        reg.participation_role = role
+        reg.paid = True
+
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Could not complete registration: {e.orig}")
+
+    db.refresh(reg)
+    return {
+        "message": "Onsite registration complete",
+        "registration_id": reg.id,
+        "user_id": user.id,
+        "email": user.email,
+        "generated_email": generated_email,
+    }
+
+
 @router.delete("/registration/{event_id}")
 async def event_deregistration(
     request: Request,
@@ -1570,10 +1682,12 @@ def _fit_lines(text, font_name, max_width, start_size, min_size=12, max_lines=3)
     return lines, size
 
 
-def _render_document_qr_flyer(c, document, event, file_url, logo_left=None, logo_right=None):
-    """Draw a one-page A4 flyer: ECSA/ECSACONM logos, event name, document
-    label, a large QR code linking straight to the uploaded file, and the
-    raw URL as a fallback."""
+def _render_qr_flyer(c, event_name, label, title_text, instruction, file_url, logo_left=None, logo_right=None):
+    """Draw a one-page A4 flyer: ECSA/ECSACONM logos, event name, a coloured
+    label, a title line, an instruction line, a large QR code linking to
+    `file_url`, and the raw URL as a fallback. Shared by the per-document QR
+    (label = document type, title = document name) and the onsite
+    registration QR (label = "ONSITE REGISTRATION", title = a short prompt)."""
     W, H = A4
 
     RED = (220 / 255.0, 50 / 255.0, 75 / 255.0)          # rgb(220,50,75)
@@ -1620,8 +1734,7 @@ def _render_document_qr_flyer(c, document, event, file_url, logo_left=None, logo
 
         logos_reserved = 8 * mm + logo_d + 8 * mm  # gap + logo + gap before the text block
 
-    event_name = (getattr(event, "event", None) or "").strip()
-    doc_title = document.name or document.file_name or "Document"
+    event_name = (event_name or "").strip()
     qr_size = 130 * mm
     pad = 7 * mm
     text_max_width = W - 40 * mm  # 20mm margin either side
@@ -1630,7 +1743,7 @@ def _render_document_qr_flyer(c, document, event, file_url, logo_left=None, logo
     heading_lines, heading_size = ([], 22)
     if event_name:
         heading_lines, heading_size = _fit_lines(event_name, heading_font, text_max_width, 22, min_size=14, max_lines=3)
-    title_lines, title_size = _fit_lines(doc_title, title_font, text_max_width, 19, min_size=13, max_lines=2)
+    title_lines, title_size = _fit_lines(title_text, title_font, text_max_width, 19, min_size=13, max_lines=2)
 
     # Line heights in points (font size * a 1.25 leading factor).
     heading_line_h = heading_size * 1.25
@@ -1661,12 +1774,12 @@ def _render_document_qr_flyer(c, document, event, file_url, logo_left=None, logo
 
     c.setFillColorRGB(*RED)
     c.setFont("Helvetica-Bold", 15)
-    c.drawCentredString(W / 2, top, _format_document_type(document.document_type).upper())
+    c.drawCentredString(W / 2, top, label.upper())
     top -= label_h
 
     c.setFillColorRGB(*GRAY_500)
     c.setFont("Helvetica", 13)
-    c.drawCentredString(W / 2, top, "Scan with your phone camera to open:")
+    c.drawCentredString(W / 2, top, instruction)
     top -= instruction_h
 
     c.setFillColorRGB(*GRAY_800)
@@ -1720,10 +1833,20 @@ async def get_document_qr_flyer(
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")
+    doc_title = document.name or document.file_name or "Document"
 
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    _render_document_qr_flyer(c, document, event, file_url, logo_left, logo_right)
+    _render_qr_flyer(
+        c,
+        getattr(event, "event", None),
+        _format_document_type(document.document_type),
+        doc_title,
+        "Scan with your phone camera to open:",
+        file_url,
+        logo_left,
+        logo_right,
+    )
     c.showPage()
     c.save()
     buffer.seek(0)
@@ -1733,6 +1856,47 @@ async def get_document_qr_flyer(
         buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{safe_name}_QR.pdf"'},
+    )
+
+
+@router.get("/{event_id}/onsite_registration/qr")
+async def get_onsite_registration_qr_flyer(
+    event_id: int,
+    user: user_dependency,
+    db: Session = Depends(get_db),
+):
+    """A4 flyer PDF with a QR code linking to this event's public onsite
+    registration form, for Finance to print and use at the venue desk."""
+    event = get_object(event_id, db, Event)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    file_url = f"{CLIENT_ORIGIN}/#/onsite-registration/{event_id}"
+
+    logo_left = convert_png_to_rgb("assets/logo_left.png")
+    logo_right = convert_png_to_rgb("assets/logo.png")
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _render_qr_flyer(
+        c,
+        getattr(event, "event", None),
+        "Onsite Registration",
+        "Register a Walk-in Participant",
+        "Finance: scan to register participants who have paid at the venue:",
+        file_url,
+        logo_left,
+        logo_right,
+    )
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", getattr(event, "event", None) or f"event_{event_id}").strip("_") or f"event_{event_id}"
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}_Onsite_Registration_QR.pdf"'},
     )
 
 

@@ -157,6 +157,21 @@ class AddParticipantSchema(BaseModel):
     participation_role: str = "delegate"
 
 
+class OnsiteRegistrationSchema(BaseModel):
+    """Public walk-in registration: identified by phone, not email — Finance
+    fills this in for a paid onsite attendee who may not have/want to give
+    an email address."""
+    firstname: str
+    lastname: str
+    phone: str
+    email: Optional[str] = None
+    title: Optional[str] = None
+    designation: Optional[str] = None
+    organisation: Optional[str] = None
+    country_id: Optional[int] = None
+    participation_role: str = "delegate"
+
+
 class OrganisationSchema(BaseModel):
     country_id: int
     organisation: str
