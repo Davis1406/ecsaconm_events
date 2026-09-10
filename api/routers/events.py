@@ -2216,8 +2216,8 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.setFillColorRGB(*RED)
     c.circle(right_cx, logo_cy, logo_d / 2, fill=1, stroke=0)
     c.restoreState()
-    c.drawImage(logo_right, right_cx - logo_d / 2 + 3.1 * mm, logo_cy - logo_d / 2 + 3.1 * mm,
-                logo_d - 6.2 * mm, logo_d - 6.2 * mm, preserveAspectRatio=True, mask="auto")
+    c.drawImage(logo_right, right_cx - logo_d / 2 + 1.6 * mm, logo_cy - logo_d / 2 + 1.6 * mm,
+                logo_d - 3.2 * mm, logo_d - 3.2 * mm, preserveAspectRatio=True, mask="auto")
 
     # Title block, centered between the two logos: ordinal + org, subtitle, pill
     title = _parse_badge_title(p.get("event_name") or "")
@@ -2226,8 +2226,8 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     title_cx = (title_x0 + title_x1) / 2
     ty = y - 5 * mm
 
-    ord_font, ord_size = "Helvetica-Bold", 10
-    org_font, org_size = "Helvetica-Bold", 13
+    ord_font, ord_size = "Helvetica-Bold", 13
+    org_font, org_size = "Helvetica-Bold", 17
     ord_text = f"{title['ordinal']} " if title["ordinal"] else ""
     ord_w = stringWidth(ord_text, ord_font, ord_size)
     org_w = stringWidth(title["org"], org_font, org_size)
@@ -2240,20 +2240,20 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     c.setFillColorRGB(*RED)
     c.setFont(org_font, org_size)
     c.drawString(tx + ord_w, ty, title["org"])
-    ty -= 4.5 * mm
+    ty -= 5.5 * mm
 
     if title["subtitle"]:
         c.setFillColorRGB(*GRAY_600)
-        c.setFont("Helvetica-Bold", 7)
-        for line in textwrap.wrap(title["subtitle"].upper(), width=30)[:2]:
+        c.setFont("Helvetica-Bold", 8.5)
+        for line in textwrap.wrap(title["subtitle"].upper(), width=28)[:2]:
             c.drawCentredString(title_cx, ty, line)
-            ty -= 3.2 * mm
+            ty -= 3.8 * mm
 
     if title["pill"]:
         pill_text = title["pill"]
-        pill_font, pill_size = "Helvetica-Bold", 6.5
+        pill_font, pill_size = "Helvetica-Bold", 7.5
         pill_w = stringWidth(pill_text, pill_font, pill_size) + 6 * mm
-        pill_h = 4.2 * mm
+        pill_h = 5 * mm
         ty -= 1 * mm
         c.setFillColorRGB(0.996, 0.933, 0.941)
         c.setStrokeColorRGB(*PINK)
@@ -2261,14 +2261,14 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
         c.roundRect(title_cx - pill_w / 2, ty - pill_h + 1 * mm, pill_w, pill_h, pill_h / 2, fill=True, stroke=True)
         c.setFillColorRGB(*RED)
         c.setFont(pill_font, pill_size)
-        c.drawCentredString(title_cx, ty - pill_h / 2 + 1.5 * mm, pill_text)
+        c.drawCentredString(title_cx, ty - pill_h / 2 + 1.6 * mm, pill_text)
         ty -= pill_h
 
     y -= max(logo_d, y - ty + 3 * mm) + 3 * mm
 
     # Divider
     c.setStrokeColorRGB(*PINK)
-    c.setLineWidth(0.5)
+    c.setLineWidth(1)
     c.line(6 * mm, y, width - 6 * mm, y)
     y -= 6 * mm
 
@@ -2332,7 +2332,7 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     id_h = 8 * mm
     reserve_below = 7 * mm + (len(theme_wrapped) * 5 * mm if theme_wrapped else 0) + 4 * mm
     available = y - footer_h - reserve_below
-    qr_size = max(22 * mm, min(34 * mm, available - qr_pad * 2 - id_h))
+    qr_size = max(24 * mm, min(38 * mm, available - qr_pad * 2 - id_h))
     box_w = qr_size + qr_pad * 2
     box_h = qr_size + qr_pad * 2 + id_h
     box_x = (width - box_w) / 2

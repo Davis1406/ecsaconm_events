@@ -16,8 +16,8 @@
       style="box-shadow: 0 20px 40px -15px rgba(220,50,75,0.18), 0 0 0 1px rgba(220,50,75,0.12), 0 8px 16px -4px rgba(15,23,42,0.08); border: 1px solid rgba(254,80,103,0.15);">
 
       <!-- Decorative background blobs -->
-      <div class="absolute -top-12 -right-12 w-36 h-36 rounded-full pointer-events-none" style="background: rgba(254,80,103,0.08); filter: blur(28px);"></div>
-      <div class="absolute top-1/3 -left-12 w-32 h-32 rounded-full pointer-events-none" style="background: rgba(254,80,103,0.06); filter: blur(24px);"></div>
+      <div class="absolute -top-12 -right-12 w-36 h-36 rounded-full pointer-events-none" style="background: rgba(254,80,103,0.16); filter: blur(28px);"></div>
+      <div class="absolute top-1/3 -left-12 w-32 h-32 rounded-full pointer-events-none" style="background: rgba(254,80,103,0.12); filter: blur(24px);"></div>
 
       <!-- Header -->
       <header class="relative z-10 pt-4 px-4 pb-1 flex-shrink-0">
@@ -45,16 +45,15 @@
               {{ event.title.subtitle }}
             </div>
             <div v-if="event.title.pill" class="mt-1.5">
-              <span class="text-[9px] font-bold tracking-tight px-2.5 py-0.5 rounded-full inline-block"
-                style="color: rgb(220,50,75); background: rgba(254,80,103,0.08); border: 1px solid rgba(254,80,103,0.25);"
-                v-html="titlePillHtml"></span>
+              <span class="text-[9px] font-bold tracking-tight px-2.5 py-0.5 rounded-full inline-block leading-none"
+                style="color: rgb(220,50,75); background: rgba(254,80,103,0.08); border: 1px solid rgba(254,80,103,0.25);">{{ event.title.pill }}</span>
             </div>
           </div>
 
           <!-- ECSACONM logo -->
           <div class="w-16 h-16 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
             style="background-color: rgb(220,50,75);">
-            <img src="@/assets/images/logo.png" class="w-11 h-11 object-contain" alt="ECSACONM" />
+            <img src="@/assets/images/logo.png" class="w-14 h-14 object-contain" alt="ECSACONM" />
           </div>
         </div>
 
@@ -154,7 +153,7 @@ export default {
       default: () => ({ title: { ordinal: '', org: 'ECSACONM', subtitle: '', pill: '' } }),
     },
     qrValue: { type: String, required: true },
-    qrSize: { type: Number, default: 108 },
+    qrSize: { type: Number, default: 124 },
   },
   computed: {
     fullName() { return this.participant.fullName || '' },
@@ -164,7 +163,6 @@ export default {
     registrationId() { return this.participant.registrationId },
     categoryLabel() { return formatBadgeCategory(this.participant.category) },
     titleOrdinalHtml() { return ordinalizeHtml(this.event.title?.ordinal || '') },
-    titlePillHtml() { return ordinalizeHtml(this.event.title?.pill || '') },
   },
 }
 </script>
