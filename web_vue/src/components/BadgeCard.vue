@@ -66,6 +66,12 @@
           {{ fullName || '—' }}
         </h1>
 
+        <!-- Round photo (only when one has been uploaded) -->
+        <div v-if="photoUrl" class="mt-2 flex justify-center">
+          <img :src="photoUrl" class="w-12 h-12 rounded-full object-cover border-2"
+            style="border-color: rgba(254,80,103,0.5);" />
+        </div>
+
         <div class="mt-2 py-2 rounded-lg flex items-center justify-center relative overflow-hidden"
           style="background: linear-gradient(to right, #173a4b, #1d4659, #173a4b); border: 1px solid rgba(43,93,115,0.4);">
           <span class="text-xl font-black tracking-[0.14em] text-white uppercase leading-none">{{ categoryLabel }}</span>
@@ -86,7 +92,7 @@
 
       <!-- QR + theme -->
       <section class="relative z-10 px-5 py-2 flex flex-col items-center flex-shrink-0">
-        <div class="bg-white p-3 rounded-xl flex flex-col items-center" style="border: 1px solid rgba(254,80,103,0.25);">
+        <div class="bg-white p-2.5 rounded-xl flex flex-col items-center" style="border: 1px solid rgba(254,80,103,0.25);">
           <QRCodeVue :value="qrValue" :size="qrSize" foreground="#0f172a" background="#ffffff" />
           <span class="mt-1.5 text-xs font-extrabold tracking-wider uppercase" style="color: rgb(220,50,75);">
             ID #{{ registrationId ?? '—' }}
@@ -153,7 +159,7 @@ export default {
       default: () => ({ title: { ordinal: '', org: 'ECSACONM', subtitle: '', pill: '' } }),
     },
     qrValue: { type: String, required: true },
-    qrSize: { type: Number, default: 124 },
+    qrSize: { type: Number, default: 96 },
   },
   computed: {
     fullName() { return this.participant.fullName || '' },
@@ -163,6 +169,13 @@ export default {
     registrationId() { return this.participant.registrationId },
     categoryLabel() { return formatBadgeCategory(this.participant.category) },
     titleOrdinalHtml() { return ordinalizeHtml(this.event.title?.ordinal || '') },
+    photoUrl() {
+      const photo = this.participant.photo || ''
+      if (!photo) return ''
+      if (/^https?:\/\//.test(photo)) return photo
+      const base = import.meta.env.VITE_API_URL || ''
+      return base.replace(/\/api\/?$/, '') + '/' + photo
+    },
   },
 }
 </script>

@@ -82,6 +82,7 @@ export default {
         institution: p.institution || p.organisation || '',
         country: p.country || '',
         registrationId: p.id,
+        photo: p.photo || '',
       }
     },
   },

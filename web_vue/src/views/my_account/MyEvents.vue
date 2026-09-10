@@ -401,6 +401,7 @@ export default {
         institution: b.organisation,
         country: b.country,
         registrationId: b.registration_id,
+        photo: b.photo || '',
       }
     },
     badgeEventCard() {
@@ -519,6 +520,7 @@ export default {
         participation_role: item.registration_details?.participation_role || 'participant',
         registration_id: item.registration_details?.registration_id,
         eventTheme: item.event?.theme || '',
+        photo: '',
       }
       // Try to enrich with profile data
       try {
@@ -532,6 +534,7 @@ export default {
         this.badgeParticipant.organisation = profile.organisation || ''
         this.badgeParticipant.country = profile.country || ''
         this.badgeParticipant.designation = profile.designation || ''
+        this.badgeParticipant.photo = res.data?.profile_picture?.profile_picture || ''
       } catch (e) { /* use store data */ }
       this.showBadgeModal = true
     },

@@ -2317,6 +2317,31 @@ def _draw_tracked(c, text, x, base_y, font, size, color, tracking_em=0.0):
     c.drawText(to)
 
 
+def _draw_round_photo(c, cx, cy, size, path, border=None, border_w=2):
+    """Draw a circular profile photo centred at (cx, cy) with diameter `size`
+    points, clipped to a circle with a brand-pink border. Returns False when
+    the file can't be loaded."""
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        im = Image.open(path).convert("RGB")
+    except Exception:
+        return False
+    r = size / 2.0
+    c.saveState()
+    clip = c.beginPath()
+    clip.circle(cx, cy, r)
+    c.clipPath(clip, stroke=0, fill=0)
+    c.drawImage(ImageReader(im), cx - r, cy - r, size, size, preserveAspectRatio=True, mask="auto")
+    c.restoreState()
+    c.saveState()
+    c.setStrokeColorRGB(*(border or (254 / 255.0, 80 / 255.0, 103 / 255.0)))
+    c.setLineWidth(border_w)
+    c.circle(cx, cy, r - border_w / 2.0, fill=0, stroke=1)
+    c.restoreState()
+    return True
+
+
 def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     """Draw a single A5 badge page onto ReportLab canvas c.
 
@@ -2533,6 +2558,15 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     for line in (wrap(full_name, "Helvetica-Bold", U(24), W - U(40))[:2] or ["—"]):
         c.drawCentredString(W / 2, line_base(top, 30, 24), line)
         top += U(30)
+
+    # Round profile photo between the name and the category bar (if uploaded)
+    photo = p.get("photo")
+    if photo and os.path.exists(photo):
+        top += U(4)
+        photo_size = U(48)
+        if _draw_round_photo(c, W / 2, Y(top + photo_size / 2), photo_size, photo):
+            top += photo_size + U(8)
+
     top += U(8)   # category bar mt-2
 
     # ── Category bar (navy gradient, white tracked caps) ────────────────────
@@ -2604,10 +2638,10 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     theme_lines = wrap(f'Theme: "{theme}"', "Helvetica-Oblique", U(11), W - U(40))[:2] if theme else []
     theme_block = (U(8) + len(theme_lines) * U(14)) if theme_lines else 0
 
-    card_pad = U(12)
-    id_block = U(22)   # ID label mt-1.5 + line
+    card_pad = U(10)
+    id_block = U(20)   # ID label mt-1.5 + line
     available = (H - footer_h) - top - U(8) - theme_block
-    qr_size = max(U(60), min(U(124), available - card_pad * 2 - id_block))
+    qr_size = max(U(40), min(U(96), available - card_pad * 2 - id_block))
     card_w = qr_size + card_pad * 2
     card_h = qr_size + card_pad * 2 + id_block
     card_x = (W - card_w) / 2
@@ -2760,6 +2794,7 @@ async def download_participant_badges_pdf(
                     "event_start_date": event.start_date,
                     "event_end_date": event.end_date,
                     "paid": reg.is_paid,
+                    "photo": user.user_photo[0].path if user and user.user_photo and len(user.user_photo) > 0 else None,
                 },
             )
         )
@@ -2872,6 +2907,7 @@ async def download_participant_badge_pdf(
         "event_start_date": event.start_date,
         "event_end_date": event.end_date,
         "paid": reg.is_paid,
+        "photo": user.user_photo[0].path if user and user.user_photo and len(user.user_photo) > 0 else None,
     }
 
     buffer = BytesIO()
@@ -2958,6 +2994,7 @@ async def download_my_badge(
         "event_start_date": event.start_date,
         "event_end_date": event.end_date,
         "paid": reg.is_paid,
+        "photo": user.user_photo[0].path if user and user.user_photo and len(user.user_photo) > 0 else None,
     }
 
     buffer = BytesIO()

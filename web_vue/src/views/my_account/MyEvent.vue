@@ -603,6 +603,7 @@ export default {
         institution: b.organisation,
         country: b.country,
         registrationId: b.registration_id,
+        photo: b.photo || '',
       }
     },
     badgeEventCard() {
@@ -682,6 +683,7 @@ export default {
         registration_id: this.registrationId,
         designation: '',
         eventTheme: this.event.theme || '',
+        photo: '',
       }
       try {
         const token = this.authStore.accessToken
@@ -694,6 +696,7 @@ export default {
         this.badgeParticipant.organisation = profile.organisation || this.badgeParticipant.organisation
         this.badgeParticipant.country = profile.country || this.badgeParticipant.country
         this.badgeParticipant.designation = profile.designation || ''
+        this.badgeParticipant.photo = res.data?.profile_picture?.profile_picture || ''
       } catch (e) { /* use store data */ }
       this.showBadgeModal = true
     },
