@@ -5,7 +5,7 @@
     <div class="flex flex-col space-y-4">
       <!-- Toolbar -->
       <div class="flex sm:flex-row flex-col sm:justify-between sm:items-center items-start gap-3">
-        <search-component @search="handleSearch"></search-component>
+        <search-component :value="searchPhrase" @search="handleSearch"></search-component>
         <router-link v-if="permissions.includes('ADD_USER')"
           :to="{ name: 'AddUser' }"
           class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition hover:opacity-90"
@@ -156,10 +156,23 @@ export default {
       return this.permissions.includes('ADMIN_DASHBOARD') && !this.authStore.isImpersonating
     },
   },
+  watch: {
+    searchPhrase() { this.syncUrl() },
+    currentPage() { this.syncUrl() },
+  },
   mounted() {
+    const q = this.$route.query
+    this.searchPhrase = q.search || ''
+    this.currentPage = parseInt(q.page, 10) || 1
     this.getUsers()
   },
   methods: {
+    syncUrl() {
+      const q = {}
+      if (this.searchPhrase) q.search = this.searchPhrase
+      if (this.currentPage > 1) q.page = String(this.currentPage)
+      this.$router.replace({ query: q })
+    },
     formatDate(dateString) {
       if (!dateString) return '—'
       return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })

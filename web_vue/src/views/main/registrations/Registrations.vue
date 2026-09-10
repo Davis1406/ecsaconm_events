@@ -5,7 +5,7 @@
     <div class="flex flex-col space-y-4">
       <!-- Search + event filter -->
       <div class="flex sm:flex-row flex-col sm:justify-between sm:items-center items-start gap-3 flex-wrap">
-        <search-component @search="handleSearch"></search-component>
+        <search-component :value="searchPhrase" @search="handleSearch"></search-component>
         <div class="flex items-center gap-2 flex-wrap">
           <select v-model="selectedEventId" @change="handleFilterChange"
             class="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-pink-400 bg-white min-w-[180px]">
@@ -753,7 +753,20 @@ export default {
       return this.registrations.length > 0 && this.registrations.every(r => this.selectedIds.has(r.id || r.registration_id))
     },
   },
+  watch: {
+    searchPhrase() { this.syncUrl() },
+    paidFilter() { this.syncUrl() },
+    proofFilter() { this.syncUrl() },
+    selectedEventId() { this.syncUrl() },
+    currentPage() { this.syncUrl() },
+  },
   mounted() {
+    const q = this.$route.query
+    this.searchPhrase = q.search || ''
+    this.paidFilter = q.paid || 'all'
+    this.proofFilter = q.proof || 'all'
+    this.selectedEventId = q.event ? String(q.event) : ''
+    this.currentPage = parseInt(q.page, 10) || 1
     this.loadEvents()
     this.loadRegistrations()
     document.addEventListener('click', this.closeMenu)
@@ -769,6 +782,15 @@ export default {
       } catch (error) {
         console.error('Error fetching events:', error)
       }
+    },
+    syncUrl() {
+      const q = {}
+      if (this.searchPhrase) q.search = this.searchPhrase
+      if (this.paidFilter && this.paidFilter !== 'all') q.paid = this.paidFilter
+      if (this.proofFilter && this.proofFilter !== 'all') q.proof = this.proofFilter
+      if (this.selectedEventId) q.event = this.selectedEventId
+      if (this.currentPage > 1) q.page = String(this.currentPage)
+      this.$router.replace({ query: q })
     },
     async loadRegistrations() {
       this.isLoading = true

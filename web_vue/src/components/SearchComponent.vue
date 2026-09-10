@@ -8,11 +8,22 @@
 <script>
 export default {
     name: "SearchComponent",
+    props: {
+        // Optional controlled value — lets the parent restore a search
+        // (e.g. from the URL query) into the box. Not required; standalone
+        // usage keeps its own internal state.
+        value: { type: String, default: "" },
+    },
     data() {
         return {
-            searchQuery: "",
+            searchQuery: this.value,
             debounceTimer: null,
         };
+    },
+    watch: {
+        value(v) {
+            if (this.searchQuery !== v) this.searchQuery = v;
+        },
     },
     beforeUnmount() {
         clearTimeout(this.debounceTimer);
