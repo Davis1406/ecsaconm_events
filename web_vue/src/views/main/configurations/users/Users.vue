@@ -27,11 +27,36 @@
         <!-- Table header -->
         <div class="hidden sm:grid grid-cols-12 gap-2 bg-gray-50 px-5 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
           <div class="col-span-1">#</div>
-          <div class="col-span-2">Name</div>
-          <div class="col-span-2">Email</div>
-          <div class="col-span-2">Phone</div>
-          <div class="col-span-2">Role</div>
-          <div class="col-span-1">Date Registered</div>
+          <button class="col-span-2 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('name')">
+            Name
+            <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'name' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+            </svg>
+          </button>
+          <button class="col-span-2 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('email')">
+            Email
+            <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'email' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+            </svg>
+          </button>
+          <button class="col-span-2 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('phone')">
+            Phone
+            <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'phone' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+            </svg>
+          </button>
+          <button class="col-span-2 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('role')">
+            Role
+            <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'role' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+            </svg>
+          </button>
+          <button class="col-span-1 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('created_at')">
+            Date Registered
+            <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'created_at' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+            </svg>
+          </button>
           <div class="col-span-2 text-right">Actions</div>
         </div>
 
@@ -120,7 +145,7 @@ import HeaderView from '@/includes/Header.vue'
 import { EyeIcon, PencilSquareIcon, TrashIcon, ArrowRightOnRectangleIcon } from '@heroicons/vue/24/solid'
 import PaginationComponent from '@/components/PaginationComponent.vue'
 import SearchComponent from '@/components/SearchComponent.vue'
-import { fetchData, deleteItem, createItem, setAuthToken } from '@/services/apiService'
+import { fetchDataWithParams, deleteItem, createItem, setAuthToken } from '@/services/apiService'
 import SpinnerComponent from '@/components/Spinner.vue'
 import DeleteConfirmationModal from '@/components/DeleteConfirmationModal.vue'
 import { useAuthStore } from '@/store/authStore'
@@ -142,6 +167,8 @@ export default {
       totalPages: 1,
       pageSize: 20,
       searchPhrase: '',
+      sortKey: 'created_at',
+      sortDir: 'desc',
       impersonatingId: null,
     }
   },
@@ -159,13 +186,17 @@ export default {
   watch: {
     searchPhrase() { this.syncUrl() },
     currentPage() { this.syncUrl() },
+    sortKey() { this.syncUrl() },
+    sortDir() { this.syncUrl() },
   },
   mounted() {
     const q = this.$route.query
-    const hasQuery = !!(q.search || q.page)
+    const hasQuery = !!(q.search || q.page || q.sort || q.dir)
     const s = hasQuery ? null : this.restoreSession()
     this.searchPhrase = q.search || s?.search || ''
     this.currentPage = parseInt(q.page || s?.page, 10) || 1
+    this.sortKey = q.sort || s?.sort || 'created_at'
+    this.sortDir = q.dir || s?.dir || 'desc'
     this.getUsers()
   },
   methods: {
@@ -173,6 +204,8 @@ export default {
       const q = {}
       if (this.searchPhrase) q.search = this.searchPhrase
       if (this.currentPage > 1) q.page = String(this.currentPage)
+      if (this.sortKey && this.sortKey !== 'created_at') q.sort = this.sortKey
+      if (this.sortDir && this.sortDir !== 'desc') q.dir = this.sortDir
       this.$router.replace({ query: q })
       this.persistSession(q)
     },
@@ -181,6 +214,8 @@ export default {
         sessionStorage.setItem('ecsa_users_session', JSON.stringify({
           search: q.search || '',
           page: q.page || '1',
+          sort: this.sortKey,
+          dir: this.sortDir,
         }))
       } catch (e) { /* ignore */ }
     },
@@ -199,7 +234,13 @@ export default {
     async getUsers() {
       this.isLoading = true
       try {
-        const response = await fetchData('users', (this.currentPage - 1) * this.pageSize, this.pageSize, this.searchPhrase)
+        const response = await fetchDataWithParams('users', {
+          skip: (this.currentPage - 1) * this.pageSize,
+          limit: this.pageSize,
+          search: this.searchPhrase,
+          sort: this.sortKey,
+          dir: this.sortDir,
+        })
         this.users = response.data || []
         this.total = response.total || 0
         this.totalPages = response.pages || 1
@@ -208,6 +249,16 @@ export default {
       } finally {
         this.isLoading = false
       }
+    },
+    sortBy(key) {
+      if (this.sortKey === key) {
+        this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc'
+      } else {
+        this.sortKey = key
+        this.sortDir = key === 'name' ? 'asc' : 'desc'
+      }
+      this.currentPage = 1
+      this.getUsers()
     },
     handleSearch(query) {
       this.searchPhrase = query

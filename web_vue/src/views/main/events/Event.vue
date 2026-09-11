@@ -167,19 +167,19 @@
         <DownloadComponent v-if="permissions.includes('DOWNLOAD_PARTICIPANT_LIST')"
           @participants="handleParticipants" @paid="handlePaid" @notPaid="handleNotPaid"
           @attendance="handleAttendance" />
-        <button v-if="permissions.includes('PRINT_BADGE')" @click="printAllBadges"
+        <button v-if="permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD')" @click="printAllBadges"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
           style="background-color: rgb(254,80,103);">
           <IdentificationIcon class="w-4 h-4" />
           Print Badges
         </button>
-        <button v-if="permissions.includes('PRINT_BADGE')" @click="downloadAllBadges"
+        <button v-if="permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD')" @click="downloadAllBadges"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
           <ArrowDownTrayIcon class="w-4 h-4" />
           Download All Badges (PDF)
         </button>
-        <button v-if="permissions.includes('PRINT_BADGE')" @click="openBadgePicker"
+        <button v-if="permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD')" @click="openBadgePicker"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
           style="background-color: rgb(254,80,103);">
           <IdentificationIcon class="w-4 h-4" />
@@ -230,7 +230,7 @@
       </div>
 
       <!-- Badge selection bar -->
-      <div v-if="permissions.includes('PRINT_BADGE') && participantsFilteredTotal > 0"
+      <div v-if="(permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD')) && participantsFilteredTotal > 0"
         class="flex flex-wrap items-center gap-3 px-5 py-2 border-b border-gray-100 text-xs text-gray-500">
         <span v-if="selectedBadgeIds.length" class="font-semibold text-gray-700">
           {{ selectedBadgeIds.length }} selected

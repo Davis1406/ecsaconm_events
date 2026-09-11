@@ -13,7 +13,7 @@ from typing import Annotated
 from core.database import get_db
 from sqlalchemy.orm import Session, joinedload
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import User, UserPhoto, UserProfile, UserRole, PasswordReset
+from models.models import User, UserPhoto, UserProfile, UserRole, PasswordReset, Role
 from dependencies.dependency import Dependency
 from fastapi import (
     APIRouter,
@@ -61,6 +61,8 @@ async def get_users(
     skip: int = Query(default=0, ge=0),
     limit: int = 10,
     search: str = "",
+    sort: str = Query(default="created_at"),
+    dir: str = Query(default="desc"),
     dependency: Dependency = Depends(get_dependency),
     auth_dependency: Auth = Depends(get_auth_dependency),
 ):
@@ -84,8 +86,31 @@ async def get_users(
         joinedload(User.user_roles).joinedload(UserRole.role)
     )
 
+    # Server-side sort. The role is resolved via a correlated subquery so a
+    # user with several role rows is still counted/ordered once.
+    sort_key = (sort or "created_at").lower()
+    sort_dir = "asc" if (dir or "desc").lower() == "asc" else "desc"
+    role_subq = (
+        db.query(Role.role)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .filter(UserRole.user_id == User.id, UserRole.deleted_at == None)
+        .order_by(UserRole.id.asc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    sort_columns = {
+        "name": (User.firstname, User.lastname),
+        "email": (User.email,),
+        "phone": (User.phone,),
+        "role": (role_subq,),
+        "created_at": (User.created_at,),
+    }
+    order_cols = sort_columns.get(sort_key, (User.created_at,))
+    order_by = [col.asc() if sort_dir == "asc" else col.desc() for col in order_cols]
+    order_by.append(User.id.asc())
+
     total_count = users_query.count()
-    users = users_query.offset(skip).limit(limit).all()
+    users = users_query.order_by(*order_by).offset(skip).limit(limit).all()
 
     pages = math.ceil(total_count / limit)
     return {
