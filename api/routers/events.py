@@ -28,7 +28,7 @@ from utils.mailer_util import send_email_with_attachment
 from fastapi import BackgroundTasks
 from PIL import Image, ImageOps
 from reportlab.lib.units import mm
-from reportlab.lib.pagesizes import A5, A4
+from reportlab.lib.pagesizes import A5, A4, landscape
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 import qrcode
@@ -3243,26 +3243,29 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     top += U(6)   # section py-2 bottom
 
 
-def _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
-    """Lay badges out 4-up (2x2) on A4 pages, each scaled from A5 keeping the
-    A5 proportions (so a badge is A6-sized on the sheet, ~105x148mm).
+def _draw_badges_two_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
+    """Lay out 2 badges per landscape A4 sheet, each scaled from its A5 design
+    down to ~118x168mm — sized to the actual badge-holder pocket in use.
 
-    A5 (148x210mm) 2-up was tried and measured too big for the actual holder
-    in use (its card pocket measures ~110x150mm) — A6 leaves only a few mm of
-    clearance per side, which is the right fit, so this reverts to 4-up."""
-    a4_w, a4_h = A4
+    Both A6 (~105x148mm, 4-up) and full A5 (148x210mm, 2-up) were tried and
+    measured against the holder: A6 left visible slack (top ~10mm, side ~8mm
+    around the card — pocket is roughly 121x168mm), and A5 was clearly larger
+    than the pocket. This targets the pocket estimate directly instead."""
+    a4_w, a4_h = landscape(A4)
     a5_w, a5_h = A5
-    cell_w, cell_h = a4_w / 2, a4_h / 2
-    scale = min(cell_w / a5_w, cell_h / a5_h)
+    target_w, target_h = 120 * mm, 168 * mm
+    scale = min(target_w / a5_w, target_h / a5_h)
     bw, bh = a5_w * scale, a5_h * scale
 
+    cell_w = a4_w / 2
+    margin_y = (a4_h - bh) / 2
+
     for index, p in enumerate(participants):
-        slot = index % 4
+        slot = index % 2
         if slot == 0 and index:
             c.showPage()
-        col, row = slot % 2, slot // 2
-        x = col * cell_w + (cell_w - bw) / 2
-        y = a4_h - (row + 1) * cell_h + (cell_h - bh) / 2
+        x = cell_w * slot + (cell_w - bw) / 2
+        y = margin_y
 
         c.saveState()
         c.translate(x, y)
@@ -3366,12 +3369,12 @@ async def download_participant_badges_pdf(
     exported_regs = [r for r, _ in rows]
 
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
+    c = canvas.Canvas(buffer, pagesize=landscape(A4))
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")
 
-    _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb)
+    _draw_badges_two_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb)
 
     exported_at = datetime.utcnow()
     for reg in exported_regs:
