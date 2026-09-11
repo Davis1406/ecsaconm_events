@@ -124,6 +124,7 @@ async def list_registrations(
     search: str = Query(default=""),
     paid: str = Query(default="all"),
     proof: str = Query(default="all"),
+    ids_only: bool = Query(default=False),
 ):
     auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
 
@@ -166,6 +167,12 @@ async def list_registrations(
         )
 
     total = q.count()
+    if ids_only:
+        # Lightweight mode used by "Select all N across pages" — return every
+        # matching registration id without the per-row joins/payload.
+        ids = [r.id for r in q.order_by(Registration.registered_at.desc()).all()]
+        return {"total": total, "ids": ids}
+
     registrations = q.order_by(Registration.registered_at.desc()).offset(skip).limit(limit).all()
     pages = math.ceil(total / limit) if limit else 1
 
@@ -303,10 +310,27 @@ async def send_payment_reminders(
     )
 
     jobs = []
+    # Render the subject from the admin-editable template too, so what the
+    # user previews in the UI matches the subject actually sent. Supports both
+    # {days_left} and {{ days_left }} placeholder styles.
+    tpl_subject = (
+        db_tpl.subject
+        if db_tpl and db_tpl.subject
+        else "Payment Reminder: {days_left} day(s) left"
+    )
+
+    def _render_subject(text, render_vars):
+        for k, v in render_vars.items():
+            if k == "subject":
+                continue
+            text = text.replace("{{ " + k + " }}", str(v)).replace(
+                "{{" + k + "}}", str(v)
+            ).replace("{" + k + "}", str(v))
+        return text
+
     for r in recipients:
-        subject = f"Payment Reminder: {r['days_left']} day{'s' if r['days_left'] != 1 else ''} left"
         render_vars = dict(
-            subject=subject,
+            subject="",
             firstname=r["firstname"],
             event_name=r["event_name"],
             days_left=r["days_left"],
@@ -315,6 +339,8 @@ async def send_payment_reminders(
             cc_email="admission@cosecsa.org",
             year=mailer_util.YEAR,
         )
+        subject = _render_subject(tpl_subject, render_vars)
+        render_vars["subject"] = subject
         try:
             if db_tpl and db_tpl.body_html:
                 email_body = Jinja2Template(db_tpl.body_html).render(**render_vars)

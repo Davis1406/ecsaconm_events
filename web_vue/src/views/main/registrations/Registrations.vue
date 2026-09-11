@@ -60,6 +60,14 @@
           </svg>
           {{ selectedIds.size }} selected
         </div>
+        <button v-if="!allFilteredSelected && total > 0" @click="selectAllAcrossPages" :disabled="selectingAll"
+          class="text-xs font-semibold hover:underline disabled:opacity-50" style="color: rgb(254,80,103);">
+          {{ selectingAll ? 'Selecting…' : `Select all ${total} across pages` }}
+        </button>
+        <button v-if="allFilteredSelected && total > 0" @click="clearSelection"
+          class="text-xs font-semibold text-gray-500 hover:text-gray-700">
+          Clear selection
+        </button>
         <button @click="bulkMarkPaid(true)" :disabled="bulkSaving || selectedIds.size === 0"
           class="px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           style="background-color: rgb(34,197,94);">
@@ -251,9 +259,18 @@
       </transition>
 
       <!-- Pagination -->
-      <pagination-component :currentPage="currentPage" :totalPages="totalPages"
-        @page-change="handlePageChange">
-      </pagination-component>
+      <div class="pt-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+          <span>{{ total }} registration{{ total !== 1 ? 's' : '' }}</span>
+          <select v-model.number="pageSize" title="Entries per page"
+            class="border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-600 bg-white focus:outline-none">
+            <option v-for="n in pageSizeOptions" :key="n" :value="n">{{ n }} / page</option>
+          </select>
+        </div>
+        <pagination-component :currentPage="currentPage" :totalPages="totalPages"
+          @page-change="handlePageChange">
+        </pagination-component>
+      </div>
     </div>
 
     <!-- Edit Registration Modal -->
@@ -556,6 +573,9 @@
           <div>
             <label class="edit-label">Email Subject</label>
             <input v-model="reminderModal.subject" type="text" class="edit-input" />
+            <p class="text-xs text-gray-400 mt-1">
+              Sent as: <strong class="text-gray-600">{{ renderSubjectPreview(reminderModal.subject) }}</strong>
+            </p>
           </div>
 
           <!-- Body editor -->
@@ -703,7 +723,8 @@ export default {
       verifyingId: null,
       currentPage: 1,
       totalPages: 1,
-      pageSize: 20,
+      pageSize: 25,
+      pageSizeOptions: [25, 50, 100],
       searchPhrase: '',
       selectedEventId: '',
       paidFilter: 'all',
@@ -711,6 +732,7 @@ export default {
       openMenuId: null,
       selectedIds: new Set(),
       bulkSaving: false,
+      selectingAll: false,
       qrPreviewUrl: '',
       qrPreviewLoading: false,
       reminderModal: {
@@ -774,6 +796,9 @@ export default {
     allSelected() {
       return this.registrations.length > 0 && this.registrations.every(r => this.selectedIds.has(r.id || r.registration_id))
     },
+    allFilteredSelected() {
+      return this.total > 0 && this.selectedIds.size >= this.total
+    },
   },
   watch: {
     searchPhrase() { this.syncUrl() },
@@ -781,6 +806,7 @@ export default {
     proofFilter() { this.syncUrl() },
     selectedEventId() { this.syncUrl(); this.loadRegistrationQrPreview() },
     currentPage() { this.syncUrl() },
+    pageSize() { this.currentPage = 1; this.persistSession(); this.loadRegistrations() },
   },
   mounted() {
     const q = this.$route.query
@@ -791,6 +817,7 @@ export default {
     this.proofFilter = q.proof || s?.proof || 'all'
     this.selectedEventId = q.event ? String(q.event) : (s?.event || '')
     this.currentPage = parseInt(q.page || s?.page, 10) || 1
+    if (s?.pageSize && this.pageSizeOptions.includes(Number(s.pageSize))) this.pageSize = Number(s.pageSize)
     this.loadEvents()
     this.loadRegistrations()
     document.addEventListener('click', this.closeMenu)
@@ -840,16 +867,17 @@ export default {
       if (this.selectedEventId) q.event = this.selectedEventId
       if (this.currentPage > 1) q.page = String(this.currentPage)
       this.$router.replace({ query: q })
-      this.persistSession(q)
+      this.persistSession()
     },
-    persistSession(q) {
+    persistSession() {
       try {
         sessionStorage.setItem('ecsa_registrations_session', JSON.stringify({
-          search: q.search || '',
-          paid: q.paid || 'all',
-          proof: q.proof || 'all',
-          event: q.event || '',
-          page: q.page || '1',
+          search: this.searchPhrase || '',
+          paid: this.paidFilter,
+          proof: this.proofFilter,
+          event: this.selectedEventId || '',
+          page: String(this.currentPage),
+          pageSize: this.pageSize,
         }))
       } catch (e) { /* ignore */ }
     },
@@ -895,6 +923,25 @@ export default {
     toggleSelectAll() {
       if (this.allSelected) this.selectedIds = new Set()
       else this.selectedIds = new Set(this.registrations.map(r => r.id || r.registration_id))
+    },
+    clearSelection() {
+      this.selectedIds = new Set()
+    },
+    async selectAllAcrossPages() {
+      if (this.selectingAll) return
+      this.selectingAll = true
+      try {
+        const params = { ids_only: true, search: this.searchPhrase || '' }
+        if (this.selectedEventId) params.event_id = this.selectedEventId
+        if (this.paidFilter !== 'all') params.paid = this.paidFilter
+        if (this.proofFilter !== 'all') params.proof = this.proofFilter
+        const res = await fetchDataWithParams('registrations', params)
+        this.selectedIds = new Set(res.ids || [])
+      } catch (error) {
+        this.showToast(error.response?.data?.detail || 'Could not select all registrations.', 'error')
+      } finally {
+        this.selectingAll = false
+      }
     },
     async bulkMarkPaid(paid) {
       if (this.selectedIds.size === 0) return
@@ -992,6 +1039,25 @@ export default {
       return (bodyHtml || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key) => {
         return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
       })
+    },
+    renderSubjectPreview(subject) {
+      const daysLeft = this.reminderModal.deadline
+        ? Math.max(0, Math.ceil((new Date(this.reminderModal.deadline) - new Date()) / 86400000))
+        : 14
+      const sample = {
+        firstname: 'Jane Presenter',
+        event_name: 'ECSACONM Scientific Conference',
+        days_left: daysLeft,
+        deadline: this.reminderModal.deadline || '2026-09-14',
+        year: new Date().getFullYear(),
+      }
+      let out = (subject || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key) => {
+        return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
+      })
+      out = out.replace(/\{(\w+)\}/g, (m, key) => {
+        return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
+      })
+      return out
     },
     async saveReminderTemplate() {
       this.reminderModal.saving = true
