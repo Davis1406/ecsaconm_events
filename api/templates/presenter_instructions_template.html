@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+        color: #333333;
+      }
+      .email-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 40px;
+        box-sizing: border-box;
+        border-top: 6px solid rgb(254,80,103);
+      }
+      h1 { font-size: 24px; margin-bottom: 16px; color: #003f5c; }
+      h2 { font-size: 17px; color: #003f5c; margin: 0 0 8px; }
+      p { font-size: 16px; line-height: 1.5; margin-bottom: 16px; color: #444444; }
+      .abstract-box {
+        background-color: #f0f8ff;
+        border-left: 4px solid rgb(254,80,103);
+        border-radius: 0 8px 8px 0;
+        padding: 16px 20px;
+        margin: 20px 0;
+      }
+      .abstract-box p { margin: 4px 0; font-size: 15px; }
+      .instruction-box {
+        border: 1px solid #eaeaea;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin: 16px 0;
+      }
+      .instruction-box h2 { margin-bottom: 6px; }
+      .instruction-box p { margin-bottom: 0; font-size: 15px; }
+      .footer {
+        font-size: 13px;
+        color: #888888;
+        margin-top: 40px;
+        border-top: 1px solid #eaeaea;
+        padding-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <h1>{{subject}}</h1>
+      <p>Dear <strong>{{ firstname }}</strong>,</p>
+
+      <p>
+        Thank you for registering and completing payment for <strong>{{ event_name }}</strong>.
+        Here are a few reminders to help your presentation go smoothly.
+      </p>
+
+      <div class="abstract-box">
+        <p><strong>Title:</strong> {{ abstract_title }}</p>
+        <p><strong>Presentation type:</strong> {{ presentation_type_label }}</p>
+      </div>
+
+      {% if show_poster %}
+      <div class="instruction-box">
+        <h2>📋 Poster presenters</h2>
+        <p>
+          Please remember to print an <strong>A0</strong> poster of your presentation and bring it
+          with you to the conference.
+        </p>
+      </div>
+      {% endif %}
+
+      {% if show_oral %}
+      <div class="instruction-box">
+        <h2>💻 Oral presenters</h2>
+        <p>
+          We encourage you to bring your own laptop to make it easier to facilitate your
+          presentation in the breakout rooms.
+        </p>
+      </div>
+      {% endif %}
+
+      <p>
+        Our secretariat team will be on hand throughout the event to make sure all sessions run
+        smoothly, so please don't hesitate to reach out to them if you need any assistance.
+      </p>
+
+      <p style="margin-top: 28px;">
+        If you have any questions, please contact us at
+        <a href="mailto:admission@cosecsa.org">admission@cosecsa.org</a>.
+      </p>
+
+      <p>Warm regards,<br />ECSACONM Conference Team<br />ECSACONM Secretariat</p>
+      <div class="footer">&copy; {{ year }} ECSACONM. All rights reserved.</div>
+    </div>
+  </body>
+</html>

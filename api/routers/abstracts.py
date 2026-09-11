@@ -1249,6 +1249,233 @@ def send_registration_reminders(
     }
 
 
+def _render_presenter_instructions(subject_tpl, body_html_tpl, firstname, event_name, abstract_title, presentation_type):
+    """Render the presenter-instructions subject + body exactly as a send
+    would, so the UI preview and the mailed email always match. Content
+    adapts to the abstract's presentation_type: poster presenters are told
+    to bring a printed A0 poster, oral presenters are encouraged to bring a
+    laptop, and 'either' shows both."""
+    import utils.mailer_util as mailer_util
+    from jinja2 import Template as Jinja2Template
+
+    show_poster = presentation_type in ("poster", "either")
+    show_oral = presentation_type in ("oral", "either")
+    presentation_type_label = {
+        "oral": "Oral", "poster": "Poster", "either": "Oral & Poster",
+    }.get(presentation_type, (presentation_type or "").title())
+
+    render_vars = dict(
+        subject="",
+        firstname=firstname,
+        event_name=event_name,
+        abstract_title=abstract_title,
+        presentation_type_label=presentation_type_label,
+        show_oral=show_oral,
+        show_poster=show_poster,
+        year=mailer_util.YEAR,
+    )
+    subject = subject_tpl or "Presenter Instructions for {event_name}"
+    for k, v in render_vars.items():
+        if k == "subject":
+            continue
+        subject = subject.replace("{{ " + k + " }}", str(v)).replace(
+            "{{" + k + "}}", str(v)
+        ).replace("{" + k + "}", str(v))
+    render_vars["subject"] = subject
+
+    try:
+        if body_html_tpl:
+            body_html = Jinja2Template(body_html_tpl).render(**render_vars)
+        else:
+            file_tpl = mailer_util.templates.get_template("presenter_instructions_template.html")
+            body_html = file_tpl.render(**render_vars)
+    except Exception:
+        body_html = (
+            f"<p>Dear {firstname},</p>"
+            f"<p>Thank you for registering and paying for <strong>{event_name}</strong>.</p>"
+            + ("<p>Poster presenters: please print an A0 poster of your presentation and bring it.</p>" if show_poster else "")
+            + ("<p>Oral presenters: please bring your laptop to help facilitate your presentation in the breakout rooms.</p>" if show_oral else "")
+            + "<p>Our secretariat team will be on hand to make sure all sessions run smoothly.</p>"
+            + "<p>ECSACONM Events Team</p>"
+        )
+    return subject, body_html
+
+
+def _resolve_presenter_recipients(db, event_id=None, selected_emails=None):
+    """Presenters (accepted-abstract authors marked as presenting) who have
+    both registered and paid for the event — the same "registered and paid"
+    gate used elsewhere for is_paid (secretariat counts as paid)."""
+    q = db.query(AbstractAuthor).join(
+        Abstract, AbstractAuthor.abstract_id == Abstract.id
+    ).options(
+        joinedload(AbstractAuthor.abstract).joinedload(Abstract.event),
+    ).filter(
+        AbstractAuthor.is_presenting == True,
+        AbstractAuthor.email != None,
+        AbstractAuthor.email != "",
+        Abstract.status == "accepted",
+        Abstract.deleted_at == None,
+    )
+    if event_id:
+        q = q.filter(Abstract.event_id == event_id)
+    presenters = q.all()
+
+    selected_set = {e.strip().lower() for e in selected_emails} if selected_emails else None
+
+    seen_emails = set()
+    recipients = []
+    for pa in presenters:
+        email = pa.email.strip().lower()
+        if email in seen_emails:
+            continue
+        seen_emails.add(email)
+
+        if selected_set is not None and email not in selected_set:
+            continue
+
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            continue
+
+        target_event_id = event_id or pa.abstract.event_id
+        reg = db.query(Registration).filter(
+            Registration.user_id == user.id,
+            Registration.event_id == target_event_id,
+            Registration.deleted_at == None,
+        ).first()
+        if not reg or not reg.is_paid:
+            continue
+
+        presentation_type = (
+            pa.abstract.presentation_type.value
+            if hasattr(pa.abstract.presentation_type, "value")
+            else str(pa.abstract.presentation_type)
+        )
+        recipients.append({
+            "firstname": pa.firstname,
+            "lastname": pa.lastname,
+            "email": pa.email,
+            "abstract_title": pa.abstract.title,
+            "presentation_type": presentation_type,
+            "event_name": pa.abstract.event.event if pa.abstract and pa.abstract.event else "ECSACONM Event",
+        })
+    return recipients
+
+
+@router.get("/presenter-instructions-preview")
+def presenter_instructions_preview(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """Preview the presenter-instructions email (rendered from a sample
+    recipient) plus how many registered, paid presenters currently qualify —
+    without sending anything."""
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    recipients = _resolve_presenter_recipients(db, event_id=event_id)
+
+    event_name = "ECSACONM Event"
+    if event_id:
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if event:
+            event_name = event.event
+    elif recipients:
+        event_name = recipients[0]["event_name"]
+
+    from models.models import EmailTemplate as EmailTemplateModel
+    db_tpl = db.query(EmailTemplateModel).filter_by(template_key="presenter_instructions").first()
+
+    # Prefer an "either" presenter for the sample so both instruction blocks
+    # show in the preview; fall back to whoever qualifies, else a placeholder.
+    sample = next((r for r in recipients if r["presentation_type"] == "either"), None) or (
+        recipients[0] if recipients else None
+    )
+    sample_type = sample["presentation_type"] if sample else "either"
+    sample_firstname = sample["firstname"] if sample else "Jane"
+    sample_title = sample["abstract_title"] if sample else "Sample Abstract Title"
+
+    subject, body_html = _render_presenter_instructions(
+        db_tpl.subject if db_tpl else None,
+        db_tpl.body_html if db_tpl else None,
+        sample_firstname, event_name, sample_title, sample_type,
+    )
+
+    return {
+        "subject": subject,
+        "body_html": body_html,
+        "recipient_count": len(recipients),
+        "oral_count": sum(1 for r in recipients if r["presentation_type"] == "oral"),
+        "poster_count": sum(1 for r in recipients if r["presentation_type"] == "poster"),
+        "either_count": sum(1 for r in recipients if r["presentation_type"] == "either"),
+    }
+
+
+@router.post("/send-presenter-instructions")
+def send_presenter_instructions(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    body: dict = None,
+):
+    """Email registered, paid presenters their presentation-day instructions.
+    Poster presenters are reminded to print and bring an A0 poster, oral
+    presenters are encouraged to bring a laptop for the breakout rooms, and
+    both groups are told the secretariat will be on hand throughout.
+
+    Accepts an optional `event_id` and `selected_emails` (list[str]) in the
+    body — when selected_emails is given, only those presenters are emailed;
+    otherwise every qualifying presenter for the event is."""
+    auth_dependency.secure_access("VIEW_ABSTRACTS", current_user["user_id"])
+
+    body = body or {}
+    event_id = body.get("event_id")
+    selected_emails = body.get("selected_emails")
+
+    recipients = _resolve_presenter_recipients(db, event_id=event_id, selected_emails=selected_emails)
+
+    event_name_override = None
+    if event_id:
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if event:
+            event_name_override = event.event
+
+    sent_by_user_id = current_user["user_id"]
+
+    import utils.mailer_util as mailer_util
+    from models.models import EmailTemplate as EmailTemplateModel
+    db_tpl = db.query(EmailTemplateModel).filter_by(template_key="presenter_instructions").first()
+
+    jobs = []
+    for r in recipients:
+        firstname = r["firstname"] or "Presenter"
+        subject, email_body = _render_presenter_instructions(
+            db_tpl.subject if db_tpl else None,
+            db_tpl.body_html if db_tpl else None,
+            firstname, event_name_override or r["event_name"], r["abstract_title"], r["presentation_type"],
+        )
+        jobs.append({
+            "recipient_email": r["email"],
+            "subject": subject,
+            "email_body": email_body,
+            "email_type": "presenter_instructions",
+            "sent_by_user_id": sent_by_user_id,
+        })
+
+    sent = len(jobs)
+    # Single background task over one reused SMTP connection — see the note
+    # on send_registration_reminders above (2026-08-13 incident).
+    if jobs:
+        background_tasks.add_task(mailer_util.send_bulk_emails, jobs)
+
+    return {
+        "sent": sent,
+        "message": f"Presenter instructions queued for {sent} presenter(s).",
+    }
+
+
 @router.post("/import-preview")
 async def import_abstracts_preview(
     file: UploadFile = File(...),

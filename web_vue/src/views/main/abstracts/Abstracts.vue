@@ -190,6 +190,14 @@
             <BellAlertIcon class="w-4 h-4" />
             Send Reminders
           </button>
+          <button @click="openPresenterEmailModal"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition
+                   border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
+            style="color: rgb(254,80,103); border-color: rgb(254,80,103);"
+            title="Presentation-day instructions for registered, paid presenters">
+            <EnvelopeIcon class="w-4 h-4" />
+            Send Email to Presenters
+          </button>
           <button @click="showImport = !showImport"
             class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition
                    border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
@@ -1217,6 +1225,98 @@
         </div>
       </div>
     </div>
+
+    <!-- ── Send Email to Presenters modal ──────────────────────────────── -->
+    <div v-if="presenterEmail.open"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      @click.self="closePresenterEmailModal">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closePresenterEmailModal"></div>
+
+      <div class="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="height: 88vh;">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-xl flex items-center justify-center" style="background-color: rgba(254,80,103,0.1);">
+              <EnvelopeIcon class="w-5 h-5" style="color: rgb(254,80,103);" />
+            </div>
+            <div>
+              <h2 class="font-semibold text-gray-800 text-base">Send Email to Presenters</h2>
+              <p class="text-xs text-gray-400">Presentation-day instructions for registered, paid presenters.</p>
+            </div>
+          </div>
+          <button @click="closePresenterEmailModal" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
+          <!-- Recipient count -->
+          <div class="flex items-center gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50">
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-gray-800">
+                <span class="text-xl font-bold" style="color: rgb(254,80,103);">{{ presenterEmail.recipientCount }}</span>
+                presenter{{ presenterEmail.recipientCount !== 1 ? 's' : '' }} will receive this email
+              </p>
+              <p class="text-xs text-gray-400 mt-0.5">
+                Accepted-abstract presenters who have registered and paid —
+                {{ presenterEmail.oralCount }} oral, {{ presenterEmail.posterCount }} poster, {{ presenterEmail.eitherCount }} both.
+              </p>
+            </div>
+            <button @click="loadPresenterEmailPreview" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 transition">
+              Refresh
+            </button>
+          </div>
+
+          <!-- Feedback -->
+          <div v-if="presenterEmail.result" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">
+            {{ presenterEmail.result }}
+          </div>
+          <div v-if="presenterEmail.error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+            {{ presenterEmail.error }}
+          </div>
+
+          <!-- Email preview (server-rendered, sample recipient) -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Email Preview</label>
+              <span class="text-[10px] text-gray-400">
+                Content adapts per presenter's oral/poster type — shown here for a sample recipient.
+              </span>
+            </div>
+            <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+              <div class="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                <span class="text-xs font-semibold text-gray-500">{{ presenterEmail.subject || 'Email subject' }}</span>
+                <span class="text-[10px] text-gray-400 uppercase tracking-wide">
+                  Preview · {{ presenterEmail.recipientCount }} recipient{{ presenterEmail.recipientCount !== 1 ? 's' : '' }}
+                </span>
+              </div>
+              <SpinnerComponent v-if="presenterEmail.loading" />
+              <iframe v-else :srcdoc="presenterEmail.body_html" style="width:100%; height:440px; border:none;"></iframe>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">
+              To edit this email's wording, use Configurations → Email Templates → Presenter Instructions.
+            </p>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+          <div class="text-xs text-gray-400">
+            {{ presenterEmail.loading ? 'Loading…' : (presenterEmail.recipientCount + ' recipient(s)') }}
+          </div>
+          <button @click="sendPresenterEmails" :disabled="presenterEmail.sending || presenterEmail.loading || !presenterEmail.recipientCount"
+            class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ presenterEmail.sending ? 'Sending…' : `Send to ${presenterEmail.recipientCount}` }}
+          </button>
+        </div>
+      </div>
+    </div>
   </Teleport>
 
 </template>
@@ -1299,6 +1399,13 @@ export default {
         subject: '', body_html: '',
         originalSubject: '', originalBody: '',
         editMode: 'preview', result: '', error: '',
+      },
+      // Send Email to Presenters modal (preview / send)
+      presenterEmail: {
+        open: false, loading: false, sending: false,
+        subject: '', body_html: '',
+        recipientCount: 0, oralCount: 0, posterCount: 0, eitherCount: 0,
+        result: '', error: '',
       },
       // Reminder template editor
       reminderTplPreview: false,
@@ -1886,6 +1993,50 @@ export default {
         this.confirmation.error = e.response?.data?.detail || 'Failed to send confirmation emails.'
       } finally {
         this.confirmation.sending = false
+      }
+    },
+
+    async openPresenterEmailModal() {
+      this.presenterEmail.open = true
+      this.presenterEmail.result = ''
+      this.presenterEmail.error = ''
+      await this.loadPresenterEmailPreview()
+    },
+    closePresenterEmailModal() {
+      this.presenterEmail.open = false
+    },
+    async loadPresenterEmailPreview() {
+      this.presenterEmail.loading = true
+      this.presenterEmail.error = ''
+      try {
+        const res = await axios.get(`${this.apiUrl}/abstracts/presenter-instructions-preview`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.presenterEmail.subject = res.data?.subject || ''
+        this.presenterEmail.body_html = res.data?.body_html || ''
+        this.presenterEmail.recipientCount = res.data?.recipient_count || 0
+        this.presenterEmail.oralCount = res.data?.oral_count || 0
+        this.presenterEmail.posterCount = res.data?.poster_count || 0
+        this.presenterEmail.eitherCount = res.data?.either_count || 0
+      } catch (e) {
+        this.presenterEmail.error = e.response?.data?.detail || 'Failed to load preview.'
+      } finally {
+        this.presenterEmail.loading = false
+      }
+    },
+    async sendPresenterEmails() {
+      this.presenterEmail.sending = true
+      this.presenterEmail.result = ''
+      this.presenterEmail.error = ''
+      try {
+        const res = await axios.post(`${this.apiUrl}/abstracts/send-presenter-instructions`, {}, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.presenterEmail.result = res.data?.message || `Presenter instructions emailed to ${res.data?.sent || 0} presenter(s).`
+      } catch (e) {
+        this.presenterEmail.error = e.response?.data?.detail || 'Failed to send presenter emails.'
+      } finally {
+        this.presenterEmail.sending = false
       }
     },
 

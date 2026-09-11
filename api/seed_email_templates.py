@@ -99,6 +99,12 @@ TEMPLATES = {
         "file": "payment_reminder_template.html",
         "variables": "subject, firstname, event_name, days_left, deadline, info_email, cc_email, year",
     },
+    "presenter_instructions": {
+        "name": "Presenter Instructions",
+        "subject": "Presenter Instructions for {event_name}",
+        "file": "presenter_instructions_template.html",
+        "variables": "subject, firstname, event_name, abstract_title, presentation_type_label, show_oral, show_poster, year",
+    },
 }
 
 
