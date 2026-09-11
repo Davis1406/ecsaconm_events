@@ -179,6 +179,12 @@
           <ArrowDownTrayIcon class="w-4 h-4" />
           Download All Badges (PDF)
         </button>
+        <button v-if="permissions.includes('PRINT_BADGE')" @click="openBadgePicker"
+          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
+          style="background-color: rgb(254,80,103);">
+          <IdentificationIcon class="w-4 h-4" />
+          Generate Badges
+        </button>
         <button @click="onsiteQrUrl = `/events/${id}/onsite_registration/qr`; showOnsiteQrPreview = true"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);"
@@ -192,20 +198,6 @@
           :fetch-url="onsiteQrUrl"
           filename="Onsite_Registration_QR.pdf"
         />
-        <template v-if="permissions.includes('PRINT_BADGE') && selectedBadgeIds.length">
-          <button @click="showBulkBadgePreview = true"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
-            style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
-            <EyeIcon class="w-4 h-4" />
-            Preview Selected ({{ selectedBadgeIds.length }})
-          </button>
-          <button @click="downloadSelectedBadges" :disabled="badgesDownloading"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-            style="background-color: rgb(254,80,103);">
-            <ArrowDownTrayIcon class="w-4 h-4" />
-            {{ badgesDownloading ? 'Preparing…' : `Download Selected (${selectedBadgeIds.length})` }}
-          </button>
-        </template>
         <button v-if="permissions.includes('BULK_UPLOAD')" @click="openBulkUploadParticipantsModal"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
@@ -252,6 +244,12 @@
           class="font-semibold text-gray-500 hover:text-gray-700">
           Clear
         </button>
+        <button v-if="selectedBadgeIds.length && filterPreset === 'badges_exported'
+            && (permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD'))"
+          @click="clearSelectedBadgeExports" :disabled="clearingBadgeExports"
+          class="ml-auto font-semibold hover:underline disabled:opacity-50" style="color: rgb(254,80,103);">
+          {{ clearingBadgeExports ? 'Clearing…' : `Clear exports (${selectedBadgeIds.length})` }}
+        </button>
       </div>
 
       <!-- Table header -->
@@ -261,11 +259,36 @@
             class="rounded border-gray-300" title="Select all on this page" />
           <span>#</span>
         </div>
-        <div class="col-span-3">Participant</div>
-        <div class="col-span-1">Institution</div>
-        <div class="col-span-1">Country</div>
-        <div class="col-span-2">Date Registered</div>
-        <div class="col-span-1 text-center">Paid</div>
+        <button class="col-span-3 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('name')">
+          Participant
+          <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'name' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+          </svg>
+        </button>
+        <button class="col-span-1 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('institution')">
+          Institution
+          <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'institution' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+          </svg>
+        </button>
+        <button class="col-span-1 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('country')">
+          Country
+          <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'country' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+          </svg>
+        </button>
+        <button class="col-span-2 flex items-center gap-1 text-left hover:text-gray-700 transition" @click="sortBy('registered_at')">
+          Date Registered
+          <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'registered_at' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+          </svg>
+        </button>
+        <button class="col-span-1 flex justify-center items-center gap-1 hover:text-gray-700 transition" @click="sortBy('paid')">
+          Paid
+          <svg class="w-3 h-3 flex-shrink-0" :class="sortKey === 'paid' ? (sortDir === 'desc' ? 'rotate-180' : '') : 'opacity-30'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+          </svg>
+        </button>
         <div class="col-span-1 text-center">Proof</div>
         <div class="col-span-2 text-right">Actions</div>
       </div>
@@ -1061,36 +1084,104 @@
       </div>
     </div>
 
-    <!-- Bulk badge preview modal -->
-    <div v-if="showBulkBadgePreview" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+    <!-- Generate Badges modal -->
+    <div v-if="showBadgePicker" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 class="font-bold text-gray-800">Badge preview — {{ selectedBadgeIds.length }} selected</h3>
-          <button @click="showBulkBadgePreview = false" class="text-gray-400 hover:text-gray-600 transition">
+          <div>
+            <h3 class="font-bold text-gray-800">Generate Badges</h3>
+            <p class="text-xs text-gray-500 mt-0.5">{{ badgePickerSelectedCount }} selected · {{ badgePickerParticipants.length }} participants</p>
+          </div>
+          <button @click="showBadgePicker = false" class="text-gray-400 hover:text-gray-600 transition">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <div class="flex-1 overflow-y-auto p-5 bg-gray-50">
-          <div class="grid sm:grid-cols-2 gap-6 justify-items-center">
-            <badge-card v-for="p in selectedBadgeParticipants" :key="p.id"
-              :participant="toBadgeParticipant(p)" :event="badgeEvent" :qr-value="badgeQrValue(p)" />
+
+        <div class="flex-1 flex min-h-0">
+          <!-- Left: participant picker -->
+          <div class="w-full lg:w-[42%] border-r border-gray-100 flex flex-col min-h-0">
+            <div class="p-4 border-b border-gray-100 space-y-2">
+              <search-component :value="badgePickerSearch" @search="badgePickerSearch = $event" class="!w-full !mt-0" />
+              <div class="flex flex-wrap items-center gap-2">
+                <button v-for="f in badgePickerFilterOptions" :key="f.key" @click="badgePickerFilter = f.key"
+                  class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition"
+                  :class="badgePickerFilter === f.key ? 'text-white border-transparent' : 'text-gray-600 border-gray-200'"
+                  :style="badgePickerFilter === f.key ? 'background-color: rgb(254,80,103);' : ''">
+                  {{ f.label }}
+                </button>
+                <button v-if="!badgePickerAllFilteredSelected" @click="selectAllBadgePicker"
+                  class="ml-auto text-xs font-semibold hover:underline" style="color: rgb(254,80,103);">
+                  Select all ({{ badgePickerFiltered.length }})
+                </button>
+              </div>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+              <div v-if="badgePickerLoading" class="py-16 text-center text-gray-400 text-sm">
+                <svg class="animate-spin w-6 h-6 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                Loading participants…
+              </div>
+              <div v-else-if="badgePickerFiltered.length === 0" class="py-16 text-center text-gray-400 text-sm">
+                No participants match.
+              </div>
+              <label v-for="p in badgePickerFiltered" :key="p.id"
+                class="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 hover:bg-gray-50 transition cursor-pointer">
+                <input type="checkbox" :checked="isBadgeSelected(p)" @change="toggleBadgeSelect(p)" class="rounded border-gray-300" />
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-gray-800 truncate">
+                    {{ [p.title, p.firstname, p.lastname].filter(Boolean).join(' ') || '—' }}
+                  </p>
+                  <p class="text-xs text-gray-400 truncate">
+                    {{ p.organisation || p.institution || '' }}{{ p.country ? ' · ' + p.country : '' }}
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Right: preview -->
+          <div class="hidden lg:flex w-[58%] flex-col min-h-0">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Preview — {{ badgePickerSelectedCount }} selected</p>
+              <button v-if="selectedBadgeIds.length" @click="clearBadgeSelection" class="text-xs font-semibold text-gray-500 hover:text-gray-700">Clear</button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-5 bg-gray-50">
+              <div v-if="badgePickerSelected.length === 0" class="h-full flex items-center justify-center text-gray-400 text-sm">
+                Select participants on the left to preview their badges.
+              </div>
+              <div v-else class="grid grid-cols-2 gap-4 justify-items-center">
+                <badge-card v-for="p in previewBadgeParticipants" :key="p.id"
+                  :participant="toBadgeParticipant(p)" :event="badgeEvent" :qr-value="badgeQrValue(p)" />
+              </div>
+              <p v-if="previewMoreCount > 0" class="text-center text-xs text-gray-400 mt-3">
+                …and {{ previewMoreCount }} more selected (all are included in the PDF).
+              </p>
+            </div>
           </div>
         </div>
-        <div class="px-5 py-4 border-t border-gray-100 flex justify-between items-center">
-          <button @click="clearBadgeSelection" class="text-xs font-semibold text-gray-500 hover:text-gray-700">
-            Clear selection
-          </button>
+
+        <div class="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+          <p class="text-xs text-gray-500">{{ badgePickerSelectedCount }} of {{ badgePickerParticipants.length }} selected</p>
           <div class="flex gap-2">
-            <button @click="showBulkBadgePreview = false"
-              class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
-              Close
+            <button @click="printSelectedBadges" :disabled="badgesDownloading || !selectedBadgeIds.length"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border-2 transition disabled:opacity-50"
+              style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+              <PrinterIcon class="w-4 h-4" />
+              Print PDF
             </button>
-            <button @click="downloadSelectedBadges" :disabled="badgesDownloading"
-              class="px-4 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            <button @click="downloadSelectedBadges" :disabled="badgesDownloading || !selectedBadgeIds.length"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
               style="background-color: rgb(254,80,103);">
-              {{ badgesDownloading ? 'Preparing…' : `Download ${selectedBadgeIds.length} badge(s)` }}
+              <svg v-if="badgesDownloading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+              </svg>
+              <ArrowDownTrayIcon v-else class="w-4 h-4" />
+              {{ badgesDownloading ? 'Preparing…' : `Export PDF (${badgePickerSelectedCount})` }}
             </button>
           </div>
         </div>
@@ -1107,8 +1198,8 @@ import {
   MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon,
   XCircleIcon, CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon,
   ChartBarIcon, ArrowDownTrayIcon, LinkIcon, FolderOpenIcon,
-  TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon,
-  QrCodeIcon,
+  TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon,
+  QrCodeIcon, PrinterIcon,
 } from '@heroicons/vue/24/solid';
 
 import HeaderView from '@/includes/Header.vue';
@@ -1143,7 +1234,7 @@ export default {
   components: {
     MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon, XCircleIcon,
     CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon, ChartBarIcon, ArrowDownTrayIcon,
-    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, EyeIcon, QrCodeIcon,
+    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, QrCodeIcon, PrinterIcon,
     HeaderView, SpinnerComponent,
     PaginationComponent, SearchComponent, ParticipantModal, DownloadComponent,
     PaymentModal, BadgeModal, BadgeCard, BulkUploadParticipantsModal, ReceiptModal, PdfPreviewModal,
@@ -1170,7 +1261,16 @@ export default {
       UserEventData: { user_id: "", event_id: "" },
       showBadgeModal: false,
       selectedBadgeIds: [],
-      showBulkBadgePreview: false,
+      showBadgePicker: false,
+      badgePickerParticipants: [],
+      badgePickerLoading: false,
+      badgePickerSearch: '',
+      badgePickerFilter: 'all',
+      badgePickerFilterOptions: [
+        { key: 'all', label: 'All' },
+        { key: 'paid', label: 'Paid' },
+        { key: 'unpaid', label: 'Unpaid' },
+      ],
       showOnsiteQrPreview: false,
       onsiteQrUrl: '',
       showDocumentQrPreview: false,
@@ -1228,6 +1328,8 @@ export default {
       localPage: (session && session.page > 0) ? session.page : 1,
       localPageSize: (session && [25, 50, 100].includes(session.pageSize)) ? session.pageSize : 25,
       pageSizeOptions: [25, 50, 100],
+      sortKey: (session && ['name', 'institution', 'country', 'paid', 'registered_at'].includes(session.sort)) ? session.sort : 'registered_at',
+      sortDir: (session && (session.dir === 'asc' || session.dir === 'desc')) ? session.dir : 'desc',
       searchPhrase: (session && typeof session.search === 'string') ? session.search : '',
       participantsLoading: false,
       exporting: false,
@@ -1266,6 +1368,8 @@ export default {
     searchPhrase() { this.localPage = 1; this.persistListSession(); this.getEvent(true); },
     localPageSize() { this.localPage = 1; this.persistListSession(); this.getEvent(true); },
     localPage() { this.persistListSession(); this.getEvent(true); },
+    sortKey() { this.localPage = 1; this.persistListSession(); this.getEvent(true); },
+    sortDir() { this.persistListSession(); this.getEvent(true); },
   },
   setup() {
     const authStore = useAuthStore();
@@ -1316,7 +1420,39 @@ export default {
         && this.selectedBadgeIds.length >= this.participantsFilteredTotal;
     },
     selectedBadgeParticipants() {
-      return this.participants.filter(p => this.selectedBadgeIds.includes(p.id));
+      // Prefer the full badge-picker roster so selections made in the picker
+      // (which spans every page) preview correctly; fall back to the current page.
+      const source = this.badgePickerParticipants.length ? this.badgePickerParticipants : this.participants;
+      return source.filter(p => this.selectedBadgeIds.includes(p.id));
+    },
+    badgePickerFiltered() {
+      let list = this.badgePickerParticipants;
+      const q = (this.badgePickerSearch || '').trim().toLowerCase();
+      if (q) {
+        list = list.filter(p => [
+          p.title, p.firstname, p.lastname, p.email, p.phone,
+          p.organisation, p.institution, p.country,
+        ].some(v => (v || '').toString().toLowerCase().includes(q)));
+      }
+      if (this.badgePickerFilter === 'paid') list = list.filter(p => p.paid);
+      else if (this.badgePickerFilter === 'unpaid') list = list.filter(p => !p.paid);
+      return list;
+    },
+    badgePickerSelected() {
+      return this.badgePickerParticipants.filter(p => this.selectedBadgeIds.includes(p.id));
+    },
+    badgePickerSelectedCount() {
+      return this.selectedBadgeIds.filter(id => this.badgePickerParticipants.some(p => p.id === id)).length;
+    },
+    badgePickerAllFilteredSelected() {
+      const ids = this.badgePickerFiltered.map(p => p.id);
+      return ids.length > 0 && ids.every(id => this.selectedBadgeIds.includes(id));
+    },
+    previewBadgeParticipants() {
+      return this.badgePickerSelected.slice(0, 30);
+    },
+    previewMoreCount() {
+      return Math.max(0, this.badgePickerSelected.length - 30);
     },
     badgeEvent() {
       return buildBadgeEvent(this.event);
@@ -1422,6 +1558,8 @@ export default {
           search: this.searchPhrase,
           page: this.localPage,
           pageSize: this.localPageSize,
+          sort: this.sortKey,
+          dir: this.sortDir,
         }));
       } catch (e) { /* ignore */ }
     },
@@ -1437,6 +1575,8 @@ export default {
             participant_limit: this.localPageSize,
             participant_filter: this.filterPreset,
             participant_search: this.searchPhrase || '',
+            participant_sort: this.sortKey,
+            participant_dir: this.sortDir,
           },
         });
         const response = res.data;
@@ -1460,6 +1600,14 @@ export default {
     },
     handleLocalPageChange(newPage) {
       this.localPage = newPage;
+    },
+    sortBy(key) {
+      if (this.sortKey === key) {
+        this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        this.sortKey = key;
+        this.sortDir = key === 'name' ? 'asc' : 'desc';
+      }
     },
     paidStatus(status) { return status === true; },
     registrationStatus(status) { return status === true; },
@@ -1759,20 +1907,27 @@ export default {
     clearBadgeSelection() {
       this.selectedBadgeIds = [];
     },
-    async clearBadgeExports() {
-      if (!confirm('Clear the "Badge Exported" status for all participants? This lets you re-export/regenerate badges.')) return;
+    async clearBadgeExports(ids) {
+      const target = Array.isArray(ids) && ids.length ? ids : null;
+      const msg = target
+        ? `Clear the "Badge Exported" status for the ${target.length} selected participant(s)? This lets you re-export/regenerate their badges.`
+        : 'Clear the "Badge Exported" status for all participants? This lets you re-export/regenerate badges.';
+      if (!confirm(msg)) return;
       this.clearingBadgeExports = true;
       try {
         const api = axios.create({ baseURL: API_URL });
         if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
-        await api.delete(`/events/${this.id}/badge-exports`);
+        const params = {};
+        if (target) params.ids = target.join(',');
+        await api.delete(`/events/${this.id}/badge-exports`, { params });
+        if (target) this.selectedBadgeIds = [];
         if (this.showReportsModal) {
           this.reportLoading = true;
           this.reportParticipants = await this.fetchAllEventParticipants();
           this.reportLoading = false;
         }
         await this.getEvent(true);
-        this.successMsg = 'Badge export status cleared.';
+        this.successMsg = target ? 'Selected badge export status cleared.' : 'Badge export status cleared.';
         this.errorMsg = '';
         setTimeout(() => { this.successMsg = ''; }, 3000);
       } catch (error) {
@@ -1783,6 +1938,10 @@ export default {
       } finally {
         this.clearingBadgeExports = false;
       }
+    },
+    clearSelectedBadgeExports() {
+      if (!this.selectedBadgeIds.length) return;
+      this.clearBadgeExports(this.selectedBadgeIds);
     },
     async selectAllAcrossPages() {
       this.selectingAll = true;
@@ -1810,16 +1969,35 @@ export default {
         registrationId: p.id,
       };
     },
+    async fetchBadgesPdfBlob(ids) {
+      const api = axios.create({ baseURL: API_URL });
+      if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+      const params = {};
+      if (Array.isArray(ids) && ids.length) params.ids = ids.join(',');
+      return api.get(`/events/${this.id}/participants/badges`, { params, responseType: 'blob' });
+    },
+    async openBadgePicker() {
+      this.showBadgePicker = true;
+      if (this.badgePickerParticipants.length || this.badgePickerLoading) return;
+      this.badgePickerLoading = true;
+      try {
+        this.badgePickerParticipants = await this.fetchAllEventParticipants();
+      } catch (error) {
+        console.error('Error loading participants for badge picker:', error);
+        this.errorMsg = 'Could not load participants for badge generation.';
+      } finally {
+        this.badgePickerLoading = false;
+      }
+    },
+    selectAllBadgePicker() {
+      const ids = this.badgePickerFiltered.map(p => p.id);
+      this.selectedBadgeIds = [...new Set([...this.selectedBadgeIds, ...ids])];
+    },
     async downloadSelectedBadges() {
       if (!this.selectedBadgeIds.length) return;
       this.badgesDownloading = true;
       try {
-        const api = axios.create({ baseURL: API_URL });
-        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
-        const res = await api.get(`/events/${this.id}/participants/badges`, {
-          params: { ids: this.selectedBadgeIds.join(',') },
-          responseType: 'blob',
-        });
+        const res = await this.fetchBadgesPdfBlob(this.selectedBadgeIds);
         const url = window.URL.createObjectURL(res.data);
         const a = document.createElement('a');
         a.href = url;
@@ -1832,6 +2010,21 @@ export default {
       } catch (error) {
         console.error('Download selected badges failed:', error);
         this.errorMsg = 'Failed to download selected badges.';
+      } finally {
+        this.badgesDownloading = false;
+      }
+    },
+    async printSelectedBadges() {
+      if (!this.selectedBadgeIds.length) return;
+      this.badgesDownloading = true;
+      try {
+        const res = await this.fetchBadgesPdfBlob(this.selectedBadgeIds);
+        const url = window.URL.createObjectURL(res.data);
+        window.open(url, '_blank');
+        await this.getEvent(true);
+      } catch (error) {
+        console.error('Print selected badges failed:', error);
+        this.errorMsg = 'Failed to open selected badges for printing.';
       } finally {
         this.badgesDownloading = false;
       }

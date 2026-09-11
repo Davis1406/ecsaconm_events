@@ -526,6 +526,8 @@ async def get_event(
     participant_limit: int = Query(default=25, ge=1, le=200),
     participant_filter: str = Query(default="all"),
     participant_search: str = Query(default=""),
+    participant_sort: str = Query(default="registered_at"),
+    participant_dir: str = Query(default="desc"),
 ):
     client_ip = dependency.request_ip(request)
 
@@ -722,8 +724,59 @@ async def get_event(
             )
 
         participants_total = reg_q.count()
+
+        # Server-side sort. Related fields are ordered via correlated
+        # scalar subqueries (a user can have several profile rows, so a plain
+        # join would duplicate registrations and inflate the count).
+        sort_key = (participant_sort or "registered_at").lower()
+        sort_dir = "asc" if (participant_dir or "desc").lower() == "asc" else "desc"
+        firstname_subq = (
+            db.query(User.firstname)
+            .filter(User.id == Registration.user_id)
+            .scalar_subquery()
+        )
+        lastname_subq = (
+            db.query(User.lastname)
+            .filter(User.id == Registration.user_id)
+            .scalar_subquery()
+        )
+        organisation_subq = (
+            db.query(UserProfile.organisation)
+            .filter(
+                UserProfile.user_id == Registration.user_id,
+                UserProfile.deleted_at == None,
+            )
+            .order_by(UserProfile.id.asc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        country_subq = (
+            db.query(Country.country)
+            .join(UserProfile, UserProfile.country_id == Country.id)
+            .filter(
+                UserProfile.user_id == Registration.user_id,
+                UserProfile.deleted_at == None,
+            )
+            .order_by(UserProfile.id.asc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        sort_columns = {
+            "name": (firstname_subq, lastname_subq),
+            "institution": (organisation_subq,),
+            "country": (country_subq,),
+            "paid": (Registration.is_paid,),
+            "registered_at": (Registration.registered_at,),
+        }
+        order_cols = sort_columns.get(sort_key, (Registration.registered_at,))
+        order_by = [
+            col.asc() if sort_dir == "asc" else col.desc() for col in order_cols
+        ]
+        # Stable tie-breaker so pagination doesn't shuffle equal rows.
+        order_by.append(Registration.id.asc())
+
         registrations = (
-            reg_q.order_by(Registration.registered_at.desc())
+            reg_q.order_by(*order_by)
             .offset(participant_skip)
             .limit(participant_limit)
             .all()
@@ -3429,12 +3482,15 @@ async def clear_badge_exports(
     request: Request,
     event_id: int,
     current_user: user_dependency,
+    ids: str = Query(""),
     db: Session = Depends(get_db),
     dependency=Depends(get_dependency),
     auth_dependency: Auth = Depends(get_auth_dependency),
 ):
-    """Reset badge_exported_at for every registration of the event, so badges
-    can be re-generated/exported. ADMIN_DASHBOARD bypasses the check."""
+    """Reset badge_exported_at for registrations of the event, so badges can be
+    re-generated/exported. Pass ``ids`` (comma-separated registration ids) to
+    clear only a selection; omit it to clear every exported badge.
+    ADMIN_DASHBOARD bypasses the check."""
     auth_dependency.secure_access("PRINT_BADGE", current_user["user_id"])
     client_ip = dependency.request_ip(request)
 
@@ -3442,23 +3498,28 @@ async def clear_badge_exports(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    cleared = (
-        db.query(Registration)
-        .filter(
-            Registration.event_id == event_id,
-            Registration.deleted_at == None,
-            Registration.badge_exported_at.isnot(None),
-        )
-        .update({Registration.badge_exported_at: None})
+    id_filter = (
+        {int(x) for x in ids.split(",") if x.strip().isdigit()} if ids else None
     )
+
+    query = db.query(Registration).filter(
+        Registration.event_id == event_id,
+        Registration.deleted_at == None,
+        Registration.badge_exported_at.isnot(None),
+    )
+    if id_filter is not None:
+        query = query.filter(Registration.id.in_(id_filter))
+
+    cleared = query.update({Registration.badge_exported_at: None})
     db.commit()
 
+    scope = f"selected {len(id_filter)}" if id_filter is not None else "all"
     dependency.log_activity(
         current_user["user_id"],
         "CLEAR_BADGE_EXPORTS",
         current_user["username"],
         client_ip,
-        f"Cleared badge export status for {cleared} registrations (event {event_id})",
+        f"Cleared badge export status for {cleared} registrations ({scope}) (event {event_id})",
     )
 
     return {"status": "success", "cleared": cleared}
