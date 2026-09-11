@@ -3243,6 +3243,42 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
     top += U(6)   # section py-2 bottom
 
 
+def _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
+    """Lay badges out 4-up (2x2) on portrait A4 pages, each scaled from its A5
+    design down to ~105x148mm (A6). Kept only for secretariat exports — for
+    everyone else the pocket-sized 2-up layout (below) is the right fit; see
+    its docstring for how that was measured."""
+    c.setPageSize(A4)
+    a4_w, a4_h = A4
+    a5_w, a5_h = A5
+    cell_w, cell_h = a4_w / 2, a4_h / 2
+    scale = min(cell_w / a5_w, cell_h / a5_h)
+    bw, bh = a5_w * scale, a5_h * scale
+
+    for index, p in enumerate(participants):
+        slot = index % 4
+        if slot == 0 and index:
+            c.showPage()
+        col, row = slot % 2, slot // 2
+        x = col * cell_w + (cell_w - bw) / 2
+        y = a4_h - (row + 1) * cell_h + (cell_h - bh) / 2
+
+        c.saveState()
+        c.translate(x, y)
+        c.scale(scale, scale)
+        _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
+        c.restoreState()
+
+        # faint cut guide around the badge
+        c.saveState()
+        c.setStrokeColorRGB(0.85, 0.85, 0.85)
+        c.setLineWidth(0.4)
+        c.rect(x, y, bw, bh, fill=0, stroke=1)
+        c.restoreState()
+
+    c.showPage()
+
+
 def _draw_badges_two_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
     """Lay out 2 badges per landscape A4 sheet, each scaled from its A5 design
     down to ~118x168mm — sized to the actual badge-holder pocket in use.
@@ -3251,6 +3287,7 @@ def _draw_badges_two_up(c, participants, logo_left, logo_right, primary_rgb, sec
     measured against the holder: A6 left visible slack (top ~10mm, side ~8mm
     around the card — pocket is roughly 121x168mm), and A5 was clearly larger
     than the pocket. This targets the pocket estimate directly instead."""
+    c.setPageSize(landscape(A4))
     a4_w, a4_h = landscape(A4)
     a5_w, a5_h = A5
     target_w, target_h = 120 * mm, 168 * mm
@@ -3355,26 +3392,33 @@ async def download_participant_badges_pdf(
                     "paid": reg.is_paid,
                     "photo": user.user_photo[0].path if user and user.user_photo and len(user.user_photo) > 0 else None,
                 },
+                role_key,
             )
         )
 
     if paid != "all":
         is_paid = paid == "true"
-        rows = [(r, p) for r, p in rows if p["paid"] == is_paid]
+        rows = [(r, p, role_key) for r, p, role_key in rows if p["paid"] == is_paid]
 
     if not rows:
         raise HTTPException(status_code=404, detail="No participants found")
 
-    participants = [p for _, p in rows]
-    exported_regs = [r for r, _ in rows]
+    # Secretariat badges keep the smaller 4-up/A6 sheet; everyone else prints
+    # 2-up at the pocket-matched size (see _draw_badges_two_up's docstring).
+    secretariat_participants = [p for _, p, role_key in rows if role_key == "secretariat"]
+    other_participants = [p for _, p, role_key in rows if role_key != "secretariat"]
+    exported_regs = [r for r, _, _ in rows]
 
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=landscape(A4))
+    c = canvas.Canvas(buffer, pagesize=A4)
 
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")
 
-    _draw_badges_two_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb)
+    if secretariat_participants:
+        _draw_badges_four_up(c, secretariat_participants, logo_left, logo_right, primary_rgb, secondary_rgb)
+    if other_participants:
+        _draw_badges_two_up(c, other_participants, logo_left, logo_right, primary_rgb, secondary_rgb)
 
     exported_at = datetime.utcnow()
     for reg in exported_regs:
