@@ -1,5 +1,6 @@
 import io
 import math
+from datetime import timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -33,6 +34,52 @@ class RegistrationUpdateSchema(BaseModel):
 
 def get_auth_dep(db: Session = Depends(get_db)) -> Auth:
     return Auth(db)
+
+
+def _render_payment_reminder(subject_tpl, body_html_tpl, firstname, event_name, days_left, deadline):
+    """Render the payment-reminder subject + body exactly as a send would, so
+    the UI preview and the mailed email always match. ``subject_tpl`` may be
+    None (falls back to the default subject) and ``body_html_tpl`` may be None
+    (falls back to the file template)."""
+    import utils.mailer_util as mailer_util
+    from jinja2 import Template as Jinja2Template
+
+    render_vars = dict(
+        subject="",
+        firstname=firstname,
+        event_name=event_name,
+        days_left=days_left,
+        deadline=deadline,
+        info_email="info@ecsaconm.org",
+        cc_email="admission@cosecsa.org",
+        year=mailer_util.YEAR,
+    )
+    # Subject supports both {days_left} and {{ days_left }} placeholder styles.
+    subject = subject_tpl or "Payment Reminder: {days_left} day(s) left"
+    for k, v in render_vars.items():
+        if k == "subject":
+            continue
+        subject = subject.replace("{{ " + k + " }}", str(v)).replace(
+            "{{" + k + "}}", str(v)
+        ).replace("{" + k + "}", str(v))
+    render_vars["subject"] = subject
+
+    try:
+        if body_html_tpl:
+            body_html = Jinja2Template(body_html_tpl).render(**render_vars)
+        else:
+            file_tpl = mailer_util.templates.get_template("payment_reminder_template.html")
+            body_html = file_tpl.render(**render_vars)
+    except Exception:
+        body_html = (
+            f"<p>Dear {render_vars['firstname']},</p>"
+            f"<p>You have <strong>{render_vars['days_left']} day(s)</strong> left to pay for "
+            f"<strong>{render_vars['event_name']}</strong>. Payment is required to confirm your availability.</p>"
+            f"<p>If you have already paid, please share your proof of payment with "
+            f"{render_vars['info_email']} and copy {render_vars['cc_email']}.</p>"
+            f"<p>ECSACONM Events Team</p>"
+        )
+    return subject, body_html
 
 
 def _serialize_reg(r: Registration) -> dict:
@@ -217,6 +264,13 @@ class SendPaymentRemindersSchema(BaseModel):
     registration_ids: Optional[list] = None
 
 
+class ReminderPreviewSchema(BaseModel):
+    event_id: Optional[int] = None
+    deadline: Optional[str] = None  # ISO date e.g. 2026-09-14
+    subject: Optional[str] = None   # working-copy subject (or use the template)
+    body_html: Optional[str] = None # working-copy body (or use the template)
+
+
 @router.post("/send_payment_reminders")
 async def send_payment_reminders(
     current_user: user_dependency,
@@ -301,7 +355,6 @@ async def send_payment_reminders(
 
     import utils.mailer_util as mailer_util
     from models.models import EmailTemplate as EmailTemplateModel
-    from jinja2 import Template as Jinja2Template
 
     db_tpl = (
         db.query(EmailTemplateModel)
@@ -310,53 +363,12 @@ async def send_payment_reminders(
     )
 
     jobs = []
-    # Render the subject from the admin-editable template too, so what the
-    # user previews in the UI matches the subject actually sent. Supports both
-    # {days_left} and {{ days_left }} placeholder styles.
-    tpl_subject = (
-        db_tpl.subject
-        if db_tpl and db_tpl.subject
-        else "Payment Reminder: {days_left} day(s) left"
-    )
-
-    def _render_subject(text, render_vars):
-        for k, v in render_vars.items():
-            if k == "subject":
-                continue
-            text = text.replace("{{ " + k + " }}", str(v)).replace(
-                "{{" + k + "}}", str(v)
-            ).replace("{" + k + "}", str(v))
-        return text
-
     for r in recipients:
-        render_vars = dict(
-            subject="",
-            firstname=r["firstname"],
-            event_name=r["event_name"],
-            days_left=r["days_left"],
-            deadline=r["deadline"],
-            info_email="info@ecsaconm.org",
-            cc_email="admission@cosecsa.org",
-            year=mailer_util.YEAR,
+        subject, email_body = _render_payment_reminder(
+            db_tpl.subject if db_tpl else None,
+            db_tpl.body_html if db_tpl else None,
+            r["firstname"], r["event_name"], r["days_left"], r["deadline"],
         )
-        subject = _render_subject(tpl_subject, render_vars)
-        render_vars["subject"] = subject
-        try:
-            if db_tpl and db_tpl.body_html:
-                email_body = Jinja2Template(db_tpl.body_html).render(**render_vars)
-            else:
-                file_tpl = mailer_util.templates.get_template("payment_reminder_template.html")
-                email_body = file_tpl.render(**render_vars)
-        except Exception:
-            email_body = (
-                f"<p>Dear {r['firstname']},</p>"
-                f"<p>You have <strong>{r['days_left']} day(s)</strong> left to pay for "
-                f"<strong>{r['event_name']}</strong>. Payment is required to confirm your availability.</p>"
-                f"<p>If you have already paid, please share your proof of payment with "
-                f"{render_vars['info_email']} and copy {render_vars['cc_email']}.</p>"
-                f"<p>ECSACONM Events Team</p>"
-            )
-
         jobs.append(
             {
                 "recipient_email": r["email"],
@@ -376,6 +388,68 @@ async def send_payment_reminders(
         "deadline": resolved_deadline,
         "message": f"Payment reminders queued for {sent} unpaid registration(s).",
         "reminders_sent": sent,
+    }
+
+
+@router.post("/send_payment_reminders/preview")
+async def preview_payment_reminders(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    body: ReminderPreviewSchema = None,
+):
+    """Render the payment-reminder subject + body exactly as they would be sent
+    (same Jinja templates, same deadline resolution) using a sample recipient,
+    so the UI can show an accurate preview without sending anything."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+
+    body = body or ReminderPreviewSchema()
+    from datetime import date as _date
+
+    def _parse_date(s):
+        try:
+            return _date.fromisoformat(str(s)[:10])
+        except Exception:
+            return None
+
+    from models.models import SystemSetting
+    setting = (
+        db.query(SystemSetting).filter(SystemSetting.key == "payment_deadline").first()
+    )
+    stored_deadline = setting.value if setting and setting.value else None
+    deadline_date = _parse_date(body.deadline or stored_deadline)
+
+    event_name = "ECSACONM Scientific Conference"
+    if body.event_id:
+        event = db.query(Event).filter(Event.id == body.event_id).first()
+        if event:
+            event_name = event.event
+            if not deadline_date and event.start_date:
+                deadline_date = event.start_date.date()
+
+    if not deadline_date:
+        deadline_date = _date.today() + timedelta(days=14)
+
+    days_left = max(0, (deadline_date - _date.today()).days)
+
+    from models.models import EmailTemplate as EmailTemplateModel
+    db_tpl = (
+        db.query(EmailTemplateModel)
+        .filter_by(template_key="payment_reminder")
+        .first()
+    )
+
+    subject, body_html = _render_payment_reminder(
+        body.subject or (db_tpl.subject if db_tpl else None),
+        body.body_html or (db_tpl.body_html if db_tpl else None),
+        "Jane Presenter", event_name, days_left, deadline_date.isoformat(),
+    )
+
+    return {
+        "subject": subject,
+        "body_html": body_html,
+        "days_left": days_left,
+        "deadline": deadline_date.isoformat(),
     }
 
 

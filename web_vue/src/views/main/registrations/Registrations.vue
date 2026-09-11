@@ -740,6 +740,7 @@ export default {
         recipientCount: 0, deadline: '',
         subject: '', body_html: '', originalSubject: '', originalBody: '',
         editMode: 'preview', result: '', error: '',
+        previewSubject: '', previewBody: '', previewTimer: null,
       },
       uploadModal: {
         show: false, eventId: '', file: null, fileName: '',
@@ -807,6 +808,9 @@ export default {
     selectedEventId() { this.syncUrl(); this.loadRegistrationQrPreview() },
     currentPage() { this.syncUrl() },
     pageSize() { this.currentPage = 1; this.persistSession(); this.loadRegistrations() },
+    'reminderModal.deadline'() { this.refreshReminderPreview() },
+    'reminderModal.subject'() { this.refreshReminderPreview() },
+    'reminderModal.body_html'() { this.refreshReminderPreview() },
   },
   mounted() {
     const q = this.$route.query
@@ -995,6 +999,7 @@ export default {
         recipientCount: this.selectedIds.size, deadline: '',
         subject: '', body_html: '', originalSubject: '', originalBody: '',
         editMode: 'preview', result: '', error: '',
+        previewSubject: '', previewBody: '', previewTimer: null,
       }
       try {
         const token = this.authStore.accessToken
@@ -1013,6 +1018,7 @@ export default {
         if (deadlineRes.status === 'fulfilled') {
           this.reminderModal.deadline = deadlineRes.value.data?.value || ''
         }
+        this.refreshReminderPreview()
       } catch (e) {
         this.reminderModal.error = 'Failed to load template.'
       } finally {
@@ -1020,9 +1026,36 @@ export default {
       }
     },
     closeReminderModal() {
+      clearTimeout(this.reminderModal.previewTimer)
       this.reminderModal.show = false
     },
+    refreshReminderPreview() {
+      // Server-renders the subject + body with the real Jinja engine (so
+      // conditionals like {{ 's' if days_left != 1 else '' }} resolve) using
+      // the current editor values; debounced so typing doesn't spam the API.
+      clearTimeout(this.reminderModal.previewTimer)
+      if (!this.reminderModal.show) return
+      this.reminderModal.previewTimer = setTimeout(async () => {
+        try {
+          const token = this.authStore.accessToken
+          const api = axios.create({ baseURL: API_URL })
+          if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+          const res = await api.post('/registrations/send_payment_reminders/preview', {
+            event_id: this.selectedEventId || null,
+            deadline: this.reminderModal.deadline || null,
+            subject: this.reminderModal.subject,
+            body_html: this.reminderModal.body_html,
+          })
+          this.reminderModal.previewSubject = res.data?.subject || ''
+          this.reminderModal.previewBody = res.data?.body_html || ''
+        } catch (e) {
+          this.reminderModal.previewSubject = ''
+          this.reminderModal.previewBody = ''
+        }
+      }, 500)
+    },
     renderReminderPreview(bodyHtml) {
+      if (this.reminderModal.previewBody) return this.reminderModal.previewBody
       const daysLeft = this.reminderModal.deadline
         ? Math.max(0, Math.ceil((new Date(this.reminderModal.deadline) - new Date()) / 86400000))
         : 14
@@ -1041,6 +1074,7 @@ export default {
       })
     },
     renderSubjectPreview(subject) {
+      if (this.reminderModal.previewSubject) return this.reminderModal.previewSubject
       const daysLeft = this.reminderModal.deadline
         ? Math.max(0, Math.ceil((new Date(this.reminderModal.deadline) - new Date()) / 86400000))
         : 14
