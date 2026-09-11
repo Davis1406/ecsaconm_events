@@ -26,7 +26,7 @@ from schemas.events_space import EventSchema, EventUpdateSchema, RegistrationSch
 from utils.receipt_generator import generate_receipt_pdf
 from utils.mailer_util import send_email_with_attachment
 from fastapi import BackgroundTasks
-from PIL import Image
+from PIL import Image, ImageOps
 from reportlab.lib.units import mm
 from reportlab.lib.pagesizes import A5, A4
 from reportlab.lib.utils import ImageReader
@@ -2854,6 +2854,31 @@ def _draw_tracked(c, text, x, base_y, font, size, color, tracking_em=0.0):
     c.drawText(to)
 
 
+def _load_square_thumb(path, target=512):
+    """Load a profile photo as a centre-cropped RGB square, downscaled to
+    `target` px. Using JPEG ``draft`` mode makes libjpeg decode at a reduced
+    scale, which is dramatically faster (and smaller) than embedding the
+    full-resolution original — a single large phone photo used to produce a
+    ~40 MB badge PDF and take ~17 s to render."""
+    im = Image.open(path)
+    try:
+        im.draft("RGB", (target, target))
+    except Exception:
+        pass
+    im = ImageOps.exif_transpose(im)
+    if im.mode != "RGB":
+        im = im.convert("RGB")
+    w, h = im.size
+    s = min(w, h)
+    left = (w - s) // 2
+    top = (h - s) // 2
+    im = im.crop((left, top, left + s, top + s))
+    if s > target:
+        resample = getattr(Image, "Resampling", Image).LANCZOS
+        im = im.resize((target, target), resample)
+    return im
+
+
 def _draw_round_photo(c, cx, cy, size, path, border=None, border_w=2):
     """Draw a circular profile photo centred at (cx, cy) with diameter `size`
     points, clipped to a circle with a brand-pink border. The image is
@@ -2862,14 +2887,7 @@ def _draw_round_photo(c, cx, cy, size, path, border=None, border_w=2):
     if not path or not os.path.exists(path):
         return False
     try:
-        im = Image.open(path)
-        if im.mode != "RGB":
-            im = im.convert("RGB")
-        w, h = im.size
-        s = min(w, h)
-        left = (w - s) // 2
-        top = (h - s) // 2
-        im = im.crop((left, top, left + s, top + s))
+        im = _load_square_thumb(path)
     except Exception:
         return False
     r = size / 2.0

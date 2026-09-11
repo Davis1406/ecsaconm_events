@@ -1188,6 +1188,27 @@
       </div>
     </div>
 
+    <!-- Badge generation progress overlay -->
+    <div v-if="showBadgeProgress" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <svg class="animate-spin w-6 h-6 flex-shrink-0" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          <div class="min-w-0">
+            <p class="text-sm font-bold text-gray-800 truncate">{{ badgeProgress.phase }}</p>
+            <p class="text-xs text-gray-500">{{ badgeProgress.current }} of {{ badgeProgress.total }} badges</p>
+          </div>
+        </div>
+        <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-300"
+            :style="{ width: badgeProgress.percent + '%', backgroundColor: 'rgb(254,80,103)' }"></div>
+        </div>
+        <p class="text-right text-xs text-gray-400 mt-1">{{ badgeProgress.percent }}%</p>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -1217,6 +1238,7 @@ import { buildBadgeEvent } from "@/utils/badgeEvent";
 import BulkUploadParticipantsModal from "@/components/BulkUploadParticipantsModal.vue";
 import ReceiptModal from "@/components/ReceiptModal.vue";
 import PdfPreviewModal from "@/components/PdfPreviewModal.vue";
+import { PDFDocument } from 'pdf-lib';
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -1278,6 +1300,8 @@ export default {
       badgesDownloading: false,
       clearingBadgeExports: false,
       selectingAll: false,
+      showBadgeProgress: false,
+      badgeProgress: { phase: '', current: 0, total: 0, percent: 0 },
       showBulkUploadParticipantsModal: false,
       showReceiptModal: false,
       successMsg: "",
@@ -1847,11 +1871,18 @@ export default {
       }
     },
     async downloadAllBadges() {
+      if (this.badgesDownloading) return;
+      this.badgesDownloading = true;
+      this.showBadgeProgress = true;
       try {
-        const api = axios.create({ baseURL: API_URL });
-        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
-        const res = await api.get(`/events/${this.id}/participants/badges`, { responseType: 'blob' });
-        const url = window.URL.createObjectURL(res.data);
+        const all = await this.fetchAllEventParticipants();
+        const ids = all.map(p => p.id);
+        if (!ids.length) {
+          this.errorMsg = 'No participants to generate badges for.';
+          return;
+        }
+        const blob = await this.badgesPdfBlobWithProgress(ids, `Generating ${ids.length} badges…`);
+        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `${String(this.event.event || 'event').replace(/\s+/g, '_')}_badges.pdf`;
@@ -1863,22 +1894,36 @@ export default {
       } catch (error) {
         console.error('Download all badges failed:', error);
         this.errorMsg = 'Failed to download badges.';
+      } finally {
+        this.badgesDownloading = false;
+        this.showBadgeProgress = false;
       }
     },
     closeBadgeModal() { this.showBadgeModal = false; },
     async printAllBadges() {
-      // Opens the same server-rendered A5 badge PDF used by "Download All
-      // Badges" in a new tab so the browser's print dialog can be used —
-      // guarantees the printed badge always matches the downloaded one.
+      // Opens the same server-rendered badge PDF used by "Download All Badges"
+      // in a new tab so the browser's print dialog can be used — guarantees the
+      // printed badge always matches the downloaded one.
+      if (this.badgesDownloading) return;
+      this.badgesDownloading = true;
+      this.showBadgeProgress = true;
       try {
-        const api = axios.create({ baseURL: API_URL });
-        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
-        const res = await api.get(`/events/${this.id}/participants/badges`, { responseType: 'blob' });
-        const url = window.URL.createObjectURL(res.data);
+        const all = await this.fetchAllEventParticipants();
+        const ids = all.map(p => p.id);
+        if (!ids.length) {
+          this.errorMsg = 'No participants to generate badges for.';
+          return;
+        }
+        const blob = await this.badgesPdfBlobWithProgress(ids, `Generating ${ids.length} badges…`);
+        const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
+        await this.getEvent(true);
       } catch (error) {
         console.error('Print badges failed:', error);
         this.errorMsg = 'Failed to open badges for printing.';
+      } finally {
+        this.badgesDownloading = false;
+        this.showBadgeProgress = false;
       }
     },
     openReceiptModal(participant) {
@@ -1976,6 +2021,31 @@ export default {
       if (Array.isArray(ids) && ids.length) params.ids = ids.join(',');
       return api.get(`/events/${this.id}/participants/badges`, { params, responseType: 'blob' });
     },
+    async badgesPdfBlobWithProgress(ids, phaseText) {
+      // Generates the badges in small server-side batches and merges them in
+      // the browser, so the user sees real progress and the single uvicorn
+      // worker is free to serve other requests between batches.
+      const batchSize = 25;
+      const chunks = [];
+      this.badgeProgress = { phase: phaseText, current: 0, total: ids.length, percent: 0 };
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const chunk = ids.slice(i, i + batchSize);
+        const res = await this.fetchBadgesPdfBlob(chunk);
+        chunks.push(await res.data.arrayBuffer());
+        const done = Math.min(i + chunk.length, ids.length);
+        this.badgeProgress.current = done;
+        this.badgeProgress.percent = Math.round((done / ids.length) * 100);
+      }
+      this.badgeProgress.phase = 'Combining badge pages…';
+      const merged = await PDFDocument.create();
+      for (const buf of chunks) {
+        const doc = await PDFDocument.load(buf);
+        const pages = await merged.copyPages(doc, doc.getPageIndices());
+        pages.forEach(p => merged.addPage(p));
+      }
+      const bytes = await merged.save();
+      return new Blob([bytes], { type: 'application/pdf' });
+    },
     async openBadgePicker() {
       this.showBadgePicker = true;
       if (this.badgePickerParticipants.length || this.badgePickerLoading) return;
@@ -1994,11 +2064,12 @@ export default {
       this.selectedBadgeIds = [...new Set([...this.selectedBadgeIds, ...ids])];
     },
     async downloadSelectedBadges() {
-      if (!this.selectedBadgeIds.length) return;
+      if (!this.selectedBadgeIds.length || this.badgesDownloading) return;
       this.badgesDownloading = true;
+      this.showBadgeProgress = true;
       try {
-        const res = await this.fetchBadgesPdfBlob(this.selectedBadgeIds);
-        const url = window.URL.createObjectURL(res.data);
+        const blob = await this.badgesPdfBlobWithProgress(this.selectedBadgeIds, `Generating ${this.selectedBadgeIds.length} badges…`);
+        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `${String(this.event.event || 'event').replace(/\s+/g, '_')}_selected_badges.pdf`;
@@ -2012,14 +2083,16 @@ export default {
         this.errorMsg = 'Failed to download selected badges.';
       } finally {
         this.badgesDownloading = false;
+        this.showBadgeProgress = false;
       }
     },
     async printSelectedBadges() {
-      if (!this.selectedBadgeIds.length) return;
+      if (!this.selectedBadgeIds.length || this.badgesDownloading) return;
       this.badgesDownloading = true;
+      this.showBadgeProgress = true;
       try {
-        const res = await this.fetchBadgesPdfBlob(this.selectedBadgeIds);
-        const url = window.URL.createObjectURL(res.data);
+        const blob = await this.badgesPdfBlobWithProgress(this.selectedBadgeIds, `Generating ${this.selectedBadgeIds.length} badges…`);
+        const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
         await this.getEvent(true);
       } catch (error) {
@@ -2027,6 +2100,7 @@ export default {
         this.errorMsg = 'Failed to open selected badges for printing.';
       } finally {
         this.badgesDownloading = false;
+        this.showBadgeProgress = false;
       }
     },
     openBulkUploadParticipantsModal() {
