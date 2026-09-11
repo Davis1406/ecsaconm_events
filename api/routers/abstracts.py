@@ -686,18 +686,11 @@ def export_abstracts(
     )
 
 
-@router.get("/abstract-book")
-def get_abstract_book(
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-    event_id: int = None,
-):
-    """Renders the Abstract Book PDF for accepted abstracts whose presenting
-    author has a paid registration for the event — regenerated fresh on every
-    request, so it always reflects current payment status."""
-    auth_dependency.secure_access("EXPORT_ABSTRACTS", current_user["user_id"])
-
+def _build_abstract_book_pdf(db: Session, event_id: int = None):
+    """Shared by the admin and participant-facing abstract-book endpoints —
+    renders accepted abstracts whose presenting author has a paid registration
+    for the event, regenerated fresh on every call so it always reflects
+    current payment status."""
     from utils.abstract_book_generator import generate_abstract_book_pdf
 
     q = db.query(Abstract).options(
@@ -757,6 +750,39 @@ def get_abstract_book(
         event_name = event.event if event else "Conference"
 
     pdf_bytes = generate_abstract_book_pdf(event_name, payload)
+    return pdf_bytes, event_name
+
+
+@router.get("/abstract-book")
+def get_abstract_book(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = None,
+):
+    """Admin/secretariat download of the Abstract Book PDF."""
+    auth_dependency.secure_access("EXPORT_ABSTRACTS", current_user["user_id"])
+
+    pdf_bytes, event_name = _build_abstract_book_pdf(db, event_id)
+
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", event_name).strip("_") or "event"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}_Abstract_Book.pdf"'},
+    )
+
+
+@router.get("/abstract-book/view")
+def get_abstract_book_participant(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    event_id: int = None,
+):
+    """Same Abstract Book PDF, open to any logged-in participant (no
+    EXPORT_ABSTRACTS permission required) — lets presenters/attendees preview
+    and download the book themselves from their account area."""
+    pdf_bytes, event_name = _build_abstract_book_pdf(db, event_id)
 
     safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", event_name).strip("_") or "event"
     return StreamingResponse(

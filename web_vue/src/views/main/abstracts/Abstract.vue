@@ -296,7 +296,8 @@
             class="w-full px-3 py-2.5 border border-mercury-300 rounded-xl text-sm text-abbey-700 focus:outline-none focus:ring-2 focus:ring-bondi-blue-400 leading-relaxed resize-y font-[inherit]"
             placeholder="Abstract body text…"></textarea>
           <div v-else-if="abstract.abstract_text"
-            class="text-sm text-abbey-700 leading-relaxed whitespace-pre-wrap font-[inherit]">{{ abstract.abstract_text }}</div>
+            class="text-sm text-abbey-700 leading-relaxed font-[inherit]"
+            v-html="formattedAbstractHtml"></div>
           <p v-else class="text-sm text-abbey-400 italic">No abstract body available for this submission.</p>
         </div>
 
@@ -332,6 +333,7 @@
 <script>
 import { fetchItem, updateItem } from "@/services/apiService";
 import { useAuthStore } from "@/store/authStore";
+import { formatAbstractHtml } from "@/utils/abstractFormat";
 
 export default {
   name: 'AbstractView',
@@ -363,6 +365,9 @@ export default {
     sortedAuthors() {
       if (!this.abstract.authors) return [];
       return [...this.abstract.authors].sort((a, b) => (a.author_order || 0) - (b.author_order || 0));
+    },
+    formattedAbstractHtml() {
+      return formatAbstractHtml(this.abstract.abstract_text);
     },
   },
   setup() {

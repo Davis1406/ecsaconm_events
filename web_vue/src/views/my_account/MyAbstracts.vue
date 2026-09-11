@@ -2,6 +2,25 @@
   <div class="flex flex-col space-y-6 flex-1">
     <div class="text-2xl font-bold text-gray-800">My Abstracts</div>
 
+    <!-- Abstract Book -->
+    <div v-if="isPaidPresenter" class="bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h3 class="font-semibold text-gray-800 mb-1">Conference Abstract Book</h3>
+        <p class="text-sm text-gray-500">Preview or download the full book of accepted abstracts.</p>
+      </div>
+      <button @click="showAbstractBook = true"
+        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white flex-shrink-0 transition hover:opacity-90"
+        style="background-color: rgb(254,80,103);">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+        </svg>
+        View Abstract Book
+      </button>
+    </div>
+    <PdfPreviewModal v-model:show="showAbstractBook" title="Abstract Book"
+      fetch-url="/abstracts/abstract-book/view" filename="Abstract_Book.pdf" />
+
     <!-- Spinner -->
     <div v-if="isLoading" class="flex justify-center py-16">
       <svg class="animate-spin h-10 w-10" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
@@ -61,12 +80,12 @@
               {{ abstract._expanded ? 'Hide abstract ▲' : 'Show abstract ▼' }}
             </button>
             <div v-if="abstract._expanded"
-              class="mt-3 text-gray-600 text-sm leading-relaxed border-t border-gray-100 pt-3 whitespace-pre-wrap">
-              {{ abstract.abstract_text || abstract.body || abstract.content }}
-              <p v-if="abstract.keywords" class="mt-3 text-xs text-gray-400">
-                <strong>Keywords:</strong> {{ abstract.keywords }}
-              </p>
+              class="mt-3 text-gray-600 text-sm leading-relaxed border-t border-gray-100 pt-3"
+              v-html="formatAbstractHtml(abstract.abstract_text || abstract.body || abstract.content)">
             </div>
+            <p v-if="abstract._expanded && abstract.keywords" class="mt-1 text-xs text-gray-400">
+              <strong>Keywords:</strong> {{ abstract.keywords }}
+            </p>
           </div>
 
           <!-- Upload presentation -->
@@ -175,15 +194,19 @@
 <script>
 import { fetchData } from "@/services/apiService";
 import { useAuthStore } from "@/store/authStore";
+import { formatAbstractHtml } from "@/utils/abstractFormat";
+import PdfPreviewModal from "@/components/PdfPreviewModal.vue";
 import axios from "axios";
 
 export default {
     name: 'MyAbstracts',
+    components: { PdfPreviewModal },
     data() {
         return {
             isLoading: true,
             abstracts: [],
             isPaidPresenter: false,
+            showAbstractBook: false,
             apiUrl: import.meta.env.VITE_API_URL,
             templates: [],
             templatesLoading: false,
@@ -218,6 +241,8 @@ export default {
         },
     },
     methods: {
+        formatAbstractHtml,
+
         async checkPresenterStatus() {
             try {
                 const res = await axios.get(
