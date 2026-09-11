@@ -3,7 +3,7 @@
         <HeaderView :headerTitle="headerTitle"></HeaderView>
         <div class="flex flex-col space-y-4">
             <div class="flex sm:flex-row flex-col sm:justify-between sm:items-center items-start">
-                <search-component @search="handleSearch"></search-component>
+                <search-component width-class="w-12/12 sm:w-3/12" @search="handleSearch"></search-component>
                 <router-link :to="{ name: 'AddEvent' }" v-if="permissions.includes('ADD_EVENT')"
                     class="mt-2 px-4 py-2 text-white font-semibold rounded-md transition hover:opacity-90"
                     style="background-color: rgb(254,80,103);">
