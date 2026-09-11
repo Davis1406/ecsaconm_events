@@ -132,7 +132,7 @@
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
         </h2>
-        <search-component @search="handleSearch" />
+        <search-component :value="searchPhrase" @search="handleSearch" />
 
         <!-- Add participant -->
         <button v-if="permissions.includes('BULK_UPLOAD') || permissions.includes('ADMIN_DASHBOARD')"
@@ -1149,6 +1149,7 @@ export default {
     PaymentModal, BadgeModal, BadgeCard, BulkUploadParticipantsModal, ReceiptModal, PdfPreviewModal,
   },
   data() {
+    const session = this.readListSession(this.$route.params.id);
     return {
       headerTitle: "Event Details",
       id: this.$route.params.id,
@@ -1162,7 +1163,6 @@ export default {
       currentPage: 1,
       totalPages: "",
       pageSize: 10000,
-      searchPhrase: "",
       showPaymentModal: false,
       userID: "",
       eventID: "",
@@ -1211,7 +1211,7 @@ export default {
       importError: '',
       importPreviewCount: 0,
       // Participant filters (client-side, over the already-fetched list) + pagination
-      filterPreset: 'all',
+      filterPreset: (session && session.filter) || 'all',
       filterOptions: [
         { key: 'all', label: 'All' },
         { key: 'presenters', label: 'Abstract Presenters' },
@@ -1225,9 +1225,10 @@ export default {
       participantsFilteredTotal: 0,
       filterCounts: { all: 0, presenters: 0, secretariat: 0, paid: 0, unpaid: 0, proof_pending: 0, badges_exported: 0 },
       togglingPaidId: null,
-      localPage: 1,
-      localPageSize: 25,
+      localPage: (session && session.page > 0) ? session.page : 1,
+      localPageSize: (session && [25, 50, 100].includes(session.pageSize)) ? session.pageSize : 25,
       pageSizeOptions: [25, 50, 100],
+      searchPhrase: (session && typeof session.search === 'string') ? session.search : '',
       participantsLoading: false,
       exporting: false,
       // Add participant
@@ -1261,10 +1262,10 @@ export default {
   watch: {
     // Reload silently (no full-page spinner) so the search box keeps focus
     // while typing — same behaviour as the Registrations page.
-    filterPreset() { this.localPage = 1; this.getEvent(true); },
-    searchPhrase() { this.localPage = 1; this.getEvent(true); },
-    localPageSize() { this.localPage = 1; this.getEvent(true); },
-    localPage() { this.getEvent(true); },
+    filterPreset() { this.localPage = 1; this.persistListSession(); this.getEvent(true); },
+    searchPhrase() { this.localPage = 1; this.persistListSession(); this.getEvent(true); },
+    localPageSize() { this.localPage = 1; this.persistListSession(); this.getEvent(true); },
+    localPage() { this.persistListSession(); this.getEvent(true); },
   },
   setup() {
     const authStore = useAuthStore();
@@ -1401,6 +1402,29 @@ export default {
     },
   },
   methods: {
+    listSessionKey(id) {
+      return `ecsa_event_participants_${id}`;
+    },
+    readListSession(id) {
+      try {
+        const raw = sessionStorage.getItem(this.listSessionKey(id));
+        if (!raw) return null;
+        const s = JSON.parse(raw);
+        return s && typeof s === 'object' ? s : null;
+      } catch (e) {
+        return null;
+      }
+    },
+    persistListSession() {
+      try {
+        sessionStorage.setItem(this.listSessionKey(this.id), JSON.stringify({
+          filter: this.filterPreset,
+          search: this.searchPhrase,
+          page: this.localPage,
+          pageSize: this.localPageSize,
+        }));
+      } catch (e) { /* ignore */ }
+    },
     async getEvent(silent = false) {
       if (!silent) this.isLoading = true;
       else this.participantsLoading = true;

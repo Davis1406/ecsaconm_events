@@ -136,7 +136,7 @@
                   bg-surface-container-lowest border border-surface-container-high rounded-xl px-4 py-3">
         <!-- Left: search + active filter chip -->
         <div class="flex items-center gap-3 flex-wrap flex-1 min-w-0">
-          <search-component @search="handleAbstractSearch" />
+          <search-component :value="abstractsSearch" @search="handleAbstractSearch" />
 
           <!-- Active filter chip -->
           <button v-if="abstractsFilter !== 'all'" @click="setAbstractFilter('all')"
@@ -1257,17 +1257,22 @@ export default {
   },
 
   data() {
+    const s = this.readAbstractsSession()
     return {
       headerTitle: 'Abstracts',
-      activeTab: 'abstracts',
+      activeTab: (s && ['abstracts', 'templates', 'reminders', 'uploads', 'report', 'confirmation_results'].includes(s.activeTab)) ? s.activeTab : 'abstracts',
       apiUrl: import.meta.env.VITE_API_URL,
 
       // ── Tab 1: Abstracts ──────────────────────────────────────────────────
       abstracts: [], abstractsLoading: true,
-      abstractsPage: 1, abstractsPageSize: 25,
-      abstractsTotal: 0, abstractsSearch: '',
-      abstractsFilter: 'all',  // 'all' | 'oral' | 'poster' | 'presenters' | 'multi'
-      abstractsSort: { field: 'created_at', dir: 'desc' },
+      abstractsPage: (s && s.page > 0) ? s.page : 1,
+      abstractsPageSize: (s && [25, 50, 100].includes(s.pageSize)) ? s.pageSize : 25,
+      abstractsTotal: 0,
+      abstractsSearch: (s && typeof s.search === 'string') ? s.search : '',
+      abstractsFilter: (s && ['all', 'oral', 'poster', 'presenters', 'multi', 'registered', 'not_registered', 'paid'].includes(s.filter)) ? s.filter : 'all',
+      abstractsSort: (s && s.sort && ['title', 'presenter', 'created_at'].includes(s.sort.field))
+        ? { field: s.sort.field, dir: s.sort.dir === 'asc' ? 'asc' : 'desc' }
+        : { field: 'created_at', dir: 'desc' },
       stats: { total: null, oral: null, poster: null, unique_presenters: null, multi_presenters: null },
       showImport: false,
       showFilterMenu: false,
@@ -1434,11 +1439,16 @@ export default {
 
   watch: {
     activeTab(tab) {
+      this.persistAbstractsSession()
       if (tab === 'templates' && !this.templates.length && !this.templatesLoading) this.loadTemplates()
       if (tab === 'reminders' && !this.presenters.length) this.loadPresenters()
       if (tab === 'uploads'   && !this.uploads.length && !this.uploadsLoading) this.loadUploads()
       if (tab === 'report'    && !this.reportLoading) this.loadReport()
     },
+    abstractsFilter()   { this.persistAbstractsSession() },
+    abstractsSearch()   { this.persistAbstractsSession() },
+    abstractsPage()     { this.persistAbstractsSession() },
+    abstractsPageSize() { this.persistAbstractsSession() },
   },
 
   mounted() {
@@ -1450,6 +1460,28 @@ export default {
   },
 
   methods: {
+
+    // ── List session persistence ──────────────────────────────────────────
+    readAbstractsSession() {
+      try {
+        const raw = sessionStorage.getItem('ecsa_abstracts_session')
+        if (!raw) return null
+        const s = JSON.parse(raw)
+        return s && typeof s === 'object' ? s : null
+      } catch (e) { return null }
+    },
+    persistAbstractsSession() {
+      try {
+        sessionStorage.setItem('ecsa_abstracts_session', JSON.stringify({
+          activeTab: this.activeTab,
+          filter: this.abstractsFilter,
+          search: this.abstractsSearch,
+          page: this.abstractsPage,
+          pageSize: this.abstractsPageSize,
+          sort: this.abstractsSort,
+        }))
+      } catch (e) { /* ignore */ }
+    },
 
     // ── Abstracts ─────────────────────────────────────────────────────────
     async loadStats() {
