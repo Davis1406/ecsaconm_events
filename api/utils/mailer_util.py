@@ -3,6 +3,7 @@ import smtplib
 import logging
 import time
 import uuid
+from collections import deque
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -202,6 +203,37 @@ def send_email(recipient_email, subject, email_body, email_type="general",
         _update_email_log(log_id, "failed", str(e))
 
 
+def _load_recent_send_times(window_seconds=3600):
+    """Epoch-second timestamps of emails successfully sent within the last
+    `window_seconds`, read from EmailLog. Seeds the rolling-hour quota counter
+    in send_bulk_emails() so a bulk send also accounts for mail already sent by
+    other requests (e.g. account/profile emails) in the same window."""
+    from datetime import datetime, timedelta
+    import calendar
+    from core.database import SessionLocal
+    from models.models import EmailLog
+
+    cutoff = datetime.utcnow() - timedelta(seconds=window_seconds)
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(EmailLog.sent_at)
+            .filter(EmailLog.status == "sent", EmailLog.sent_at >= cutoff)
+            .all()
+        )
+        times = []
+        for r in rows:
+            dt = r[0]
+            if dt is None:
+                continue
+            # Naive DB timestamps are UTC (server default func.now()); treat
+            # them as such regardless of the process timezone.
+            times.append(calendar.timegm(dt.timetuple()) if dt.tzinfo is None else dt.timestamp())
+        return times
+    finally:
+        db.close()
+
+
 def send_bulk_emails(jobs, delay_seconds=0.3):
     """Send multiple emails over a single, reused SMTP connection.
 
@@ -271,8 +303,50 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
     # fresh, re-authenticated connection before that happens.
     max_msgs_per_connection = int(os.getenv("SMTP_MAX_MSGS_PER_CONNECTION", "20"))
 
+    # ── Rolling-hour quota pacing ─────────────────────────────────────────
+    # The mail host enforces a domain-wide hourly cap (e.g. Exim/cPanel's
+    # "max emails per hour", 500/hr here). A large bulk send can blow straight
+    # through it, after which the server starts refusing connections and
+    # replying "550 … exceeded the max emails per hour" — and those messages
+    # are lost. Track sends in a rolling 60-minute window (seeded from
+    # EmailLog so mail sent elsewhere counts too) and pause until a slot frees
+    # up rather than overrunning the cap.
+    try:
+        # Default 450 leaves headroom below the host's 500/hr domain limit for
+        # mail this app didn't send (other mailboxes on the domain, etc.).
+        max_per_hour = int(os.getenv("SMTP_MAX_EMAILS_PER_HOUR", "450"))
+    except ValueError:
+        max_per_hour = 450
+    quota_window = 3600
+    try:
+        send_times = deque(_load_recent_send_times(quota_window))
+    except Exception as e:
+        logger.warning("Could not load recent send times for quota pacing: %s", e)
+        send_times = deque()
+
+    def _await_quota_slot():
+        """Block until the rolling-hour send count is below the cap."""
+        if max_per_hour <= 0:
+            return
+        now = time.time()
+        while send_times and now - send_times[0] >= quota_window:
+            send_times.popleft()
+        while len(send_times) >= max_per_hour:
+            wait = quota_window - (now - send_times[0]) + 2
+            logger.info(
+                "Hourly email quota reached (%d/%d) — pausing %.0fs before continuing",
+                len(send_times), max_per_hour, wait,
+            )
+            time.sleep(max(1, wait))
+            now = time.time()
+            while send_times and now - send_times[0] >= quota_window:
+                send_times.popleft()
+
     try:
         for i, job in enumerate(jobs):
+            # Respect the rolling-hour quota before doing any work for this job.
+            _await_quota_slot()
+
             recipient_email = job["recipient_email"]
             subject = job["subject"]
             email_body = job["email_body"]
@@ -315,6 +389,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
                 logger.info("Email sent successfully to %s", recipient_email)
                 _update_email_log(log_id, "sent")
                 sent_count += 1
+                send_times.append(time.time())
             except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
                 # The server dropped/refused the connection mid-batch (the
                 # same per-connection cap, or a transient network blip) —
@@ -329,6 +404,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
                     logger.info("Email sent successfully to %s (after reconnect)", recipient_email)
                     _update_email_log(log_id, "sent")
                     sent_count += 1
+                    send_times.append(time.time())
                 except Exception as e2:
                     logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
                     _update_email_log(log_id, "failed", str(e2))

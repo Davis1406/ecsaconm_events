@@ -171,6 +171,8 @@ The `.env.development` file already points the frontend at the production API (`
 | `MAIL_FROM` | Sender address |
 | `MAIL_SERVER` | SMTP host |
 | `MAIL_PORT` | SMTP port |
+| `SMTP_MAX_EMAILS_PER_HOUR` | Rolling-hour cap for bulk email sends; `send_bulk_emails` pauses when reached (default `450` — the mail host caps the `ecsaconm.org` domain at 500/hr). Set `0` to disable pacing. |
+| `SMTP_MAX_MSGS_PER_CONNECTION` | Messages per SMTP session before reconnecting (default `20`) |
 | `BASE_URL` | Public API base, e.g. `https://events.ecsaconm.org/api` |
 | `CLIENT_ORIGIN` | Frontend origin, e.g. `https://events.ecsaconm.org` |
 
