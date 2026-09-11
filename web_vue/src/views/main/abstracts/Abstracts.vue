@@ -1400,7 +1400,10 @@ export default {
         originalSubject: '', originalBody: '',
         editMode: 'preview', result: '', error: '',
       },
-      // Send Email to Presenters modal (preview / send)
+      // Send Email to Presenters modal (preview / send) — scoped to the
+      // single conference this portal runs (event 1), same as
+      // AbstractNotifications.vue's registration-reminder tab.
+      presenterEventId: 1,
       presenterEmail: {
         open: false, loading: false, sending: false,
         subject: '', body_html: '',
@@ -2010,6 +2013,7 @@ export default {
       this.presenterEmail.error = ''
       try {
         const res = await axios.get(`${this.apiUrl}/abstracts/presenter-instructions-preview`, {
+          params: { event_id: this.presenterEventId },
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.presenterEmail.subject = res.data?.subject || ''
@@ -2029,7 +2033,8 @@ export default {
       this.presenterEmail.result = ''
       this.presenterEmail.error = ''
       try {
-        const res = await axios.post(`${this.apiUrl}/abstracts/send-presenter-instructions`, {}, {
+        const res = await axios.post(`${this.apiUrl}/abstracts/send-presenter-instructions`,
+          { event_id: this.presenterEventId }, {
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.presenterEmail.result = res.data?.message || `Presenter instructions emailed to ${res.data?.sent || 0} presenter(s).`
