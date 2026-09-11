@@ -135,3 +135,35 @@ now be a genuine no-op for it, and should actually work for future migrations.
 `api/models/models.py`**, and don't assume `alembic upgrade head` works just
 because it's the documented command; this incident is the first time anyone
 actually depended on it running successfully against production.
+
+---
+
+## 2026-09-11 — Production runs behind Cloudflare (undocumented); blank page after rapid `web` redeploys
+
+**What happened**
+
+After three `deploy/deploy.sh web` runs in quick succession (~5 minutes apart,
+each building fresh content-hashed assets and `rsync --delete`-ing the old
+ones), a user hit a blank page at `/#/abstracts`. Turned out to be their
+browser holding an `index.html` from mid-sequence, whose asset hashes had
+since been deleted off the server by the next deploy — a hard refresh fixed
+it immediately, no server-side bug.
+
+While investigating, found `events.ecsaconm.org` is actually proxied through
+**Cloudflare** (`server: cloudflare` on every response) — not mentioned
+anywhere in TEAM.md §7, which describes plain Nginx with no CDN. Confirmed
+Cloudflare's edge cache will keep serving a deleted deploy's JS/CSS files
+(`cf-cache-status: HIT`, 200 OK) well after `rsync` has removed them from
+origin — `index.html` itself came back `cf-cache-status: DYNAMIC` (not
+edge-cached) in this check, so the blank page here was client-side, but a
+client that *does* hold a stale `index.html` (browser cache, or a request
+mid-flight during the deploy window) can end up pointing at a hash trio
+that partially 404s once a later deploy deletes it.
+
+**Takeaway** — avoid stacking `web` deploys back-to-back within the same
+few minutes if avoidable; tell users to hard-refresh if something looks
+blank right after a frontend deploy before assuming it's a real bug. Nobody
+currently has documented Cloudflare dashboard/API access from this
+environment — if edge cache staleness ever *doesn't* self-resolve (unlike
+this incident), purging it needs that access, which should get added to
+TEAM.md §7 alongside the EC2/Nginx details already there.
