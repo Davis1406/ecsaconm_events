@@ -726,10 +726,16 @@ def _build_abstract_book_pdf(db: Session, event_id: int = None):
         return False
 
     event_name = None
+    event_obj = None
     payload = []
     for a in abstracts:
+        # Book only ever lists oral presentations — posters/either are excluded.
+        ptype = a.presentation_type.value if a.presentation_type else "oral"
+        if ptype != "oral":
+            continue
         if not presenter_is_paid(a):
             continue
+        event_obj = event_obj or a.event
         event_name = event_name or (a.event.event if a.event else "Conference")
         authors = sorted(a.authors, key=lambda x: x.author_order)
         payload.append({
@@ -737,7 +743,7 @@ def _build_abstract_book_pdf(db: Session, event_id: int = None):
             "title": a.title,
             "track": a.track,
             "keywords": a.keywords,
-            "presentation_type": a.presentation_type.value if a.presentation_type else "oral",
+            "presentation_type": ptype,
             "abstract_text": a.abstract_text,
             "authors": [
                 {"name": f"{au.firstname} {au.lastname}", "affiliation": au.affiliation, "is_presenting": au.is_presenting}
@@ -745,11 +751,18 @@ def _build_abstract_book_pdf(db: Session, event_id: int = None):
             ],
         })
 
-    if not event_name:
-        event = db.query(Event).filter(Event.id == event_id).first() if event_id else None
-        event_name = event.event if event else "Conference"
+    if not event_obj:
+        event_obj = db.query(Event).filter(Event.id == event_id).first() if event_id else None
+    event_name = (event_obj.event if event_obj else None) or event_name or "Conference"
 
-    pdf_bytes = generate_abstract_book_pdf(event_name, payload)
+    event_meta = {
+        "theme": event_obj.theme if event_obj else None,
+        "start_date": event_obj.start_date if event_obj else None,
+        "end_date": event_obj.end_date if event_obj else None,
+        "location": event_obj.location if event_obj else None,
+    }
+
+    pdf_bytes = generate_abstract_book_pdf(event_name, payload, event_meta)
     return pdf_bytes, event_name
 
 
