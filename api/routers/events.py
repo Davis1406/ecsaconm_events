@@ -3424,6 +3424,46 @@ async def download_participant_badge_pdf(
     )
 
 
+@router.delete("/{event_id}/badge-exports")
+async def clear_badge_exports(
+    request: Request,
+    event_id: int,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    dependency=Depends(get_dependency),
+    auth_dependency: Auth = Depends(get_auth_dependency),
+):
+    """Reset badge_exported_at for every registration of the event, so badges
+    can be re-generated/exported. ADMIN_DASHBOARD bypasses the check."""
+    auth_dependency.secure_access("PRINT_BADGE", current_user["user_id"])
+    client_ip = dependency.request_ip(request)
+
+    event = get_object(event_id, db, Event)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    cleared = (
+        db.query(Registration)
+        .filter(
+            Registration.event_id == event_id,
+            Registration.deleted_at == None,
+            Registration.badge_exported_at.isnot(None),
+        )
+        .update({Registration.badge_exported_at: None})
+    )
+    db.commit()
+
+    dependency.log_activity(
+        current_user["user_id"],
+        "CLEAR_BADGE_EXPORTS",
+        current_user["username"],
+        client_ip,
+        f"Cleared badge export status for {cleared} registrations (event {event_id})",
+    )
+
+    return {"status": "success", "cleared": cleared}
+
+
 @router.get("/{event_id}/my-badge")
 async def download_my_badge(
     event_id: int,

@@ -238,6 +238,25 @@
                 <option v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</option>
               </select>
             </label>
+            <label class="block sm:col-span-2">
+              <span class="block text-xs font-semibold text-gray-500 mb-1">Badge photo</span>
+              <div class="flex items-center gap-3">
+                <div class="h-14 w-14 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-gray-50">
+                  <img v-if="editPhotoPreview" :src="editPhotoPreview" class="h-full w-full object-cover" alt="Badge photo" />
+                  <div v-else class="h-full w-full flex items-center justify-center text-white text-lg font-semibold"
+                    style="background-color: rgb(254,80,103);">
+                    {{ initials }}
+                  </div>
+                </div>
+                <div class="flex-1">
+                  <input ref="editPhotoInput" type="file" accept="image/*" :disabled="editPhotoUploading"
+                    class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:text-white file:bg-pink-500 file:cursor-pointer disabled:opacity-50"
+                    @change="onEditPhotoChange" />
+                  <p v-if="editPhotoError" class="text-xs text-red-600 mt-1">{{ editPhotoError }}</p>
+                  <p v-if="editPhotoUploading" class="text-xs text-gray-500 mt-1">Uploading…</p>
+                </div>
+              </div>
+            </label>
           </div>
 
           <p v-if="editError" class="text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600">{{ editError }}</p>
@@ -262,6 +281,7 @@
 <script>
 import HeaderView from '@/includes/Header.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
+import axios from 'axios'
 import { fetchItem, createItem, fetchData, deleteItemWithBody, setAuthToken, updateItem } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 
@@ -287,6 +307,9 @@ export default {
       showEditModal: false,
       editSaving: false,
       editError: '',
+      editPhotoPreview: null,
+      editPhotoUploading: false,
+      editPhotoError: '',
       editCountries: [],
       editForm: {
         registration_id: null,
@@ -417,6 +440,8 @@ export default {
         participation_role: this.normalizeParticipationRole(first.participation_role),
       }
       this.editError = ''
+      this.editPhotoError = ''
+      this.editPhotoPreview = this.profilePictureUrl
       this.showEditModal = true
       await this.loadEditCountries()
     },
@@ -440,6 +465,36 @@ export default {
         this.editCountries = res.data || []
       } catch (error) {
         console.error('Error fetching countries:', error)
+      }
+    },
+    async onEditPhotoChange(event) {
+      const file = event.target.files[0]
+      if (!file) return
+      if (!file.type.startsWith('image/')) {
+        this.editPhotoError = 'Please select an image file.'
+        return
+      }
+      this.editPhotoError = ''
+      this.editPhotoUploading = true
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        const token = this.authStore.accessToken
+        const res = await axios.post(`${API_URL}/users/${this.id}/photo`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${token}`,
+          },
+        })
+        this.editPhotoPreview = `${API_URL}/${res.data.file_path}`
+        this.profilePictureUrl = this.editPhotoPreview
+        this.showMessage('Photo uploaded.', 'success')
+      } catch (e) {
+        this.editPhotoError = e.response?.data?.detail || 'Failed to upload photo.'
+      } finally {
+        this.editPhotoUploading = false
+        // Reset input so the same file can be re-selected
+        this.$refs.editPhotoInput && (this.$refs.editPhotoInput.value = '')
       }
     },
     async saveEditParticipant() {

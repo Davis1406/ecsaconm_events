@@ -228,6 +228,13 @@
           :style="filterPreset === f.key ? 'background-color: rgb(254,80,103);' : ''">
           {{ f.label }} <span :class="filterPreset === f.key ? 'opacity-80' : 'text-gray-400'">({{ filterCounts[f.key] }})</span>
         </button>
+        <button v-if="filterPreset === 'badges_exported' && filterCounts.badges_exported > 0
+            && (permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD'))"
+          @click="clearBadgeExports" :disabled="clearingBadgeExports"
+          class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          style="background-color: rgb(254,80,103);">
+          {{ clearingBadgeExports ? 'Clearing…' : 'Clear exported status' }}
+        </button>
       </div>
 
       <!-- Badge selection bar -->
@@ -853,7 +860,20 @@
 
           <!-- Badge Exports -->
           <div>
-            <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Badge Exports</p>
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Badge Exports</p>
+              <button v-if="badgesExportedCount > 0
+                  && (permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD'))"
+                @click="clearBadgeExports" :disabled="clearingBadgeExports"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                style="background-color: rgb(254,80,103);">
+                <svg v-if="clearingBadgeExports" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                {{ clearingBadgeExports ? 'Clearing…' : 'Clear Exports' }}
+              </button>
+            </div>
             <div class="grid grid-cols-3 gap-3 mb-4">
               <div class="text-center p-3 rounded-xl bg-gray-50">
                 <p class="text-2xl font-bold text-gray-800">{{ reportTotal }}</p>
@@ -1156,6 +1176,7 @@ export default {
       showDocumentQrPreview: false,
       documentQrUrl: '',
       badgesDownloading: false,
+      clearingBadgeExports: false,
       selectingAll: false,
       showBulkUploadParticipantsModal: false,
       showReceiptModal: false,
@@ -1713,6 +1734,31 @@ export default {
     },
     clearBadgeSelection() {
       this.selectedBadgeIds = [];
+    },
+    async clearBadgeExports() {
+      if (!confirm('Clear the "Badge Exported" status for all participants? This lets you re-export/regenerate badges.')) return;
+      this.clearingBadgeExports = true;
+      try {
+        const api = axios.create({ baseURL: API_URL });
+        if (this.authStore.accessToken) api.defaults.headers.common['Authorization'] = `Bearer ${this.authStore.accessToken}`;
+        await api.delete(`/events/${this.id}/badge-exports`);
+        if (this.showReportsModal) {
+          this.reportLoading = true;
+          this.reportParticipants = await this.fetchAllEventParticipants();
+          this.reportLoading = false;
+        }
+        await this.getEvent(true);
+        this.successMsg = 'Badge export status cleared.';
+        this.errorMsg = '';
+        setTimeout(() => { this.successMsg = ''; }, 3000);
+      } catch (error) {
+        console.error('Clear badge exports failed:', error);
+        this.errorMsg = error.response?.data?.detail || 'Failed to clear badge exports.';
+        this.successMsg = '';
+        setTimeout(() => { this.errorMsg = ''; }, 4000);
+      } finally {
+        this.clearingBadgeExports = false;
+      }
     },
     async selectAllAcrossPages() {
       this.selectingAll = true;
