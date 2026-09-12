@@ -50,7 +50,9 @@ def delete_attendance(
     db: Session = Depends(get_db),
     auth_dependency: Auth = Depends(get_auth_dependency),
 ):
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    # ADMIN_DASHBOARD still bypasses this check; anyone entrusted with
+    # VIEW_REGISTRATIONS (e.g. the Finance role) can also manage attendance.
+    auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
     success = crud_event_attendance.delete_attendance(db, attendance_id)
     if not success:
         raise HTTPException(status_code=404, detail="Attendance not found")
@@ -64,6 +66,6 @@ def delete_event_attendance(
     db: Session = Depends(get_db),
     auth_dependency: Auth = Depends(get_auth_dependency),
 ):
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
     count = crud_event_attendance.delete_all_attendance(db, event_id)
     return {"detail": f"Deleted {count} attendance record(s)"}

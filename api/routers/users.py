@@ -385,6 +385,60 @@ async def admin_reset_user_password(
     return {"detail": "Password reset link sent to user's email successfully"}
 
 
+@router.post("/{user_id}/set-password")
+async def admin_set_user_password(
+    user_id: int,
+    current_user: user_dependency,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dependency),
+    dependency: Dependency = Depends(get_dependency),
+    body: dict = None,
+):
+    """Admin sets a user's password directly — either a random string
+    (default) or one the admin typed themselves — and emails the person
+    their new credentials, noting an admin performed the reset. Unlike
+    /reset-password (which only emails a self-service reset link and
+    leaves the current password untouched), this changes the password
+    immediately."""
+    auth_dependency.secure_access("UPDATE_USER", current_user["user_id"])
+
+    user = db.query(User).filter(User.id == user_id, User.deleted_at == None).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    body = body or {}
+    new_password = (body.get("new_password") or "").strip()
+    if new_password:
+        if len(new_password) < 8:
+            raise HTTPException(
+                status_code=400, detail="Password must be at least 8 characters long"
+            )
+    else:
+        new_password = auth_dependency.generate_random_password()
+
+    user.hashed_password = bcrypt.hash(new_password)
+    db.commit()
+
+    mailer_util.admin_password_reset_email(
+        user.email, user.firstname, new_password, background_tasks,
+        sent_by_user_id=current_user["user_id"],
+    )
+
+    dependency.log_activity(
+        current_user["user_id"],
+        "ADMIN_RESET_PASSWORD",
+        current_user["username"],
+        "127.0.0.1",
+        f"Admin set a new password for user id {user_id}",
+    )
+
+    return {
+        "detail": "Password updated and emailed to the user successfully",
+        "password": new_password,
+    }
+
+
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: int,

@@ -565,6 +565,27 @@ def password_reset_email(
                                email_type="password_reset")
 
 
+def admin_password_reset_email(
+    recipient_email, firstname, new_password, background_tasks: BackgroundTasks = None,
+    sent_by_user_id=None,
+):
+    """Sent when an admin sets a user's password directly (random or
+    admin-typed) via the Users admin section — unlike password_reset_email
+    above, this carries the actual new password since the user didn't
+    request or choose it themselves."""
+    subject = "Your ECSACONM Events Portal password has been reset by an administrator"
+    template = templates.get_template("admin_password_reset_template.html")
+    email_body = template.render(
+        subject=subject,
+        firstname=firstname,
+        email=recipient_email,
+        password=new_password,
+        year=YEAR,
+    )
+    send_email_backgroundable(recipient_email, subject, email_body, background_tasks,
+                               email_type="admin_password_reset", sent_by_user_id=sent_by_user_id)
+
+
 def account_verification_email(
     recipient_email, firstname, background_tasks: BackgroundTasks = None
 ):

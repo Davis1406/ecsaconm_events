@@ -36,7 +36,7 @@
       </a>
     </router-link>
 
-    <router-link v-if="has('ADMIN_DASHBOARD')" :to="{ name: 'AttendanceConfirmation' }" v-slot="{ isActive }" custom>
+    <router-link v-if="has('ADMIN_DASHBOARD') || has('VIEW_REGISTRATIONS')" :to="{ name: 'AttendanceConfirmation' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('AttendanceConfirmation')"
         class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
         <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">

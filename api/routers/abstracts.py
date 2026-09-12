@@ -1305,20 +1305,26 @@ def _resolve_presenter_recipients(db, event_id=None, selected_emails=None):
     """Presenters (accepted-abstract authors marked as presenting) who have
     both registered and paid for the event — the same "registered and paid"
     gate used elsewhere for is_paid (secretariat counts as paid)."""
-    q = db.query(AbstractAuthor).join(
-        Abstract, AbstractAuthor.abstract_id == Abstract.id
-    ).options(
-        joinedload(AbstractAuthor.abstract).joinedload(Abstract.event),
+    q = db.query(Abstract).options(
+        joinedload(Abstract.authors), joinedload(Abstract.event),
     ).filter(
-        AbstractAuthor.is_presenting == True,
-        AbstractAuthor.email != None,
-        AbstractAuthor.email != "",
         Abstract.status == "accepted",
         Abstract.deleted_at == None,
     )
     if event_id:
         q = q.filter(Abstract.event_id == event_id)
-    presenters = q.all()
+    abstracts = q.all()
+
+    # Same fallback as the abstract-book generator: when no author on an
+    # abstract is explicitly flagged is_presenting (a data-entry gap), treat
+    # every author with an email as a presenting candidate rather than
+    # silently dropping that abstract's presenters from the mailing.
+    presenters = []
+    for a in abstracts:
+        authors = [au for au in a.authors if au.is_presenting and au.email]
+        if not authors:
+            authors = [au for au in a.authors if au.email]
+        presenters.extend(authors)
 
     selected_set = {e.strip().lower() for e in selected_emails} if selected_emails else None
 

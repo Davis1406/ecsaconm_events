@@ -47,7 +47,7 @@
               style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
               {{ impersonating ? 'Switching…' : 'Log in as User' }}
             </button>
-            <button @click="resetPassword"
+            <button @click="openPasswordModal"
               class="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
               Reset Password
             </button>
@@ -275,6 +275,70 @@
         </div>
       </div>
     </div>
+
+    <!-- Reset password modal -->
+    <div v-if="showPasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-gray-800">Reset Password</h3>
+          <button @click="closePasswordModal" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <p class="text-sm text-gray-500">
+            Set a new password for <strong>{{ user.firstname }} {{ user.lastname }}</strong>
+            ({{ user.email }}). They'll be emailed the new password and told an
+            admin reset it.
+          </p>
+
+          <div class="flex gap-2">
+            <label class="flex-1 flex items-center gap-2 border rounded-lg px-3 py-2 text-sm cursor-pointer"
+              :class="passwordMode === 'random' ? 'border-pink-400 bg-pink-50' : 'border-gray-200'">
+              <input type="radio" value="random" v-model="passwordMode" @change="generatePassword" />
+              Generate random
+            </label>
+            <label class="flex-1 flex items-center gap-2 border rounded-lg px-3 py-2 text-sm cursor-pointer"
+              :class="passwordMode === 'custom' ? 'border-pink-400 bg-pink-50' : 'border-gray-200'">
+              <input type="radio" value="custom" v-model="passwordMode" @change="newPassword = ''" />
+              Type my own
+            </label>
+          </div>
+
+          <label class="block">
+            <span class="block text-xs font-semibold text-gray-500 mb-1">
+              {{ passwordMode === 'random' ? 'Generated password' : 'New password' }}
+            </span>
+            <div class="flex gap-2">
+              <input v-model="newPassword" :readonly="passwordMode === 'random'" type="text"
+                placeholder="At least 8 characters"
+                class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-pink-400" />
+              <button v-if="passwordMode === 'random'" @click="generatePassword" type="button"
+                class="px-3 py-2 rounded-lg text-xs font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+                Regenerate
+              </button>
+            </div>
+          </label>
+
+          <p v-if="passwordError" class="text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600">{{ passwordError }}</p>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button @click="closePasswordModal"
+            class="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <button @click="submitPasswordReset" :disabled="passwordSaving"
+            class="px-4 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ passwordSaving ? 'Saving…' : 'Reset & Email' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -311,6 +375,12 @@ export default {
       editPhotoUploading: false,
       editPhotoError: '',
       editCountries: [],
+      // Reset password
+      showPasswordModal: false,
+      passwordMode: 'random',
+      newPassword: '',
+      passwordSaving: false,
+      passwordError: '',
       editForm: {
         registration_id: null,
         title: '',
@@ -414,12 +484,38 @@ export default {
         this.impersonating = false
       }
     },
-    async resetPassword() {
+    openPasswordModal() {
+      this.passwordMode = 'random'
+      this.passwordError = ''
+      this.generatePassword()
+      this.showPasswordModal = true
+    },
+    closePasswordModal() {
+      this.showPasswordModal = false
+    },
+    generatePassword() {
+      // 12 random characters from a readable, mixed-case + digit + symbol
+      // set — matches the backend's own minimum length.
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%'
+      let pwd = ''
+      for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)]
+      this.newPassword = pwd
+    },
+    async submitPasswordReset() {
+      this.passwordError = ''
+      if (!this.newPassword || this.newPassword.length < 8) {
+        this.passwordError = 'Password must be at least 8 characters long.'
+        return
+      }
+      this.passwordSaving = true
       try {
-        await createItem(`users/${this.id}/reset-password`, {})
-        this.showMessage('Password reset and sent to email.', 'success')
+        await createItem(`users/${this.id}/set-password`, { new_password: this.newPassword })
+        this.showPasswordModal = false
+        this.showMessage('Password reset and emailed to the user.', 'success')
       } catch (error) {
-        this.showMessage('Failed to reset password.', 'error')
+        this.passwordError = error.response?.data?.detail || 'Failed to reset password.'
+      } finally {
+        this.passwordSaving = false
       }
     },
     async openEditParticipant() {
