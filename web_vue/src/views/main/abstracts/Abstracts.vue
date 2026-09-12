@@ -332,10 +332,10 @@
                     </button>
                     <span v-else class="text-sm font-semibold text-on-surface">{{ presenterName(a) }}</span>
 
-                    <span class="text-xs text-on-surface-variant mt-0.5">{{ presenterEmail(a) }}</span>
+                    <span class="text-xs text-on-surface-variant mt-0.5">{{ getPresenterEmail(a) }}</span>
 
                     <!-- Registration badge -->
-                    <div v-if="presenterEmail(a) && presenterStatus(a)" class="mt-1.5">
+                    <div v-if="getPresenterEmail(a) && presenterStatus(a)" class="mt-1.5">
                       <span v-if="presenterStatus(a).has_paid"
                         class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-tertiary-container/40 text-cp-tertiary">
                         <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
@@ -1669,7 +1669,7 @@ export default {
     },
 
     presenterStatus(abstract) {
-      const email = this.presenterEmail(abstract)
+      const email = this.getPresenterEmail(abstract)
       if (!email) return null
       const key = `${email.toLowerCase()}:${abstract.event_id}`
       return this.presenterStatusMap[key] || null
@@ -1747,7 +1747,7 @@ export default {
       if (presenter) return [presenter.firstname, presenter.lastname].filter(Boolean).join(' ') || '—'
       return abstract.submitter_name || '—'
     },
-    presenterEmail(abstract) {
+    getPresenterEmail(abstract) {
       if (abstract.matched_presenter_email) return abstract.matched_presenter_email
       const authors = abstract.authors || []
       const presenter = authors.find(au => au.is_presenting) || null
