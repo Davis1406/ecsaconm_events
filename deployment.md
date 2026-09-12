@@ -167,3 +167,53 @@ currently has documented Cloudflare dashboard/API access from this
 environment — if edge cache staleness ever *doesn't* self-resolve (unlike
 this incident), purging it needs that access, which should get added to
 TEAM.md §7 alongside the EC2/Nginx details already there.
+
+---
+
+## 2026-09-13 — `/#/abstracts` blank again: real bug this time (data/method name collision)
+
+**What happened**
+
+A user reported `/#/abstracts` rendering a blank page after the "Send Email
+to Presenters" change. Hard refresh did **not** fix it this time — it
+"flashed and disappeared" (rendered briefly, then unmounted). That symptom
+differs from the 2026-09-11 cache incident, so it was investigated as a
+code regression rather than cache.
+
+**Root cause**
+
+The `5aa2895` change added a new `data()` property also named
+`presenterEmail` (the "Send Email to Presenters" modal state) to
+`web_vue/src/views/main/abstracts/Abstracts.vue` — but the component already
+had a `presenterEmail()` **method** (returns the presenter's email). In Vue 3,
+`data()` wins over `methods` when names collide, so `this.presenterEmail`
+became the modal object and `presenterStatus()` calling
+`this.presenterEmail(abstract)` threw `TypeError: this.presenterEmail is not
+a function` during re-render — once the async `presenter-registration-status`
+data arrived, the render threw and Vue unmounted the tree. The page "flashed
+and disappeared" because it rendered before the data loaded.
+
+**Resolution**
+
+Renamed the colliding method to `getPresenterEmail()` (3 call sites; the
+modal's `presenterEmail` data object untouched). Committed as `1d29b0e`.
+Reproduced the crash before (headless Chrome + admin token: `TypeError` × 3,
+blank page) and confirmed no crash after. A scan of all `.vue` files found no
+other data/method name collisions (only legitimate data+`watch` pairings).
+
+**Takeaways**
+
+1. **In Vue 3, `data()` shadows `methods` of the same name silently.** When
+   adding a `data()` property, grep the file for a same-named method (and
+   vice-versa). Runtime errors from this only surface when data-dependent
+   code paths execute — build passes, page "flashes and disappears".
+2. **"Blank page after a change" is not always the Cloudflare/cache issue.**
+   The tell is *does it persist after a hard refresh*. If it does, treat it
+   as a code regression; the cache incident self-resolves with a hard refresh.
+3. **Deploy note for this fix:** the server's git working tree still has
+   hand-applied edits (untracked `api/templates/presenter_instructions_template.html`,
+   modified `api/routers/abstracts.py`, etc. — the documented anti-pattern).
+   `server-deploy.sh` (git-pull based) will refuse to run over those, so use
+   `deploy/deploy.sh web` (rsync-based) to ship `web_vue/dist/`, and hard-refresh
+   after. Clean the server tree back to a single `git pull`-able state when
+   convenient.
