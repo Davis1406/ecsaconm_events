@@ -288,10 +288,13 @@ export default {
         const response = await createItem(`auth/impersonate/${user.id}`, {})
         this.authStore.startImpersonation(response)
         setAuthToken()
-        const targetIsAdmin = (response.permissions || []).some(
-          p => (typeof p === 'string' ? p : p.permission_code) === 'ADMIN_DASHBOARD'
-        )
-        this.$router.push({ name: targetIsAdmin ? 'Dashboard' : 'MyDashboard' })
+        // Any assigned permission (not just ADMIN_DASHBOARD) means the target
+        // is a staff account — restricted roles like Finance (VIEW_EVENT,
+        // VIEW_REGISTRATIONS, VIEW_USER, no ADMIN_DASHBOARD) still belong in
+        // the admin panel, not the plain-user "My Account" area. Regular
+        // delegates/presenters (role "User") hold no permissions at all.
+        const targetIsStaff = (response.permissions || []).length > 0
+        this.$router.push({ name: targetIsStaff ? 'Dashboard' : 'MyDashboard' })
       } catch (error) {
         console.error('Error impersonating user:', error)
       } finally {

@@ -243,7 +243,10 @@ async def bulk_update_payment(
     auth_dependency: Auth = Depends(get_auth_dep),
 ):
     """Bulk verify / un-verify payment for a set of registrations."""
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    # ADMIN_DASHBOARD still bypasses this check; anyone entrusted with
+    # VIEW_REGISTRATIONS (e.g. the Finance role) can also manage registration
+    # payment status, matching their attendance-management access.
+    auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
     if not data.registration_ids:
         raise HTTPException(status_code=400, detail="No registrations selected")
 

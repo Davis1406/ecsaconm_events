@@ -105,11 +105,13 @@ export default {
         authStore.setAccessToken(response.access_token)
         setAuthToken()
 
-        // Redirect admins to admin dashboard, regular users to their account
-        const isAdmin = (response.permissions || []).some(
-          p => p.permission_code === 'ADMIN_DASHBOARD'
-        )
-        this.$router.push(isAdmin ? '/dashboard' : '/my-account')
+        // Any assigned permission (not just ADMIN_DASHBOARD) means the user is
+        // a staff account — restricted roles like Finance (VIEW_EVENT,
+        // VIEW_REGISTRATIONS, VIEW_USER, no ADMIN_DASHBOARD) still belong in
+        // the admin panel, not the plain-user "My Account" area. Regular
+        // delegates/presenters (role "User") hold no permissions at all.
+        const isStaff = (response.permissions || []).length > 0
+        this.$router.push(isStaff ? '/dashboard' : '/my-account')
       } catch (error) {
         this.message = 'Invalid email or password. Please try again.'
       } finally {
