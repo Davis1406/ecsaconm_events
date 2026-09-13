@@ -1282,24 +1282,33 @@
 
           <!-- Email preview (server-rendered, sample recipient) -->
           <div>
-            <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center justify-between mb-2 gap-3">
               <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Email Preview</label>
-              <span class="text-[10px] text-gray-400">
-                Content adapts per presenter's oral/poster type — shown here for a sample recipient.
-              </span>
+              <div class="flex items-center gap-1">
+                <button v-for="t in ['oral', 'poster', 'either']"
+                  v-show="t === 'oral' ? presenterEmail.oralCount : (t === 'poster' ? presenterEmail.posterCount : presenterEmail.eitherCount)"
+                  :key="t"
+                  @click="presenterEmail.previewType = t; applyPresenterPreview()"
+                  class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition"
+                  :class="presenterEmail.previewType === t
+                    ? 'bg-gray-800 text-white border-gray-800'
+                    : 'border-gray-200 text-gray-500 hover:bg-gray-100'">
+                  {{ t === 'oral' ? 'Oral' : (t === 'poster' ? 'Poster' : 'Both') }}
+                </button>
+              </div>
             </div>
             <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
               <div class="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                <span class="text-xs font-semibold text-gray-500">{{ presenterEmail.subject || 'Email subject' }}</span>
+                <span class="text-xs font-semibold text-gray-500">{{ presenterEmail.previewSubject || presenterEmail.subject || 'Email subject' }}</span>
                 <span class="text-[10px] text-gray-400 uppercase tracking-wide">
-                  Preview · {{ presenterEmail.recipientCount }} recipient{{ presenterEmail.recipientCount !== 1 ? 's' : '' }}
+                  Preview · {{ presenterEmail.previewCount || presenterEmail.recipientCount }} recipient{{ (presenterEmail.previewCount || presenterEmail.recipientCount) !== 1 ? 's' : '' }}
                 </span>
               </div>
               <SpinnerComponent v-if="presenterEmail.loading" />
-              <iframe v-else :srcdoc="presenterEmail.body_html" style="width:100%; height:440px; border:none;"></iframe>
+              <iframe v-else :srcdoc="presenterEmail.previewHtml || presenterEmail.body_html" style="width:100%; height:440px; border:none;"></iframe>
             </div>
             <p class="text-xs text-gray-400 mt-1">
-              To edit this email's wording, use Configurations → Email Templates → Presenter Instructions.
+              Each presenter receives the version matching their abstract's type. To edit this email's wording, use Configurations → Email Templates → Presenter Instructions.
             </p>
           </div>
         </div>
@@ -1407,6 +1416,8 @@ export default {
       presenterEmail: {
         open: false, loading: false, sending: false,
         subject: '', body_html: '',
+        previewType: 'oral', previews: {},
+        previewHtml: '', previewSubject: '', previewCount: 0,
         recipientCount: 0, oralCount: 0, posterCount: 0, eitherCount: 0,
         result: '', error: '',
       },
@@ -2018,15 +2029,30 @@ export default {
         })
         this.presenterEmail.subject = res.data?.subject || ''
         this.presenterEmail.body_html = res.data?.body_html || ''
+        this.presenterEmail.previews = res.data?.previews || {}
         this.presenterEmail.recipientCount = res.data?.recipient_count || 0
         this.presenterEmail.oralCount = res.data?.oral_count || 0
         this.presenterEmail.posterCount = res.data?.poster_count || 0
         this.presenterEmail.eitherCount = res.data?.either_count || 0
+        // Pick a sensible preview: start on "either" when such presenters
+        // exist, otherwise land on the richest available block.
+        if (res.data?.either_count) this.presenterEmail.previewType = 'either'
+        else if (this.presenterEmail.previewType === 'either' && !res.data?.either_count) this.presenterEmail.previewType = 'oral'
+        if (!this.presenterEmail.previews[this.presenterEmail.previewType]) {
+          this.presenterEmail.previewType = this.presenterEmail.posterCount ? 'poster' : 'oral'
+        }
+        this.applyPresenterPreview()
       } catch (e) {
         this.presenterEmail.error = e.response?.data?.detail || 'Failed to load preview.'
       } finally {
         this.presenterEmail.loading = false
       }
+    },
+    applyPresenterPreview() {
+      const p = this.presenterEmail.previews[this.presenterEmail.previewType]
+      this.presenterEmail.previewHtml = p?.body_html || this.presenterEmail.body_html
+      this.presenterEmail.previewSubject = p?.subject || this.presenterEmail.subject
+      this.presenterEmail.previewCount = p?.count ?? this.presenterEmail.recipientCount
     },
     async sendPresenterEmails() {
       this.presenterEmail.sending = true

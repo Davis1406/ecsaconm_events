@@ -4,8 +4,32 @@
 
     <div class="flex sm:flex-row flex-col sm:justify-between sm:items-center items-start gap-3">
       <search-component @search="handleSearch" />
-      <div class="text-sm text-gray-500">
-        {{ total }} presentation{{ total !== 1 ? 's' : '' }} uploaded
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-gray-500">
+          {{ total }} presentation{{ total !== 1 ? 's' : '' }} uploaded
+        </span>
+        <!-- Batch download toolbar -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Batch</span>
+          <button @click="downloadPresentationsZip(null)" :disabled="zipDownloading"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40"
+            style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+            All ({{ total }})
+          </button>
+          <button @click="downloadPresentationsZip('oral')" :disabled="zipDownloading"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40">
+            Oral
+          </button>
+          <button @click="downloadPresentationsZip('poster')" :disabled="zipDownloading"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40">
+            Poster
+          </button>
+          <span v-if="zipDownloading" class="text-xs text-gray-400 italic">Preparing ZIP…</span>
+          <span v-if="zipError" class="text-xs text-red-500">{{ zipError }}</span>
+        </div>
       </div>
     </div>
 
@@ -69,6 +93,7 @@ import SpinnerComponent from '@/components/Spinner.vue'
 import PaginationComponent from '@/components/PaginationComponent.vue'
 import SearchComponent from '@/components/SearchComponent.vue'
 import { useAuthStore } from '@/store/authStore'
+import { saveAs } from 'file-saver'
 import axios from 'axios'
 
 export default {
@@ -85,6 +110,7 @@ export default {
       pageSize: 20,
       searchPhrase: '',
       apiUrl: import.meta.env.VITE_API_URL,
+      zipDownloading: false, zipError: '',
     }
   },
 
@@ -130,6 +156,31 @@ export default {
     handlePageChange(page) {
       this.currentPage = page
       this.load()
+    },
+
+    async downloadPresentationsZip(presentationType) {
+      this.zipDownloading = true
+      this.zipError = ''
+      try {
+        const params = {}
+        if (presentationType) params.presentation_type = presentationType
+        const res = await axios.get(`${this.apiUrl}/abstracts/download-presentations-zip`, {
+          params,
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          responseType: 'blob',
+        })
+        saveAs(res.data, `presentations_${presentationType || 'all'}.zip`)
+      } catch (e) {
+        const blob = e.response?.data
+        if (blob instanceof Blob) {
+          try { this.zipError = JSON.parse(await blob.text())?.detail || 'No matching presentations found to download.' }
+          catch { this.zipError = 'No matching presentations found to download.' }
+        } else {
+          this.zipError = e.response?.data?.detail || 'No matching presentations found to download.'
+        }
+      } finally {
+        this.zipDownloading = false
+      }
     },
 
     presenterName(row) {

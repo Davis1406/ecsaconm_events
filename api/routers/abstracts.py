@@ -1392,15 +1392,36 @@ def presenter_instructions_preview(
     from models.models import EmailTemplate as EmailTemplateModel
     db_tpl = db.query(EmailTemplateModel).filter_by(template_key="presenter_instructions").first()
 
-    # Prefer an "either" presenter for the sample so both instruction blocks
-    # show in the preview; fall back to whoever qualifies, else a placeholder.
-    sample = next((r for r in recipients if r["presentation_type"] == "either"), None) or (
-        recipients[0] if recipients else None
-    )
+    # Render one preview per presentation type so the admin can see the Oral
+    # block, the Poster block, and (when they exist) the combined "either"
+    # email. Each preview uses a real recipient of that type as its sample so
+    # the subject/firstname/title look like the actual email.
+    def _sample_for(ptype):
+        return next((r for r in recipients if r["presentation_type"] == ptype), None)
+
+    previews = {}
+    for ptype, label in (("oral", "Oral"), ("poster", "Poster"), ("either", "Either")):
+        sample = _sample_for(ptype)
+        sample_type = ptype
+        sample_firstname = sample["firstname"] if sample else "Jane"
+        sample_title = sample["abstract_title"] if sample else "Sample Abstract Title"
+        psubject, pbody = _render_presenter_instructions(
+            db_tpl.subject if db_tpl else None,
+            db_tpl.body_html if db_tpl else None,
+            sample_firstname, event_name, sample_title, sample_type,
+        )
+        previews[ptype] = {
+            "subject": psubject,
+            "body_html": pbody,
+            "count": sum(1 for r in recipients if r["presentation_type"] == ptype),
+        }
+
+    # Back-compat: a single sample preview. Prefer the first "either" so both
+    # blocks show, else the first recipient overall.
+    sample = _sample_for("either") or (recipients[0] if recipients else None)
     sample_type = sample["presentation_type"] if sample else "either"
     sample_firstname = sample["firstname"] if sample else "Jane"
     sample_title = sample["abstract_title"] if sample else "Sample Abstract Title"
-
     subject, body_html = _render_presenter_instructions(
         db_tpl.subject if db_tpl else None,
         db_tpl.body_html if db_tpl else None,
@@ -1410,6 +1431,7 @@ def presenter_instructions_preview(
     return {
         "subject": subject,
         "body_html": body_html,
+        "previews": previews,
         "recipient_count": len(recipients),
         "oral_count": sum(1 for r in recipients if r["presentation_type"] == "oral"),
         "poster_count": sum(1 for r in recipients if r["presentation_type"] == "poster"),
