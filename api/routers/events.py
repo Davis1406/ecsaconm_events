@@ -668,6 +668,15 @@ async def get_event(
             )
             .count()
         )
+        usher_total = (
+            db.query(Registration)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.deleted_at == None,
+                Registration.participation_role == ParticipationRole.usher,
+            )
+            .count()
+        )
         badge_exported_total = (
             db.query(Registration)
             .filter(
@@ -685,6 +694,7 @@ async def get_event(
             "proof_pending": proof_pending_total,
             "presenters": presenter_total,
             "secretariat": secretariat_total,
+            "usher": usher_total,
             "badges_exported": badge_exported_total,
         }
 
@@ -700,6 +710,10 @@ async def get_event(
         elif participant_filter == "secretariat":
             reg_q = reg_q.filter(
                 Registration.participation_role == ParticipationRole.secretariat
+            )
+        elif participant_filter == "usher":
+            reg_q = reg_q.filter(
+                Registration.participation_role == ParticipationRole.usher
             )
         elif participant_filter == "badges_exported":
             reg_q = reg_q.filter(Registration.badge_exported_at.isnot(None))

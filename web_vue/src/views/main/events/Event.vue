@@ -1308,6 +1308,7 @@ export default {
         { key: 'all', label: 'All' },
         { key: 'not_printed', label: 'Not Printed' },
         { key: 'secretariat', label: 'Secretariat' },
+        { key: 'usher', label: 'Ushers' },
         { key: 'paid', label: 'Paid' },
         { key: 'unpaid', label: 'Unpaid' },
       ],
@@ -1358,6 +1359,7 @@ export default {
         { key: 'all', label: 'All' },
         { key: 'presenters', label: 'Abstract Presenters' },
         { key: 'secretariat', label: 'Secretariat' },
+        { key: 'usher', label: 'Ushers' },
         { key: 'paid', label: 'Paid' },
         { key: 'unpaid', label: 'Unpaid' },
         { key: 'proof_pending', label: 'Proof Submitted, Not Paid' },
@@ -1365,7 +1367,7 @@ export default {
       ],
       participantsTotal: 0,
       participantsFilteredTotal: 0,
-      filterCounts: { all: 0, presenters: 0, secretariat: 0, paid: 0, unpaid: 0, proof_pending: 0, badges_exported: 0 },
+      filterCounts: { all: 0, presenters: 0, secretariat: 0, usher: 0, paid: 0, unpaid: 0, proof_pending: 0, badges_exported: 0 },
       togglingPaidId: null,
       localPage: (session && session.page > 0) ? session.page : 1,
       localPageSize: (session && [25, 50, 100].includes(session.pageSize)) ? session.pageSize : 25,
@@ -1479,6 +1481,7 @@ export default {
       if (this.badgePickerFilter === 'paid') list = list.filter(p => p.paid);
       else if (this.badgePickerFilter === 'unpaid') list = list.filter(p => !p.paid);
       else if (this.badgePickerFilter === 'secretariat') list = list.filter(p => (p.participation_role || '').toLowerCase() === 'secretariat');
+      else if (this.badgePickerFilter === 'usher') list = list.filter(p => (p.participation_role || '').toLowerCase() === 'usher');
       else if (this.badgePickerFilter === 'not_printed') list = list.filter(p => p.paid && !p.badge_exported_at);
       if (this.badgePickerExcludeSecretariat) list = list.filter(p => (p.participation_role || '').toLowerCase() !== 'secretariat');
       return list;
@@ -1765,6 +1768,7 @@ export default {
         all: 'All',
         presenters: 'Presenters',
         secretariat: 'Secretariat',
+        usher: 'Ushers',
         paid: 'Paid',
         unpaid: 'Unpaid',
         proof_pending: 'ProofSubmitted',
