@@ -1112,6 +1112,16 @@
                   :style="badgePickerFilter === f.key ? 'background-color: rgb(254,80,103);' : ''">
                   {{ f.label }}
                 </button>
+                <button @click="toggleBadgePickerExcludeSecretariat"
+                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition"
+                  :class="badgePickerExcludeSecretariat ? 'text-white border-transparent' : 'text-gray-600 border-gray-200'"
+                  :style="badgePickerExcludeSecretariat ? 'background-color: rgb(100,116,139);' : ''"
+                  title="Secretariat already have their badges — exclude them from selection">
+                  <svg v-if="badgePickerExcludeSecretariat" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Exclude secretariat
+                </button>
                 <button v-if="!badgePickerAllFilteredSelected" @click="selectAllBadgePicker"
                   class="ml-auto text-xs font-semibold hover:underline" style="color: rgb(254,80,103);">
                   Select all ({{ badgePickerFiltered.length }})
@@ -1293,6 +1303,7 @@ export default {
       badgePickerLoading: false,
       badgePickerSearch: '',
       badgePickerFilter: 'all',
+      badgePickerExcludeSecretariat: false,
       badgePickerFilterOptions: [
         { key: 'all', label: 'All' },
         { key: 'secretariat', label: 'Secretariat' },
@@ -1467,6 +1478,7 @@ export default {
       if (this.badgePickerFilter === 'paid') list = list.filter(p => p.paid);
       else if (this.badgePickerFilter === 'unpaid') list = list.filter(p => !p.paid);
       else if (this.badgePickerFilter === 'secretariat') list = list.filter(p => (p.participation_role || '').toLowerCase() === 'secretariat');
+      if (this.badgePickerExcludeSecretariat) list = list.filter(p => (p.participation_role || '').toLowerCase() !== 'secretariat');
       return list;
     },
     badgePickerSelected() {
@@ -2080,6 +2092,10 @@ export default {
         .filter(p => (p.participation_role || '').toLowerCase() === 'secretariat')
         .map(p => p.id);
       this.selectedBadgeIds = this.selectedBadgeIds.filter(id => !secretariatIds.includes(id));
+    },
+    toggleBadgePickerExcludeSecretariat() {
+      this.badgePickerExcludeSecretariat = !this.badgePickerExcludeSecretariat;
+      if (this.badgePickerExcludeSecretariat) this.deselectSecretariatBadges();
     },
     async downloadSelectedBadges() {
       if (!this.selectedBadgeIds.length || this.badgesDownloading) return;
