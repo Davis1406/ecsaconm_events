@@ -1303,8 +1303,7 @@ def _render_presenter_instructions(subject_tpl, body_html_tpl, firstname, event_
 
 def _resolve_presenter_recipients(db, event_id=None, selected_emails=None):
     """Presenters (accepted-abstract authors marked as presenting) who have
-    both registered and paid for the event — the same "registered and paid"
-    gate used elsewhere for is_paid (secretariat counts as paid)."""
+    registered for the event (registration required, payment not required)."""
     q = db.query(Abstract).options(
         joinedload(Abstract.authors), joinedload(Abstract.event),
     ).filter(
@@ -1349,7 +1348,7 @@ def _resolve_presenter_recipients(db, event_id=None, selected_emails=None):
             Registration.event_id == target_event_id,
             Registration.deleted_at == None,
         ).first()
-        if not reg or not reg.is_paid:
+        if not reg:
             continue
 
         presentation_type = (
