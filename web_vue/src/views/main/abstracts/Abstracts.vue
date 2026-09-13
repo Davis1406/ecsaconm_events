@@ -746,12 +746,27 @@
               <ArrowDownTrayIcon class="h-3.5 w-3.5" />
               Get
             </button>
+            <button @click="replaceUploadedPresentation(u)" :disabled="replacingUploadId === u.id"
+              title="Replace the uploaded file"
+              class="inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full font-semibold border transition hover:opacity-90 disabled:opacity-40"
+              style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+              <ArrowPathIcon class="h-3.5 w-3.5" />
+              {{ replacingUploadId === u.id ? 'Replacing…' : 'Replace' }}
+            </button>
           </div>
         </div>
         <div class="px-5 py-3 border-t border-gray-100">
           <pagination-component :currentPage="uploadsPage" :totalPages="uploadsTotalPages" @page-change="handleUploadsPage" />
         </div>
       </div>
+    </div>
+
+    <input type="file" ref="replaceUploadInput" class="hidden"
+      accept=".pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp" @change="onReplaceUploadChange" />
+    <div v-if="replaceUploadMsg"
+      class="mb-3 px-3 py-2 rounded-md text-sm"
+      :class="replaceUploadErr ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'">
+      {{ replaceUploadMsg }}
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════ -->
@@ -1437,6 +1452,8 @@ export default {
       uploadsTotal: 0, uploadsSearch: '',
       uploadsOralCount: 0, uploadsPosterCount: 0,
       zipDownloading: false, zipError: '',
+      replacingUploadId: null, replaceUploadTarget: null,
+      replaceUploadMsg: '', replaceUploadErr: false,
       uploadPreview: { open: false, name: '', src: '', abstract: null },
 
       // ── Tab 5: Visual Report ─────────────────────────────────────────────
@@ -2161,6 +2178,41 @@ export default {
         saveAs(res.data, `${cleanTitle || 'presentation'}.${ext}`)
       } catch (e) {
         this.errorMsg = 'Failed to download presentation.'
+      }
+    },
+
+    replaceUploadedPresentation(u) {
+      this.replaceUploadTarget = u
+      this.replaceUploadMsg = ''
+      this.replaceUploadErr = false
+      this.$refs.replaceUploadInput.value = ''
+      this.$refs.replaceUploadInput.click()
+    },
+    async onReplaceUploadChange(e) {
+      const file = e.target.files && e.target.files[0]
+      if (!file || !this.replaceUploadTarget) return
+      const id = this.replaceUploadTarget.id
+      this.replacingUploadId = id
+      this.replaceUploadMsg = ''
+      this.replaceUploadErr = false
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        await axios.post(`${this.apiUrl}/abstracts/${id}/upload-presentation`, form, {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        })
+        this.replaceUploadMsg = `Replaced "${String(this.replaceUploadTarget.title || 'presentation').slice(0, 60)}" — upload successful.`
+        this.replaceUploadErr = false
+        await this.loadUploads()
+      } catch (err) {
+        this.replaceUploadMsg = err.response?.data?.detail || 'Replace failed.'
+        this.replaceUploadErr = true
+      } finally {
+        this.replacingUploadId = null
+        this.replaceUploadTarget = null
       }
     },
 

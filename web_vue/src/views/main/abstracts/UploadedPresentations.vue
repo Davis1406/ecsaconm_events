@@ -33,6 +33,12 @@
       </div>
     </div>
 
+    <div v-if="replaceMsg"
+      class="px-3 py-2 rounded-md text-sm"
+      :class="replaceErr ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'">
+      {{ replaceMsg }}
+    </div>
+
     <SpinnerComponent v-if="isLoading" />
 
     <div v-else class="rounded-md border-2 border-white-600 shadow-sm text-abbey-500">
@@ -66,16 +72,28 @@
         <div class="sm:w-2/12 w-full p-1 text-xs text-gray-600">{{ row.event }}</div>
         <div class="sm:w-2/12 w-full p-1 text-xs text-gray-500">{{ formatDate(row.presentation_uploaded_at) }}</div>
         <div class="sm:w-2/12 w-full p-1">
-          <a :href="`${apiUrl}/abstracts/${row.id}/download-presentation`"
-            target="_blank"
-            class="inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full font-semibold text-white transition hover:opacity-90"
-            style="background-color: rgb(0,150,180);">
-            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Download
-          </a>
+          <div class="flex items-center gap-1.5">
+            <a :href="`${apiUrl}/abstracts/${row.id}/download-presentation`"
+              target="_blank"
+              class="inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full font-semibold text-white transition hover:opacity-90"
+              style="background-color: rgb(0,150,180);">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download
+            </a>
+            <button @click="replacePresentation(row)" :disabled="replacingId === row.id"
+              title="Replace the uploaded file"
+              class="inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full font-semibold border transition hover:opacity-90 disabled:opacity-40"
+              style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ replacingId === row.id ? 'Replacing…' : 'Replace' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -84,6 +102,9 @@
       :currentPage="currentPage"
       :totalPages="totalPages"
       @page-change="handlePageChange" />
+
+    <input type="file" ref="replaceFileInput" class="hidden"
+      :accept="acceptedExtensions" @change="onReplaceFileChange" />
   </div>
 </template>
 
@@ -113,6 +134,10 @@ export default {
       searchPhrase: '',
       apiUrl: import.meta.env.VITE_API_URL,
       zipDownloading: false, zipError: '',
+      replacingId: null,
+      replaceTarget: null,
+      replaceMsg: '', replaceErr: false,
+      acceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp',
     }
   },
 
@@ -189,6 +214,41 @@ export default {
 
     presenterName(row) {
       return row.presenting_author?.name || row.submitter_name || '—'
+    },
+
+    replacePresentation(row) {
+      this.replaceTarget = row
+      this.replaceMsg = ''
+      this.replaceErr = false
+      this.$refs.replaceFileInput.value = ''
+      this.$refs.replaceFileInput.click()
+    },
+    async onReplaceFileChange(e) {
+      const file = e.target.files && e.target.files[0]
+      if (!file || !this.replaceTarget) return
+      const id = this.replaceTarget.id
+      this.replacingId = id
+      this.replaceMsg = ''
+      this.replaceErr = false
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await axios.post(`${this.apiUrl}/abstracts/${id}/upload-presentation`, form, {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        })
+        this.replaceMsg = `Replaced "${this.replaceTarget.title.slice(0, 60)}" — upload successful.`
+        this.replaceErr = false
+        await this.load()
+      } catch (err) {
+        this.replaceMsg = err.response?.data?.detail || 'Replace failed.'
+        this.replaceErr = true
+      } finally {
+        this.replacingId = null
+        this.replaceTarget = null
+      }
     },
 
     presenterEmail(row) {
