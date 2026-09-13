@@ -427,11 +427,6 @@ export default {
           label: 'Sponsor / Exhibitor',
           fee: 'Contact the secretariat for sponsorship packages.',
         },
-        {
-          value: 'secretariat',
-          label: 'Secretariat / Staff',
-          fee: 'Internal registration — no registration fee.',
-        },
       ],
     }
   },

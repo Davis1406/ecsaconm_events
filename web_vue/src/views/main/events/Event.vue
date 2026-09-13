@@ -220,11 +220,12 @@
           :style="filterPreset === f.key ? 'background-color: rgb(254,80,103);' : ''">
           {{ f.label }} <span :class="filterPreset === f.key ? 'opacity-80' : 'text-gray-400'">({{ filterCounts[f.key] }})</span>
         </button>
-        <button v-if="filterPreset === 'badges_exported' && filterCounts.badges_exported > 0
+        <button v-if="filterCounts.badges_exported > 0
             && (permissions.includes('PRINT_BADGE') || permissions.includes('ADMIN_DASHBOARD'))"
           @click="clearBadgeExports" :disabled="clearingBadgeExports"
           class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-          style="background-color: rgb(254,80,103);">
+          style="background-color: rgb(254,80,103);"
+          title="Clear the Badge Exported status for every exported participant so badges can be re-generated">
           {{ clearingBadgeExports ? 'Clearing…' : 'Clear exported status' }}
         </button>
       </div>
@@ -1115,6 +1116,10 @@
                   class="ml-auto text-xs font-semibold hover:underline" style="color: rgb(254,80,103);">
                   Select all ({{ badgePickerFiltered.length }})
                 </button>
+                <button v-if="badgePickerSelectedSecretariatCount > 0" @click="deselectSecretariatBadges"
+                  class="ml-auto text-xs font-semibold hover:underline" style="color: rgb(100,116,139);">
+                  Deselect secretariat ({{ badgePickerSelectedSecretariatCount }})
+                </button>
               </div>
             </div>
             <div class="flex-1 overflow-y-auto">
@@ -1290,6 +1295,7 @@ export default {
       badgePickerFilter: 'all',
       badgePickerFilterOptions: [
         { key: 'all', label: 'All' },
+        { key: 'secretariat', label: 'Secretariat' },
         { key: 'paid', label: 'Paid' },
         { key: 'unpaid', label: 'Unpaid' },
       ],
@@ -1460,6 +1466,7 @@ export default {
       }
       if (this.badgePickerFilter === 'paid') list = list.filter(p => p.paid);
       else if (this.badgePickerFilter === 'unpaid') list = list.filter(p => !p.paid);
+      else if (this.badgePickerFilter === 'secretariat') list = list.filter(p => (p.participation_role || '').toLowerCase() === 'secretariat');
       return list;
     },
     badgePickerSelected() {
@@ -1467,6 +1474,11 @@ export default {
     },
     badgePickerSelectedCount() {
       return this.selectedBadgeIds.filter(id => this.badgePickerParticipants.some(p => p.id === id)).length;
+    },
+    badgePickerSelectedSecretariatCount() {
+      return this.badgePickerParticipants
+        .filter(p => this.selectedBadgeIds.includes(p.id))
+        .filter(p => (p.participation_role || '').toLowerCase() === 'secretariat').length;
     },
     badgePickerAllFilteredSelected() {
       const ids = this.badgePickerFiltered.map(p => p.id);
@@ -2062,6 +2074,12 @@ export default {
     selectAllBadgePicker() {
       const ids = this.badgePickerFiltered.map(p => p.id);
       this.selectedBadgeIds = [...new Set([...this.selectedBadgeIds, ...ids])];
+    },
+    deselectSecretariatBadges() {
+      const secretariatIds = this.badgePickerParticipants
+        .filter(p => (p.participation_role || '').toLowerCase() === 'secretariat')
+        .map(p => p.id);
+      this.selectedBadgeIds = this.selectedBadgeIds.filter(id => !secretariatIds.includes(id));
     },
     async downloadSelectedBadges() {
       if (!this.selectedBadgeIds.length || this.badgesDownloading) return;

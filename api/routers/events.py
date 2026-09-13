@@ -1060,6 +1060,22 @@ async def event_registration(
     # )
 
     # Check for existing registration
+    try:
+        role = ParticipationRole(registration_schema.participation_role)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid participation_role: {registration_schema.participation_role}",
+        )
+
+    # Secretariat is secretariat-entered only: it must never be chosen via
+    # public self-registration (it would bypass the fee and auto-mark paid).
+    if role == ParticipationRole.secretariat:
+        raise HTTPException(
+            status_code=400,
+            detail="Secretariat must be registered by the secretariat, not via self-registration.",
+        )
+
     existing_registration = (
         db.query(Registration)
         .filter(
@@ -1229,6 +1245,14 @@ async def onsite_register_participant(
         raise HTTPException(
             status_code=400,
             detail=f"Invalid participation_role: {data.participation_role}",
+        )
+
+    # Secretariat is entered by the secretariat itself; public onsite
+    # walk-in registration must not assign it (it bypasses the fee).
+    if role == ParticipationRole.secretariat:
+        raise HTTPException(
+            status_code=400,
+            detail="Secretariat must be registered by the secretariat, not via onsite registration.",
         )
 
     phone = (data.phone or "").strip()

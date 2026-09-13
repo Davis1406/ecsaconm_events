@@ -76,7 +76,6 @@
               <select v-model="form.participation_role"
                 class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-400">
                 <option value="delegate">Delegate</option>
-                <option value="secretariat">Secretariat</option>
                 <option value="media">Media</option>
                 <option value="exhibitor">Exhibitor</option>
                 <option value="usher">Usher</option>
