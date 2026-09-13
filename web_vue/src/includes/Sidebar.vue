@@ -57,9 +57,10 @@
     </router-link>
 
     <!-- ── Abstracts ────────────────────────────────────────────────────── -->
+    <template v-if="has('ADMIN_DASHBOARD')">
     <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 px-3 pt-4 pb-1">Abstracts</p>
 
-    <router-link v-if="has('ADMIN_DASHBOARD')" :to="{ name: 'Abstracts' }" v-slot="{ isActive }" custom>
+    <router-link :to="{ name: 'Abstracts' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('Abstracts')"
         class="nav-item" :class="isAbstractActive ? 'nav-item--active' : 'nav-item--idle'">
         <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -68,11 +69,13 @@
         Submissions
       </a>
     </router-link>
+    </template>
 
     <!-- ── Settings ─────────────────────────────────────────────────────── -->
+    <template v-if="has('ADMIN_DASHBOARD')">
     <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 px-3 pt-4 pb-1">Settings</p>
 
-    <router-link v-if="has('VIEW_USER')" :to="{ name: 'Configurations' }" v-slot="{ isActive }" custom>
+    <router-link :to="{ name: 'Configurations' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('Configurations')"
         class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
         <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -83,7 +86,7 @@
       </a>
     </router-link>
 
-    <router-link v-if="has('ADMIN_DASHBOARD')" :to="{ name: 'EmailTemplates' }" v-slot="{ isActive }" custom>
+    <router-link :to="{ name: 'EmailTemplates' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('EmailTemplates')"
         class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
         <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -93,7 +96,7 @@
       </a>
     </router-link>
 
-    <router-link v-if="has('VIEW_USER')" :to="{ name: 'EmailLogs' }" v-slot="{ isActive }" custom>
+    <router-link :to="{ name: 'EmailLogs' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('EmailLogs')"
         class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
         <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -103,7 +106,7 @@
       </a>
     </router-link>
 
-    <router-link v-if="has('ADMIN_DASHBOARD')" :to="{ name: 'Contacts' }" v-slot="{ isActive }" custom>
+    <router-link :to="{ name: 'Contacts' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('Contacts')"
         class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
         <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -112,6 +115,7 @@
         Contacts
       </a>
     </router-link>
+    </template>
 
     <!-- ── Account ──────────────────────────────────────────────────────── -->
     <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 px-3 pt-4 pb-1">Account</p>
