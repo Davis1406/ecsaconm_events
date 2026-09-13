@@ -28,7 +28,7 @@ from utils.mailer_util import send_email_with_attachment
 from fastapi import BackgroundTasks
 from PIL import Image, ImageOps
 from reportlab.lib.units import mm
-from reportlab.lib.pagesizes import A5, A4, landscape
+from reportlab.lib.pagesizes import A5, A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 import qrcode
@@ -3251,9 +3251,8 @@ def _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb):
 
 def _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
     """Lay badges out 4-up (2x2) on portrait A4 pages, each scaled from its A5
-    design down to ~105x148mm (A6). Kept only for secretariat exports — for
-    everyone else the pocket-sized 2-up layout (below) is the right fit; see
-    its docstring for how that was measured."""
+    design down to ~105x148mm (A6). This is the shared badge sheet for all
+    participants (secretariat included)."""
     c.setPageSize(A4)
     a4_w, a4_h = A4
     a5_w, a5_h = A5
@@ -3268,47 +3267,6 @@ def _draw_badges_four_up(c, participants, logo_left, logo_right, primary_rgb, se
         col, row = slot % 2, slot // 2
         x = col * cell_w + (cell_w - bw) / 2
         y = a4_h - (row + 1) * cell_h + (cell_h - bh) / 2
-
-        c.saveState()
-        c.translate(x, y)
-        c.scale(scale, scale)
-        _render_badge_page(c, p, logo_left, logo_right, primary_rgb, secondary_rgb)
-        c.restoreState()
-
-        # faint cut guide around the badge
-        c.saveState()
-        c.setStrokeColorRGB(0.85, 0.85, 0.85)
-        c.setLineWidth(0.4)
-        c.rect(x, y, bw, bh, fill=0, stroke=1)
-        c.restoreState()
-
-    c.showPage()
-
-
-def _draw_badges_two_up(c, participants, logo_left, logo_right, primary_rgb, secondary_rgb):
-    """Lay out 2 badges per landscape A4 sheet, each scaled from its A5 design
-    down to ~118x168mm — sized to the actual badge-holder pocket in use.
-
-    Both A6 (~105x148mm, 4-up) and full A5 (148x210mm, 2-up) were tried and
-    measured against the holder: A6 left visible slack (top ~10mm, side ~8mm
-    around the card — pocket is roughly 121x168mm), and A5 was clearly larger
-    than the pocket. This targets the pocket estimate directly instead."""
-    c.setPageSize(landscape(A4))
-    a4_w, a4_h = landscape(A4)
-    a5_w, a5_h = A5
-    target_w, target_h = 120 * mm, 168 * mm
-    scale = min(target_w / a5_w, target_h / a5_h)
-    bw, bh = a5_w * scale, a5_h * scale
-
-    cell_w = a4_w / 2
-    margin_y = (a4_h - bh) / 2
-
-    for index, p in enumerate(participants):
-        slot = index % 2
-        if slot == 0 and index:
-            c.showPage()
-        x = cell_w * slot + (cell_w - bw) / 2
-        y = margin_y
 
         c.saveState()
         c.translate(x, y)
@@ -3409,10 +3367,8 @@ async def download_participant_badges_pdf(
     if not rows:
         raise HTTPException(status_code=404, detail="No participants found")
 
-    # Secretariat badges keep the smaller 4-up/A6 sheet; everyone else prints
-    # 2-up at the pocket-matched size (see _draw_badges_two_up's docstring).
-    secretariat_participants = [p for _, p, role_key in rows if role_key == "secretariat"]
-    other_participants = [p for _, p, role_key in rows if role_key != "secretariat"]
+    # Everyone prints on the shared 4-per-page (2x2, portrait A4) scheme — the
+    # same sheet used for the secretariat badges.
     exported_regs = [r for r, _, _ in rows]
 
     buffer = BytesIO()
@@ -3421,10 +3377,7 @@ async def download_participant_badges_pdf(
     logo_left = convert_png_to_rgb("assets/logo_left.png")
     logo_right = convert_png_to_rgb("assets/logo.png")
 
-    if secretariat_participants:
-        _draw_badges_four_up(c, secretariat_participants, logo_left, logo_right, primary_rgb, secondary_rgb)
-    if other_participants:
-        _draw_badges_two_up(c, other_participants, logo_left, logo_right, primary_rgb, secondary_rgb)
+    _draw_badges_four_up(c, [p for _, p, _ in rows], logo_left, logo_right, primary_rgb, secondary_rgb)
 
     exported_at = datetime.utcnow()
     for reg in exported_regs:
