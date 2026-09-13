@@ -1306,6 +1306,7 @@ export default {
       badgePickerExcludeSecretariat: false,
       badgePickerFilterOptions: [
         { key: 'all', label: 'All' },
+        { key: 'not_printed', label: 'Not Printed' },
         { key: 'secretariat', label: 'Secretariat' },
         { key: 'paid', label: 'Paid' },
         { key: 'unpaid', label: 'Unpaid' },
@@ -1478,6 +1479,7 @@ export default {
       if (this.badgePickerFilter === 'paid') list = list.filter(p => p.paid);
       else if (this.badgePickerFilter === 'unpaid') list = list.filter(p => !p.paid);
       else if (this.badgePickerFilter === 'secretariat') list = list.filter(p => (p.participation_role || '').toLowerCase() === 'secretariat');
+      else if (this.badgePickerFilter === 'not_printed') list = list.filter(p => p.paid && !p.badge_exported_at);
       if (this.badgePickerExcludeSecretariat) list = list.filter(p => (p.participation_role || '').toLowerCase() !== 'secretariat');
       return list;
     },
