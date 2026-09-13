@@ -1510,7 +1510,11 @@ async def verify_payment(
     auth_dependency: Auth = Depends(get_auth_dependency),
 ):
     """Admin verifies a participant's payment, setting paid=True."""
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    # ADMIN_DASHBOARD still bypasses this check; anyone entrusted with
+    # VIEW_REGISTRATIONS (e.g. the Finance role) can also manage registration
+    # payment status, matching bulk_update_payment and their attendance-
+    # management access.
+    auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
 
     registration = db.query(Registration).filter(Registration.id == registration_id).first()
     if not registration:
@@ -1540,7 +1544,9 @@ async def unverify_payment(
     auth_dependency: Auth = Depends(get_auth_dependency),
 ):
     """Admin un-verifies a participant's payment, setting paid=False."""
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    # See verify_payment above — VIEW_REGISTRATIONS holders (e.g. Finance)
+    # can also manage registration payment status.
+    auth_dependency.secure_access("VIEW_REGISTRATIONS", current_user["user_id"])
 
     registration = db.query(Registration).filter(Registration.id == registration_id).first()
     if not registration:
