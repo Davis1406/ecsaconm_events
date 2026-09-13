@@ -21,11 +21,11 @@
           </button>
           <button @click="downloadPresentationsZip('oral')" :disabled="zipDownloading"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40">
-            Oral
+            Oral ({{ oralCount }})
           </button>
           <button @click="downloadPresentationsZip('poster')" :disabled="zipDownloading"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40">
-            Poster
+            Poster ({{ posterCount }})
           </button>
           <span v-if="zipDownloading" class="text-xs text-gray-400 italic">Preparing ZIP…</span>
           <span v-if="zipError" class="text-xs text-red-500">{{ zipError }}</span>
@@ -105,6 +105,8 @@ export default {
       headerTitle: 'Uploaded Presentations',
       rows: [],
       total: 0,
+      oralCount: 0,
+      posterCount: 0,
       isLoading: true,
       currentPage: 1,
       pageSize: 20,
@@ -140,6 +142,8 @@ export default {
         })
         this.rows = res.data.data || []
         this.total = res.data.total || 0
+        this.oralCount = res.data.oral_count || 0
+        this.posterCount = res.data.poster_count || 0
       } catch (e) {
         console.error('Error loading uploaded presentations:', e)
       } finally {

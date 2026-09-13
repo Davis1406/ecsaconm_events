@@ -2277,10 +2277,30 @@ def list_uploaded_presentations(
         q = q.filter(Abstract.presentation_type == presentation_type)
 
     total = q.count()
+
+    # Per-type upload counts (over the whole uploaded set, ignoring search and
+    # pagination) so the batch-download toolbar can show how many oral vs
+    # poster files each ZIP contains.
+    def _type_count(ptype):
+        return (
+            db.query(Abstract.id)
+            .filter(
+                Abstract.deleted_at == None,
+                Abstract.presentation_file != None,
+                Abstract.presentation_type == ptype,
+            )
+            .count()
+        )
+
+    oral_count = _type_count("oral")
+    poster_count = _type_count("poster")
+
     rows = q.order_by(Abstract.presentation_uploaded_at.desc()).offset(skip).limit(limit).all()
 
     return {
         "total": total,
+        "oral_count": oral_count,
+        "poster_count": poster_count,
         "data": [
             {
                 "id": a.id,

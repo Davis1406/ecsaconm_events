@@ -691,13 +691,13 @@
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40
                  bg-secondary-container/30 text-cp-secondary border-secondary-container/60">
           <ArchiveBoxArrowDownIcon class="w-3.5 h-3.5" />
-          Oral only
+          Oral only ({{ uploadsOralCount }})
         </button>
         <button @click="downloadPresentationsZip('poster')" :disabled="zipDownloading"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-40
                  bg-tertiary-container/30 text-cp-tertiary border-tertiary-container/60">
           <ArchiveBoxArrowDownIcon class="w-3.5 h-3.5" />
-          Poster only
+          Poster only ({{ uploadsPosterCount }})
         </button>
         <span v-if="zipDownloading" class="text-xs text-gray-400 italic ml-1">Preparing ZIP…</span>
         <span v-if="zipError" class="text-xs text-cp-error ml-1">{{ zipError }}</span>
@@ -1435,6 +1435,7 @@ export default {
       uploads: [], uploadsLoading: true,
       uploadsPage: 1, uploadsPageSize: 20,
       uploadsTotal: 0, uploadsSearch: '',
+      uploadsOralCount: 0, uploadsPosterCount: 0,
       zipDownloading: false, zipError: '',
       uploadPreview: { open: false, name: '', src: '', abstract: null },
 
@@ -2119,6 +2120,8 @@ export default {
         })
         this.uploads = res.data.data || []
         this.uploadsTotal = res.data.total || 0
+        this.uploadsOralCount = res.data.oral_count || 0
+        this.uploadsPosterCount = res.data.poster_count || 0
       } catch (e) { console.error(e) }
       finally { this.uploadsLoading = false }
     },
