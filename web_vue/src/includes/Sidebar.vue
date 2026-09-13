@@ -71,6 +71,32 @@
     </router-link>
     </template>
 
+    <!-- ── Conference Programme ─────────────────────────────────────────── -->
+    <template v-if="has('ADMIN_DASHBOARD')">
+    <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 px-3 pt-4 pb-1">Conference Programme</p>
+
+    <router-link :to="{ name: 'ProgrammeSummary' }" v-slot="{ isActive }" custom>
+      <a @click.prevent="go('ProgrammeSummary')"
+        class="nav-item" :class="isProgrammeActive ? 'nav-item--active' : 'nav-item--idle'">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5zM8 7h8M8 11h8M8 15h5"/>
+        </svg>
+        Programme Summary
+      </a>
+    </router-link>
+
+    <router-link :to="{ name: 'ProgrammeRooms' }" v-slot="{ isActive }" custom>
+      <a @click.prevent="go('ProgrammeRooms')"
+        class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+          <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Presentations by Room
+      </a>
+    </router-link>
+    </template>
+
     <!-- ── Settings ─────────────────────────────────────────────────────── -->
     <template v-if="has('ADMIN_DASHBOARD')">
     <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 px-3 pt-4 pb-1">Settings</p>
@@ -137,6 +163,7 @@
 import { useAuthStore } from '@/store/authStore'
 
 const ABSTRACT_ROUTES = ['Abstracts', 'Abstract', 'PresentationTemplates', 'UploadedPresentations']
+const PROGRAMME_ROUTES = ['ProgrammeSummary', 'ProgrammeRooms']
 const EVENT_ROUTES    = ['Events', 'Event', 'AddEvent', 'EditEvent']
 const USER_ROUTES     = ['Users', 'User', 'AddUser', 'EditUser']
 const MY_ACCOUNT      = ['MyDashboard', 'MyAccountProfile', 'MyEvents', 'MyEvent']
@@ -151,6 +178,7 @@ export default {
   },
   computed: {
     isAbstractActive() { return ABSTRACT_ROUTES.includes(this.$route.name) },
+    isProgrammeActive() { return PROGRAMME_ROUTES.includes(this.$route.name) },
     isEventActive()    { return EVENT_ROUTES.includes(this.$route.name) },
     isUserActive()     { return USER_ROUTES.includes(this.$route.name) },
     isMyAccountActive(){ return MY_ACCOUNT.includes(this.$route.name) },

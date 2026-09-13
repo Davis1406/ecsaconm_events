@@ -522,6 +522,9 @@ class Event(Base):
     documents = relationship("Document", back_populates="events")
     links = relationship("Link", back_populates="events")
     abstracts = relationship("Abstract")
+    programme_entries = relationship(
+        "ProgrammeEntry", back_populates="event", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<Event id={self.id}, name={self.name}>"
@@ -823,6 +826,47 @@ class AbstractReview(Base):
     submitted_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     assignment = relationship("AbstractReviewer", back_populates="review")
+
+
+class ProgrammeEntry(BaseWithSoftDelete):
+    """One row of the conference programme timetable.
+
+    Covers all three streams — plenary (main-stage speakers/panellists),
+    oral (parallel breakout presentations, code + title + session + room)
+    and posters (code + title + theme) — seeded from the official
+    programme book but editable live by the secretariat (e.g. renaming a
+    presenter, slotting in a substitute speaker, moving a talk between
+    rooms, or adding a brand-new empty slot).
+    """
+    __tablename__ = "programme_entry"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("event.id"), nullable=False, index=True)
+    # plenary | oral | poster
+    category = Column(String(20), nullable=False, index=True)
+    day = Column(String(30), nullable=False)          # "Day 1", "Day 2", "Day 3" or "Day 1-3"
+    session = Column(String(20), nullable=True)       # "S01".."S06" for oral
+    room = Column(String(100), nullable=True)         # e.g. "GTCC 1", "Jahazi 2", "Main Hall", "Poster Area"
+    code = Column(String(30), nullable=True)          # abstract code, e.g. HAE021
+    theme = Column(String(30), nullable=True)         # poster theme, e.g. HAE / TECH / RIN / CLIM / LAP
+    title = Column(Text, nullable=True)
+    presenter_name = Column(String(200), nullable=True)
+    role = Column(Text, nullable=True)                # plenary: role / moderator / chair etc.
+    activity = Column(Text, nullable=True)            # plenary: activity / presentation title
+    # Substitution bookkeeping: who is presenting instead of whom.
+    original_presenter = Column(String(200), nullable=True)  # scheduled name before substitution
+    is_substitution = Column(Boolean, nullable=False, server_default="0", default=False)
+    notes = Column(Text, nullable=True)
+    # Slide file uploaded against this programme entry (path under uploads/).
+    presentation_file = Column(String(500), nullable=True)
+    presentation_uploaded_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    sort_order = Column(Integer, nullable=False, server_default="0", default=0)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    event = relationship("Event", back_populates="programme_entries")
+
+    __table_args__ = (Index("ix_programme_entry", "event_id", "category", "day", "deleted_at"),)
 
 
 # class Document(Base):

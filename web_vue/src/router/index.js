@@ -78,6 +78,8 @@ const routeComponents = {
   AbstractNotificationsView: () => import("@/views/main/abstracts/AbstractNotifications.vue"),
   PresentationTemplatesView: () => import("@/views/main/abstracts/PresentationTemplates.vue"),
   UploadedPresentationsView: () => import("@/views/main/abstracts/UploadedPresentations.vue"),
+  ProgrammeSummaryView: () => import("@/views/main/abstracts/ProgrammeSummary.vue"),
+  ProgrammeRoomsView: () => import("@/views/main/abstracts/ProgrammeRooms.vue"),
 
   // Registrations
   RegistrationsView: () => import("@/views/main/registrations/Registrations.vue"),
@@ -409,6 +411,20 @@ const routes = [
         path: "/uploaded-presentations",
         name: "UploadedPresentations",
         component: routeComponents.UploadedPresentationsView,
+        meta: { requiresAuth: true },
+      },
+
+      {
+        path: "/programme-summary",
+        name: "ProgrammeSummary",
+        component: routeComponents.ProgrammeSummaryView,
+        meta: { requiresAuth: true },
+      },
+
+      {
+        path: "/programme-rooms",
+        name: "ProgrammeRooms",
+        component: routeComponents.ProgrammeRoomsView,
         meta: { requiresAuth: true },
       },
 
