@@ -7,7 +7,7 @@ from openpyxl import Workbook, load_workbook
 from io import BytesIO
 from typing import Literal
 from fastapi.responses import JSONResponse
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from sqlalchemy.exc import IntegrityError
 from fastapi import status, HTTPException, File, Form, UploadFile
 from typing import Annotated
@@ -727,15 +727,25 @@ async def get_event(
         if participant_filter == "presenters" and presenter_emails:
             reg_q = reg_q.filter(User.email.in_(presenter_emails))
         if participant_search:
-            term = f"%{participant_search.strip()}%"
-            reg_q = reg_q.filter(
-                or_(
-                    User.firstname.ilike(term),
-                    User.lastname.ilike(term),
-                    User.email.ilike(term),
-                    User.phone.ilike(term),
+            # Split on whitespace so a full-name search like "John Doe" matches
+            # (firstname=John, lastname=Doe) even though neither single field
+            # contains the whole typed string — each word must hit at least one
+            # field (AND across words), same field set as a single-word search.
+            words = participant_search.strip().split()
+            if words:
+                reg_q = reg_q.filter(
+                    and_(
+                        *[
+                            or_(
+                                User.firstname.ilike(f"%{word}%"),
+                                User.lastname.ilike(f"%{word}%"),
+                                User.email.ilike(f"%{word}%"),
+                                User.phone.ilike(f"%{word}%"),
+                            )
+                            for word in words
+                        ]
+                    )
                 )
-            )
 
         participants_total = reg_q.count()
 
