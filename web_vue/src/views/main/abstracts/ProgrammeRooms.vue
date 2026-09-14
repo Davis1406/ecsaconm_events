@@ -333,13 +333,19 @@
 
             <div v-if="assignLoading" class="py-10"><SpinnerComponent /></div>
             <template v-else>
-              <!-- Category + filter chips -->
+              <!-- Category + search -->
               <div class="flex flex-wrap items-center gap-2 pl-7">
                 <button v-for="c in assignCategoryOptions" :key="c.key"
                   @click="assignCategory = c.key"
                   class="chip" :class="assignCategory === c.key ? 'chip--active' : 'chip--idle'">
                   {{ c.label }} ({{ c.count }})
                 </button>
+                <div class="relative flex-1 min-w-[160px]">
+                  <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                  </svg>
+                  <input v-model.trim="assignSearch" type="text" class="field-input !py-1.5 !text-xs !pl-8" placeholder="Search presenter or abstract…" />
+                </div>
                 <div class="flex-1"></div>
                 <div class="text-xs text-gray-500 space-x-2">
                   <button @click="setAssignAll(true)" class="font-medium hover:underline" style="color: rgb(0,150,180);">Select all shown</button>
@@ -350,7 +356,7 @@
               <!-- Presenter list -->
               <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-72 overflow-y-auto">
                 <div v-if="assignFilteredRows.length === 0" class="px-4 py-6 text-center text-sm text-gray-400 italic">
-                  No uploaded presentations for this filter.
+                  No presenters match your search or filter.
                 </div>
                 <label v-for="r in assignFilteredRows" :key="r.abstract_id"
                   class="px-4 py-3 text-sm flex items-start gap-3 cursor-pointer hover:bg-gray-50">
@@ -512,6 +518,7 @@ export default {
       acceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp',
       // assign presenters state
       assignOpen: false, assignLoading: false, assignRows: [], assignCategory: 'all',
+      assignSearch: '',
       assignErr: '', assignDone: null, assignBusy: false, assignSelected: {},
       assignForm: { room: '', day: 'Day 1' },
     }
@@ -584,8 +591,18 @@ export default {
         .sort((a, b) => a.room.localeCompare(b.room))
     },
     assignFilteredRows() {
-      if (this.assignCategory === 'all') return this.assignRows
-      return this.assignRows.filter(r => (r.presentation_type || 'oral') === this.assignCategory)
+      const q = (this.assignSearch || '').trim().toLowerCase()
+      let rows = this.assignRows
+      if (this.assignCategory !== 'all') {
+        rows = rows.filter(r => (r.presentation_type || 'oral') === this.assignCategory)
+      }
+      if (q) {
+        rows = rows.filter(r =>
+          (r.presenter || '').toLowerCase().includes(q) ||
+          (r.title || '').toLowerCase().includes(q)
+        )
+      }
+      return rows
     },
     assignSelectedCount() {
       const rows = this.assignFilteredRows
@@ -915,6 +932,7 @@ export default {
       this.assignErr = ''
       this.assignDone = null
       this.assignCategory = 'all'
+      this.assignSearch = ''
       // Default to the first day that actually has room slots.
       this.assignForm.day = this.assignDays[0] || 'Day 1'
       this.assignForm.room = ''
