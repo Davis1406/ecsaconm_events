@@ -754,14 +754,23 @@ async def get_event(
         # join would duplicate registrations and inflate the count).
         sort_key = (participant_sort or "registered_at").lower()
         sort_dir = "asc" if (participant_dir or "desc").lower() == "asc" else "desc"
+        # .correlate(Registration) pins these to *only* auto-correlate against
+        # Registration. Without it, a search (which explicitly joins User onto
+        # the outer query) makes SQLAlchemy think User/UserProfile/Country here
+        # should also correlate outward — stripping the subquery's only FROM
+        # table and raising "returned no FROM clauses due to auto-correlation"
+        # (a 500, which is why sorting by Name/Institution/Country while
+        # searching made the participant list come back empty).
         firstname_subq = (
             db.query(User.firstname)
             .filter(User.id == Registration.user_id)
+            .correlate(Registration)
             .scalar_subquery()
         )
         lastname_subq = (
             db.query(User.lastname)
             .filter(User.id == Registration.user_id)
+            .correlate(Registration)
             .scalar_subquery()
         )
         organisation_subq = (
@@ -772,6 +781,7 @@ async def get_event(
             )
             .order_by(UserProfile.id.asc())
             .limit(1)
+            .correlate(Registration)
             .scalar_subquery()
         )
         country_subq = (
@@ -783,6 +793,7 @@ async def get_event(
             )
             .order_by(UserProfile.id.asc())
             .limit(1)
+            .correlate(Registration)
             .scalar_subquery()
         )
         sort_columns = {
