@@ -4,7 +4,7 @@ import io
 import uuid
 import hmac
 import zipfile
-from typing import Annotated, Optional
+from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Header
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -63,7 +63,12 @@ def _firstname(n) -> str:
     p = _parts(n)
     if not p:
         return ""
-    return "".join(p[:-1])
+    # Space-joined, not concatenated — a concatenated "getrude m sibuchi" ->
+    # "getrudemsibuchi" can never equal or share tokens with a candidate's
+    # first name, so 3+-word given names (common in this dataset) always
+    # scored as a bare surname-only match. Space-joining lets both the exact
+    # match and the per-word overlap bonus below actually fire.
+    return " ".join(p[:-1])
 
 
 def _name_score(pname, cand_first, cand_last):
@@ -122,9 +127,9 @@ def _load_abstract_candidates(db: Session, event_id: int, category: str):
     """One row per accepted abstract of the given category: its presenting
     author (falling back to the first-listed author if none is flagged)."""
     rows = (
-        db.query(Abstract.id, Abstract.title, AbstractAuthor.firstname,
-                  AbstractAuthor.lastname, AbstractAuthor.is_presenting,
-                  AbstractAuthor.author_order)
+        db.query(Abstract.id, Abstract.title, Abstract.presentation_file,
+                  AbstractAuthor.firstname, AbstractAuthor.lastname,
+                  AbstractAuthor.is_presenting, AbstractAuthor.author_order)
         .join(AbstractAuthor, AbstractAuthor.abstract_id == Abstract.id)
         .filter(
             Abstract.event_id == event_id,
@@ -144,6 +149,8 @@ def _load_abstract_candidates(db: Session, event_id: int, category: str):
         out.append({
             "abstract_id": abstract_id,
             "title": authors[0].title,
+            "has_presentation": bool(authors[0].presentation_file),
+            "presentation_ext": os.path.splitext(authors[0].presentation_file)[-1].lower() if authors[0].presentation_file else None,
             "first": chosen.firstname,
             "last": chosen.lastname,
         })
@@ -196,6 +203,8 @@ def _compute_abstract_matches(db: Session, event_id: int, category: str):
             "name_changed": _norm(corrected) != _norm(e.presenter_name or ""),
             "abstract_id": c["abstract_id"],
             "abstract_title": c["title"],
+            "abstract_has_presentation": c["has_presentation"],
+            "abstract_presentation_ext": c["presentation_ext"],
             "score": score,
             "already_linked": e.abstract_id == c["abstract_id"],
         })
@@ -210,6 +219,7 @@ def _compute_abstract_matches(db: Session, event_id: int, category: str):
     ]
     unmatched_abstracts = [
         {"abstract_id": c["abstract_id"], "title": c["title"],
+         "has_presentation": c["has_presentation"],
          "presenter": " ".join(p for p in [(c["first"] or "").strip(), (c["last"] or "").strip()] if p)}
         for c in candidates if c["abstract_id"] not in matched_abstract_ids
     ]
@@ -576,27 +586,42 @@ def match_abstracts_preview(
     return _compute_abstract_matches(db, event_id, category)
 
 
+class ApplyMatchesSchema(BaseModel):
+    # Which proposed matches (by entry_id) to actually write — lets the admin
+    # review each one (and check the presenter's uploaded slides for the
+    # matched abstract, when there is one) before committing rather than
+    # applying the whole batch blind. None (the default — no body, or
+    # entry_ids omitted) applies every proposed match, same as before this
+    # existed; an explicit list, including an empty one, applies only those.
+    entry_ids: Optional[List[int]] = None
+
+
 @router.post("/match-abstracts/apply")
 def match_abstracts_apply(
     current_user: user_dependency,
     db: Session = Depends(get_db),
     auth_dependency: Auth = Depends(get_auth_dep),
+    payload: ApplyMatchesSchema = ApplyMatchesSchema(),
     event_id: int = Query(DEFAULT_EVENT_ID),
     category: str = Query("oral"),
 ):
-    """Recomputes the same matches as the preview and writes them: each
-    matched entry gets abstract_id set and its presenter_name corrected to
-    the name on file for the abstract's presenting author."""
+    """Recomputes the same matches as the preview and writes the selected
+    ones: each gets abstract_id set and its presenter_name corrected to the
+    name on file for the abstract's presenting author."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
     report = _compute_abstract_matches(db, event_id, category)
-    entry_ids = [m["entry_id"] for m in report["matches"]]
+    to_apply = report["matches"]
+    if payload.entry_ids is not None:
+        selected = set(payload.entry_ids)
+        to_apply = [m for m in to_apply if m["entry_id"] in selected]
+    entry_ids = [m["entry_id"] for m in to_apply]
     entries_by_id = {
         e.id: e for e in
         db.query(ProgrammeEntry).filter(ProgrammeEntry.id.in_(entry_ids)).all()
     } if entry_ids else {}
     renamed = 0
     linked = 0
-    for m in report["matches"]:
+    for m in to_apply:
         entry = entries_by_id.get(m["entry_id"])
         if not entry:
             continue
@@ -608,7 +633,8 @@ def match_abstracts_apply(
             renamed += 1
     db.commit()
     return {
-        "applied": len(report["matches"]),
+        "applied": len(to_apply),
+        "skipped": len(report["matches"]) - len(to_apply),
         "renamed": renamed,
         "linked": linked,
         "unmatched_entries": len(report["unmatched_entries"]),

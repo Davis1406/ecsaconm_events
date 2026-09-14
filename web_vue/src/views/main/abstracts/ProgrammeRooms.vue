@@ -218,21 +218,42 @@
             </div>
 
             <div v-if="matchReport.matches.length" class="space-y-2">
-              <div class="font-semibold text-sm">Proposed matches</div>
-              <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-64 overflow-y-auto">
-                <div v-for="m in matchReport.matches" :key="m.entry_id" class="px-3 py-2 text-sm">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-mono text-xs text-gray-400">{{ m.code || '—' }}</span>
-                    <template v-if="m.name_changed">
-                      <span class="text-gray-400 line-through">{{ m.current_presenter_name }}</span>
-                      <span>→</span>
-                      <span class="font-semibold">{{ m.corrected_name }}</span>
-                    </template>
-                    <span v-else class="font-semibold">{{ m.corrected_name }}</span>
-                    <span class="text-[10px] text-gray-400 ml-auto">score {{ m.score }}</span>
-                  </div>
-                  <div class="text-xs text-gray-500 truncate mt-0.5">{{ m.abstract_title }}</div>
+              <div class="flex items-center justify-between">
+                <div class="font-semibold text-sm">Proposed matches — confirm each one</div>
+                <div class="text-xs space-x-2">
+                  <button @click="setAllMatchSelected(true)" class="text-cp-secondary font-medium hover:underline">Select all</button>
+                  <button @click="setAllMatchSelected(false)" class="text-gray-400 font-medium hover:underline">Select none</button>
                 </div>
+              </div>
+              <p class="text-xs text-gray-500">
+                Untick anything that doesn't look right — it's left alone and
+                still shows up next time. Where the presenter already uploaded
+                slides, use Preview to check it's really them before confirming.
+              </p>
+              <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                <label v-for="m in matchReport.matches" :key="m.entry_id"
+                  class="px-3 py-2 text-sm flex items-start gap-2.5 cursor-pointer hover:bg-gray-50">
+                  <input type="checkbox" v-model="matchSelected[m.entry_id]" class="mt-1 accent-cp-secondary flex-shrink-0" />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="font-mono text-xs text-gray-400">{{ m.code || '—' }}</span>
+                      <template v-if="m.name_changed">
+                        <span class="text-gray-400 line-through">{{ m.current_presenter_name }}</span>
+                        <span>→</span>
+                        <span class="font-semibold">{{ m.corrected_name }}</span>
+                      </template>
+                      <span v-else class="font-semibold">{{ m.corrected_name }}</span>
+                      <span class="text-[10px] text-gray-400 ml-auto">score {{ m.score }}</span>
+                    </div>
+                    <div class="text-xs text-gray-500 truncate mt-0.5">{{ m.abstract_title }}</div>
+                    <button v-if="m.abstract_has_presentation" @click.prevent="previewAbstract(m)"
+                      class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border"
+                      style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+                      Preview their slides
+                    </button>
+                    <span v-else class="inline-block mt-1 text-[11px] text-gray-400 italic">no slides uploaded yet</span>
+                  </div>
+                </label>
               </div>
             </div>
 
@@ -272,6 +293,7 @@
               <div class="rounded-lg border border-orange-100 bg-orange-50/50 divide-y divide-orange-100 max-h-40 overflow-y-auto">
                 <div v-for="u in matchReport.unmatched_abstracts" :key="u.abstract_id" class="px-3 py-2 text-sm">
                   <span class="font-semibold">{{ u.presenter }}</span>
+                  <span v-if="u.has_presentation" class="text-[10px] text-teal-600 font-semibold uppercase tracking-wide ml-1">has slides</span>
                   <div class="text-xs text-gray-500 truncate">{{ u.title }}</div>
                 </div>
               </div>
@@ -281,9 +303,9 @@
         </div>
         <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
           <button @click="matchOpen = false" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Close</button>
-          <button v-if="matchReport && matchReport.matches.length" @click="applyMatch" :disabled="matchApplying"
-            class="px-4 py-2 text-sm font-semibold text-white rounded-lg" style="background-color: rgb(254,80,103);">
-            {{ matchApplying ? 'Applying…' : `Apply ${matchReport.matches.length} matches` }}
+          <button v-if="matchReport && matchReport.matches.length" @click="applyMatch" :disabled="matchApplying || selectedMatchCount === 0"
+            class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50" style="background-color: rgb(254,80,103);">
+            {{ matchApplying ? 'Applying…' : `Confirm ${selectedMatchCount} match${selectedMatchCount === 1 ? '' : 'es'}` }}
           </button>
         </div>
       </div>
@@ -347,7 +369,7 @@
         <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <div class="font-semibold text-sm truncate pr-4">{{ preview.name }}</div>
           <div class="flex items-center gap-2">
-            <button @click="downloadSingle(preview.entry)"
+            <button v-if="preview.entry" @click="downloadSingle(preview.entry)"
               class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full text-white"
               style="background-color: rgb(0,150,180);">
               <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -406,7 +428,7 @@ export default {
       preview: { open: false, name: '', src: '', entry: null },
       zipBusy: false,
       matchOpen: false, matchLoading: false, matchReport: null, matchErr: '',
-      matchApplying: false, matchApplyResult: null,
+      matchApplying: false, matchApplyResult: null, matchSelected: {},
       linkChoice: {}, linkBusy: false,
       acceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp',
       _roomPin: '',
@@ -462,6 +484,9 @@ export default {
       const total = this.categoryRoomsData.reduce((s, d) => s + d.entries.length, 0)
       const withSlide = this.categoryRoomsData.reduce((s, d) => s + d.entries.filter(e => e.has_presentation).length, 0)
       return `${withSlide} of ${total} presentations have slides`
+    },
+    selectedMatchCount() {
+      return Object.values(this.matchSelected).filter(Boolean).length
     },
   },
 
@@ -765,23 +790,53 @@ export default {
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.matchReport = res.data
+        // Default every proposed match to selected — reviewing means
+        // unticking the ones you're not sure of, not building the list
+        // up from nothing.
+        this.matchSelected = {}
+        for (const m of this.matchReport.matches) this.matchSelected[m.entry_id] = true
       } catch (e) {
         this.matchErr = e.response?.data?.detail || 'Failed to compute matches.'
       } finally {
         this.matchLoading = false
       }
     },
+    setAllMatchSelected(value) {
+      for (const id of Object.keys(this.matchSelected)) this.matchSelected[id] = value
+    },
+    previewAbstract(m) {
+      const fileUrl = `${this.apiUrl}/abstracts/${m.abstract_id}/preview-presentation`
+      const ext = (m.abstract_presentation_ext || '').replace(/^\./, '').toLowerCase()
+      const src = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
+        ? fileUrl
+        : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
+      this.preview = {
+        open: true,
+        name: `${m.corrected_name} — ${m.abstract_title || ''}`,
+        src,
+        entry: null,
+      }
+    },
     async applyMatch() {
+      const entryIds = Object.keys(this.matchSelected)
+        .filter(id => this.matchSelected[id])
+        .map(Number)
+      if (!entryIds.length) return
       this.matchApplying = true
       this.matchErr = ''
       try {
-        const res = await axios.post(`${this.apiUrl}/programme/match-abstracts/apply`, {}, {
+        const res = await axios.post(`${this.apiUrl}/programme/match-abstracts/apply`, { entry_ids: entryIds }, {
           params: { event_id: 1, category: this.entryCategory },
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.matchApplyResult = res.data
         await this.loadRooms()
-        this.flash(`Applied: ${res.data.renamed} name(s) corrected, ${res.data.linked} newly linked.`)
+        this.flash(`Confirmed: ${res.data.renamed} name(s) corrected, ${res.data.linked} newly linked.`)
+        // Drop what was just applied from the list rather than a full
+        // re-fetch — the rest of the review (ticks, scroll position) stays put.
+        const appliedIds = new Set(entryIds)
+        this.matchReport.matches = this.matchReport.matches.filter(m => !appliedIds.has(m.entry_id))
+        for (const id of entryIds) delete this.matchSelected[id]
       } catch (e) {
         this.matchErr = e.response?.data?.detail || 'Failed to apply matches.'
       } finally {
