@@ -10,6 +10,7 @@
   /* ── Theme tokens — light (default) ─────────────────────────────────────── */
   :root {
     color-scheme: light;
+    --ecsa-build: "2026-09-14T10-20";
 
     --surface:                   #f8f9fa;
     --surface-bright:            #f8f9fa;
