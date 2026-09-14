@@ -8,13 +8,13 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Header
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
 from models.models import (
-    ProgrammeEntry, SystemSetting, User, Registration,
+    ProgrammeEntry, SystemSetting, User, Registration, Event,
     Abstract, AbstractAuthor, AbstractStatus, PresentationType,
 )
 
@@ -255,7 +255,24 @@ def _require_pin(db: Session, pin: str):
         raise HTTPException(status_code=403, detail="Invalid room PIN.")
 
 
-def _serialize(entry: ProgrammeEntry, match=None):
+def _effective_presentation_file(entry: ProgrammeEntry):
+    """The slide file to serve for this entry: the one uploaded directly
+    against it (via the Rooms admin page) if there is one, else the file the
+    presenter uploaded when submitting the abstract it's linked to. Lets
+    preview/download/zip work for a slot the whole moment it's matched to an
+    abstract, even before anyone re-uploads anything here."""
+    if entry.presentation_file:
+        return entry.presentation_file
+    abstract = getattr(entry, "abstract", None)
+    if abstract and abstract.presentation_file:
+        return abstract.presentation_file
+    return None
+
+
+def _serialize_base(entry: ProgrammeEntry):
+    """Fields safe to hand to anyone with the link (public room-view page) —
+    no registration/payment status, no raw server file paths."""
+    eff = _effective_presentation_file(entry)
     return {
         "id": entry.id,
         "event_id": entry.event_id,
@@ -272,9 +289,24 @@ def _serialize(entry: ProgrammeEntry, match=None):
         "original_presenter": entry.original_presenter,
         "is_substitution": bool(entry.is_substitution),
         "notes": entry.notes,
+        "sort_order": entry.sort_order,
+        "abstract_id": entry.abstract_id,
+        # whether *something* can be previewed/downloaded for this slot, and
+        # its extension — never the raw on-disk path. Same URL either way:
+        # GET /programme/{id}/preview-presentation|download-presentation.
+        "has_presentation": bool(eff),
+        "presentation_ext": os.path.splitext(eff)[-1].lower() if eff else None,
+        "presentation_source": "entry" if entry.presentation_file else ("abstract" if eff else None),
+    }
+
+
+def _serialize(entry: ProgrammeEntry, match=None):
+    """Admin view: base fields plus the entry's own upload path/timestamp and
+    live registration/payment match status."""
+    base = _serialize_base(entry)
+    base.update({
         "presentation_file": entry.presentation_file,
         "presentation_uploaded_at": entry.presentation_uploaded_at.isoformat() if entry.presentation_uploaded_at else None,
-        "sort_order": entry.sort_order,
         # live registration / payment status
         "status": "registered_paid" if match and match["paid"] else (
             "registered_unpaid" if match else "not_registered"),
@@ -284,7 +316,8 @@ def _serialize(entry: ProgrammeEntry, match=None):
         "matched_user_id": match["id"] if match else None,
         "matched_first": match["first"] if match else None,
         "matched_last": match["last"] if match else None,
-    }
+    })
+    return base
 
 
 # ── PIN management ───────────────────────────────────────────────────────────
@@ -354,7 +387,7 @@ def list_programme(
     limit: int = 500,
 ):
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    q = db.query(ProgrammeEntry).filter(
+    q = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
         ProgrammeEntry.event_id == event_id,
         ProgrammeEntry.deleted_at == None,
     )
@@ -456,7 +489,7 @@ def programme_rooms(
 ):
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
     _require_pin(db, pin or x_room_pin or "")
-    entries = db.query(ProgrammeEntry).filter(
+    entries = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
         ProgrammeEntry.event_id == event_id,
         ProgrammeEntry.deleted_at == None,
     ).all()
@@ -477,7 +510,7 @@ def programme_rooms(
             "total": 0, "with_slide": 0, "entries": [],
         })
         bucket["total"] += 1
-        if e.presentation_file:
+        if _effective_presentation_file(e):
             bucket["with_slide"] += 1
         bucket["entries"].append(_serialize(e, cache.get(key)))
     result = []
@@ -486,6 +519,44 @@ def programme_rooms(
         result.append({"day": bucket["day"], "room": bucket["room"], "total": bucket["total"],
                         "with_slide": bucket["with_slide"], "entries": bucket["entries"]})
     return {"data": result}
+
+
+# ── Room-leader view (public, shareable link) ─────────────────────────────────
+@router.get("/room-view")
+def room_view(
+    db: Session = Depends(get_db),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+    day: str = Query(...),
+    room: str = Query(...),
+):
+    """Read-only running order for one room/day, for the admin to share with
+    that room's session leader/moderator.
+
+    Public-by-URL (no JWT, no PIN, no admin permission check) — same trust
+    model as the presentation preview/download/zip links below: the admin
+    generates and shares this URL, and it always reflects live data (nothing
+    is cached or exported), so reloading it after new slides are uploaded or
+    presenters get matched shows the update immediately.
+    """
+    entries = (
+        db.query(ProgrammeEntry)
+        .options(joinedload(ProgrammeEntry.abstract))
+        .filter(
+            ProgrammeEntry.event_id == event_id,
+            ProgrammeEntry.deleted_at == None,
+            ProgrammeEntry.day == day,
+            ProgrammeEntry.room == room,
+        )
+        .order_by(ProgrammeEntry.session.asc(), ProgrammeEntry.sort_order.asc())
+        .all()
+    )
+    event = db.query(Event).filter(Event.id == event_id).first()
+    return {
+        "event": {"id": event.id, "name": event.event} if event else None,
+        "day": day,
+        "room": room,
+        "entries": [_serialize_base(e) for e in entries],
+    }
 
 
 # ── Matching programme slots to submitted Abstracts ──────────────────────────
@@ -543,6 +614,72 @@ def match_abstracts_apply(
         "unmatched_entries": len(report["unmatched_entries"]),
         "unmatched_abstracts": len(report["unmatched_abstracts"]),
     }
+
+
+class LinkAbstractSchema(BaseModel):
+    abstract_id: int
+
+
+@router.put("/{entry_id}/link-abstract")
+def link_abstract(
+    entry_id: int,
+    payload: LinkAbstractSchema,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """Manual pairing for the ones the automatic matcher couldn't place —
+    picked from the report's unmatched-abstracts list. Also corrects the
+    presenter name to the one on file, same as the automatic match."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    entry = db.query(ProgrammeEntry).filter(
+        ProgrammeEntry.id == entry_id, ProgrammeEntry.deleted_at == None,
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    abstract = db.query(Abstract).filter(
+        Abstract.id == payload.abstract_id, Abstract.deleted_at == None,
+    ).first()
+    if not abstract:
+        raise HTTPException(status_code=404, detail="Abstract not found")
+    authors = (
+        db.query(AbstractAuthor)
+        .filter(AbstractAuthor.abstract_id == abstract.id)
+        .order_by(AbstractAuthor.author_order.asc())
+        .all()
+    )
+    presenting = next((a for a in authors if a.is_presenting), authors[0] if authors else None)
+    entry.abstract_id = abstract.id
+    if presenting:
+        name = " ".join(p for p in [(presenting.firstname or "").strip(), (presenting.lastname or "").strip()] if p)
+        if name:
+            entry.presenter_name = name
+    db.commit()
+    db.refresh(entry)
+    reg_rows = _load_reg_rows(db, entry.event_id)
+    m = best_registration_match(entry.presenter_name or "", reg_rows)
+    return _serialize(entry, m)
+
+
+@router.delete("/{entry_id}/link-abstract")
+def unlink_abstract(
+    entry_id: int,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    entry = db.query(ProgrammeEntry).filter(
+        ProgrammeEntry.id == entry_id, ProgrammeEntry.deleted_at == None,
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    entry.abstract_id = None
+    db.commit()
+    db.refresh(entry)
+    reg_rows = _load_reg_rows(db, entry.event_id)
+    m = best_registration_match(entry.presenter_name or "", reg_rows)
+    return _serialize(entry, m)
 
 
 # ── Create / Update / Delete ────────────────────────────────────────────────
@@ -733,20 +870,22 @@ def preview_presentation(
 
     Public-by-URL (no JWT, no PIN) — same model as the abstract preview links:
     the admin generates this URL and shares it, so the Office Online viewer can
-    fetch it and anyone with the link can view the slides.
+    fetch it and anyone with the link can view the slides. Falls back to the
+    linked abstract's own uploaded file if nothing's been uploaded here.
     """
-    entry = db.query(ProgrammeEntry).filter(
+    entry = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
         ProgrammeEntry.id == entry_id, ProgrammeEntry.deleted_at == None,
     ).first()
-    if not entry or not entry.presentation_file:
+    path = _effective_presentation_file(entry) if entry else None
+    if not path:
         raise HTTPException(status_code=404, detail="No presentation file found")
-    if not os.path.exists(entry.presentation_file):
+    if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found on server")
-    ext = os.path.splitext(entry.presentation_file)[-1].lower()
+    ext = os.path.splitext(path)[-1].lower()
     media_type = PREVIEW_MEDIA_TYPES.get(ext)
     if not media_type:
         raise HTTPException(status_code=415, detail="Preview not supported for this file type")
-    return FileResponse(path=entry.presentation_file, media_type=media_type)
+    return FileResponse(path=path, media_type=media_type)
 
 
 @router.get("/{entry_id}/download-presentation")
@@ -759,18 +898,20 @@ def download_presentation(
     Public-by-URL (no JWT, no PIN) — mirrors the abstract file links: the admin
     generates this URL in the dashboard and shares it, so anyone with the URL
     can fetch the file. This is also why the whole-room ZIP is public-by-URL
-    below.
+    below. Falls back to the linked abstract's own uploaded file if nothing's
+    been uploaded here.
     """
-    entry = db.query(ProgrammeEntry).filter(
+    entry = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
         ProgrammeEntry.id == entry_id, ProgrammeEntry.deleted_at == None,
     ).first()
-    if not entry or not entry.presentation_file:
+    path = _effective_presentation_file(entry) if entry else None
+    if not path:
         raise HTTPException(status_code=404, detail="No presentation file found")
-    if not os.path.exists(entry.presentation_file):
+    if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found on server")
-    ext = os.path.splitext(entry.presentation_file)[-1]
+    ext = os.path.splitext(path)[-1]
     label = re.sub(r"[^A-Za-z0-9 _-]+", "", (entry.presenter_name or "")).strip().replace(" ", "_")[:40] or f"entry_{entry.id}"
-    return FileResponse(path=entry.presentation_file, filename=f"{label}_{entry.id}{ext}",
+    return FileResponse(path=path, filename=f"{label}_{entry.id}{ext}",
                         media_type="application/octet-stream")
 
 
@@ -785,12 +926,13 @@ def download_room_zip(
 
     Public-by-URL (no JWT, no PIN) — same trust model as the abstract links
     and the whole-office ZIP page: the admin generates this URL in the
-    dashboard and shares it, so anyone with the URL can fetch the ZIP.
+    dashboard and shares it, so anyone with the URL can fetch the ZIP. Includes
+    a slot's linked-abstract file when nothing's been uploaded to the slot
+    itself.
     """
-    q = db.query(ProgrammeEntry).filter(
+    q = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
         ProgrammeEntry.event_id == event_id,
         ProgrammeEntry.deleted_at == None,
-        ProgrammeEntry.presentation_file != None,
     )
     if room:
         q = q.filter(ProgrammeEntry.room == room)
@@ -805,9 +947,10 @@ def download_room_zip(
     used = set()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for e in entries:
-            if not e.presentation_file or not os.path.exists(e.presentation_file):
+            path = _effective_presentation_file(e)
+            if not path or not os.path.exists(path):
                 continue
-            ext = os.path.splitext(e.presentation_file)[-1]
+            ext = os.path.splitext(path)[-1]
             base = re.sub(r"[^A-Za-z0-9 _-]+", "", (e.code or e.presenter_name or str(e.id))).strip()[:60] or f"entry_{e.id}"
             arc = f"{base}{ext}"
             n = 1
@@ -815,7 +958,7 @@ def download_room_zip(
                 n += 1
                 arc = f"{base}_{n}{ext}"
             used.add(arc)
-            zf.write(e.presentation_file, arcname=arc)
+            zf.write(path, arcname=arc)
             added += 1
     if added == 0:
         raise HTTPException(status_code=404, detail="No slide files were found on disk for this room/day.")

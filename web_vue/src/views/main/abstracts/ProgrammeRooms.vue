@@ -84,6 +84,13 @@
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[11px] text-white/90 font-medium">{{ room.total }}</span>
+                  <button @click="copyRoomLink(room)"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white/15 text-white hover:bg-white/25" title="Copy a shareable link for this room's leader">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5"/>
+                    </svg>
+                    Share
+                  </button>
                   <button v-if="room.with_slide" @click="downloadRoomZip(room)"
                     :disabled="zipBusy"
                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-cp-secondary hover:opacity-90">
@@ -116,21 +123,22 @@
                     <div class="text-sm text-on-surface mt-1">{{ e.title || e.activity || '' }}</div>
                   </div>
                   <div class="flex items-center gap-1">
-                    <button v-if="e.presentation_file"
+                    <button v-if="e.has_presentation"
                       @click="openPreview(e)"
-                      class="action-btn hover:border-cp-secondary" title="Preview slides">
+                      class="action-btn hover:border-cp-secondary" :title="e.presentation_source === 'abstract' ? 'Preview slides (from submitted abstract)' : 'Preview slides'">
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                       </svg>
                     </button>
-                    <button v-if="e.presentation_file"
+                    <button v-if="e.has_presentation"
                       @click="downloadSingle(e)"
-                      class="action-btn hover:border-cp-secondary" title="Download slides">
+                      class="action-btn hover:border-cp-secondary" :title="e.presentation_source === 'abstract' ? 'Download slides (from submitted abstract)' : 'Download slides'">
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                       </svg>
                     </button>
-                    <span v-if="!e.presentation_file" class="text-[10px] text-gray-400 italic">no slides yet</span>
+                    <span v-if="!e.has_presentation" class="text-[10px] text-gray-400 italic">no slides yet</span>
+                    <span v-else-if="e.presentation_source === 'abstract'" class="text-[9px] text-teal-600 font-semibold uppercase tracking-wide">from abstract</span>
                     <button @click="openManage(e)" title="Replace presenter / add slides"
                       class="action-btn hover:border-cp-secondary">
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -221,11 +229,31 @@
 
             <div v-if="matchReport.unmatched_entries.length" class="space-y-2">
               <div class="font-semibold text-sm text-amber-700">Schedule slots with no matching abstract</div>
-              <div class="rounded-lg border border-amber-100 bg-amber-50/50 divide-y divide-amber-100 max-h-40 overflow-y-auto">
-                <div v-for="u in matchReport.unmatched_entries" :key="u.entry_id" class="px-3 py-2 text-sm">
-                  <span class="font-mono text-xs text-gray-400 mr-2">{{ u.code || '—' }}</span>
-                  <span class="font-semibold">{{ u.presenter_name || '—' }}</span>
-                  <div class="text-xs text-gray-500 truncate">{{ u.title }}</div>
+              <p class="text-xs text-gray-500">
+                Pick the right abstract from the list below and link it manually
+                — the presenter name will be corrected the same way an automatic
+                match would.
+              </p>
+              <div class="rounded-lg border border-amber-100 bg-amber-50/50 divide-y divide-amber-100 max-h-72 overflow-y-auto">
+                <div v-for="u in matchReport.unmatched_entries" :key="u.entry_id" class="px-3 py-2 text-sm space-y-1.5">
+                  <div>
+                    <span class="font-mono text-xs text-gray-400 mr-2">{{ u.code || '—' }}</span>
+                    <span class="font-semibold">{{ u.presenter_name || '—' }}</span>
+                    <div class="text-xs text-gray-500 truncate">{{ u.title }}</div>
+                  </div>
+                  <div v-if="matchReport.unmatched_abstracts.length" class="flex items-center gap-2">
+                    <select v-model="linkChoice[u.entry_id]" class="field-input !py-1 !text-xs flex-1">
+                      <option value="">Match to abstract…</option>
+                      <option v-for="a in matchReport.unmatched_abstracts" :key="a.abstract_id" :value="a.abstract_id">
+                        {{ a.presenter }} — {{ (a.title || '').slice(0, 50) }}
+                      </option>
+                    </select>
+                    <button @click="linkAbstract(u.entry_id)" :disabled="!linkChoice[u.entry_id] || linkBusy"
+                      class="px-2.5 py-1 text-xs font-semibold rounded-full text-white flex-shrink-0"
+                      style="background-color: rgb(0,150,180);">
+                      Link
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -365,6 +393,7 @@ export default {
       zipBusy: false,
       matchOpen: false, matchLoading: false, matchReport: null, matchErr: '',
       matchApplying: false, matchApplyResult: null,
+      linkChoice: {}, linkBusy: false,
       acceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp',
       _roomPin: '',
     }
@@ -401,7 +430,7 @@ export default {
     },
     slideCountSummary() {
       const total = this.roomsData.reduce((s, d) => s + d.entries.length, 0)
-      const withSlide = this.roomsData.reduce((s, d) => s + d.entries.filter(e => e.presentation_file).length, 0)
+      const withSlide = this.roomsData.reduce((s, d) => s + d.entries.filter(e => e.has_presentation).length, 0)
       return `${withSlide} of ${total} presentations have slides`
     },
   },
@@ -502,19 +531,23 @@ export default {
     },
 
     // ── slides ────────────────────────────────────────────────
-    isPreviewable(path) {
-      const ext = (path || '').split('.').pop().toLowerCase()
-      return ['pdf', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
+    // entry.presentation_ext (from the backend) already accounts for the
+    // linked-abstract fallback — don't parse entry.presentation_file, it's
+    // only ever the entry's own upload and is null when the file being
+    // served actually came from the abstract.
+    isPreviewable(ext) {
+      const e = (ext || '').replace(/^\./, '').toLowerCase()
+      return ['pdf', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(e)
     },
     previewSrc(entry) {
-      const ext = (entry.presentation_file || '').split('.').pop().toLowerCase()
+      const ext = (entry.presentation_ext || '').replace(/^\./, '').toLowerCase()
       const fileUrl = `${this.apiUrl}/programme/${entry.id}/preview-presentation`
       return ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
         ? fileUrl
         : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
     },
     openPreview(entry) {
-      if (!this.isPreviewable(entry.presentation_file)) {
+      if (!this.isPreviewable(entry.presentation_ext)) {
         this.flash('Preview not supported for this file type — use Download instead.', true)
         return
       }
@@ -526,7 +559,7 @@ export default {
         const res = await axios.get(`${this.apiUrl}/programme/${entry.id}/download-presentation`, {
           responseType: 'blob',
         })
-        const ext = (entry.presentation_file || '').split('.').pop()
+        const ext = (entry.presentation_ext || '').replace(/^\./, '')
         const clean = (entry.code || entry.presenter_name || 'presentation').replace(/[^A-Za-z0-9 _-]+/g, '').trim().slice(0, 60)
         saveAs(res.data, `${clean || 'presentation'}.${ext}`)
       } catch (e) {
@@ -558,6 +591,22 @@ export default {
         }
       } finally {
         this.zipBusy = false
+      }
+    },
+
+    roomShareUrl(room) {
+      const params = new URLSearchParams({ event_id: '1', day: room.day, room: room.room })
+      return `${window.location.origin}${window.location.pathname}#/room-programme?${params.toString()}`
+    },
+    async copyRoomLink(room) {
+      const url = this.roomShareUrl(room)
+      try {
+        await navigator.clipboard.writeText(url)
+        this.flash('Link copied — share it with this room\'s leader.')
+      } catch (e) {
+        // clipboard API can be unavailable (older browsers, non-HTTPS) —
+        // fall back to just showing it so it can be selected and copied.
+        window.prompt('Copy this link:', url)
       }
     },
 
@@ -698,6 +747,25 @@ export default {
         this.matchErr = e.response?.data?.detail || 'Failed to apply matches.'
       } finally {
         this.matchApplying = false
+      }
+    },
+    async linkAbstract(entryId) {
+      const abstractId = this.linkChoice[entryId]
+      if (!abstractId) return
+      this.linkBusy = true
+      this.matchErr = ''
+      try {
+        await axios.put(`${this.apiUrl}/programme/${entryId}/link-abstract`, { abstract_id: Number(abstractId) }, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        delete this.linkChoice[entryId]
+        this.flash('Linked.')
+        await this.openMatch()
+        await this.loadRooms()
+      } catch (e) {
+        this.matchErr = e.response?.data?.detail || 'Failed to link.'
+      } finally {
+        this.linkBusy = false
       }
     },
 

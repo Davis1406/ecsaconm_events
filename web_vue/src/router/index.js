@@ -19,6 +19,7 @@ const routeComponents = {
   DashboardView: () => import("@/views/main/dashboard/Dashboard.vue"),
   WebEventsView: () => import("@/views/web/WebEvents.vue"),
   WebEventView: () => import("@/views/web/WebEvent.vue"),
+  RoomProgrammeView: () => import("@/views/web/RoomProgramme.vue"),
   UserEventStatusView: () => import("@/views/web/UserEventStatus.vue"),
   AttendanceView: () => import("@/views/web/Attendance.vue"),
   OnsiteRegistrationView: () => import("@/views/web/OnsiteRegistration.vue"),
@@ -145,6 +146,11 @@ const routes = [
         path: "/web-event/:id",
         name: "WebEvent",
         component: routeComponents.WebEventView,
+      },
+      {
+        path: "/room-programme",
+        name: "RoomProgramme",
+        component: routeComponents.RoomProgrammeView,
       },
       {
         path: "/user-event-status/:userId/:eventId",
