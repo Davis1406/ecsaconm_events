@@ -39,6 +39,15 @@
 
     <!-- Rooms view -->
     <template v-else>
+      <!-- category toggle: abstracts (oral) vs posters -->
+      <div class="flex items-center gap-2">
+        <button v-for="c in categoryOptions" :key="c.key"
+          @click="entryCategory = c.key"
+          class="chip" :class="entryCategory === c.key ? 'chip--active' : 'chip--idle'">
+          {{ c.label }}
+        </button>
+      </div>
+
       <!-- room summary chips -->
       <div class="flex flex-wrap items-center gap-2">
         <button v-for="r in roomFilterChips" :key="r"
@@ -53,7 +62,7 @@
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          {{ matchLoading ? 'Matching…' : 'Match to Abstracts' }}
+          {{ matchLoading ? 'Matching…' : `Match ${entryCategory === 'poster' ? 'Posters' : 'Abstracts'}` }}
         </button>
         <span class="text-xs text-gray-500">{{ slideCountSummary }}</span>
       </div>
@@ -174,11 +183,11 @@
       <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto">
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white">
           <div>
-            <div class="font-bold">Match Presenters to Abstracts</div>
+            <div class="font-bold">Match Presenters to Abstracts — {{ entryCategory === 'poster' ? 'Posters' : 'Abstracts' }}</div>
             <p class="text-xs text-gray-500 mt-0.5">
-              Matches each oral schedule slot to its submitted abstract by presenter name
-              (titles are ignored — the schedule book's wording often differs from the
-              submitted title). Corrects the presenter name to what's on file.
+              Matches each {{ entryCategory === 'poster' ? 'poster' : 'oral' }} schedule slot to its submitted abstract by
+              presenter name (titles are ignored — the schedule book's wording often differs
+              from the submitted title). Corrects the presenter name to what's on file.
             </p>
           </div>
           <button @click="matchOpen = false" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3">
@@ -385,6 +394,11 @@ export default {
       pinError: '',
       pinBusy: false,
       activeRoom: 'All Rooms',
+      entryCategory: 'oral',
+      categoryOptions: [
+        { key: 'oral', label: 'Abstracts' },
+        { key: 'poster', label: 'Posters' },
+      ],
       apiUrl: import.meta.env.VITE_API_URL,
       flashMsg: '', flashErr: false,
       pinSetupOpen: false, newPin: '', pinSetupErr: '',
@@ -405,9 +419,25 @@ export default {
   },
 
   computed: {
+    // roomsData buckets mix every category together (plenary/oral/poster) —
+    // this page is scoped to abstracts (oral) and posters only, one at a
+    // time, so every other computed below filters through this first.
+    categoryRoomsData() {
+      return this.roomsData
+        .map(d => {
+          const entries = d.entries.filter(e => e.category === this.entryCategory)
+          return {
+            ...d,
+            entries,
+            total: entries.length,
+            with_slide: entries.filter(e => e.has_presentation).length,
+          }
+        })
+        .filter(d => d.entries.length > 0)
+    },
     roomFilterChips() {
       const rooms = new Set(['All Rooms'])
-      for (const d of this.roomsData) {
+      for (const d of this.categoryRoomsData) {
         for (const r of d.entries) {
           if (r.room) rooms.add(r.room)
         }
@@ -418,7 +448,7 @@ export default {
     },
     roomDays() {
       const grouped = {}
-      for (const d of this.roomsData) {
+      for (const d of this.categoryRoomsData) {
         if (this.activeRoom !== 'All Rooms' && d.room !== this.activeRoom) continue
         ;(grouped[d.day] = grouped[d.day] || []).push(d)
       }
@@ -429,9 +459,18 @@ export default {
       }))
     },
     slideCountSummary() {
-      const total = this.roomsData.reduce((s, d) => s + d.entries.length, 0)
-      const withSlide = this.roomsData.reduce((s, d) => s + d.entries.filter(e => e.has_presentation).length, 0)
+      const total = this.categoryRoomsData.reduce((s, d) => s + d.entries.length, 0)
+      const withSlide = this.categoryRoomsData.reduce((s, d) => s + d.entries.filter(e => e.has_presentation).length, 0)
       return `${withSlide} of ${total} presentations have slides`
+    },
+  },
+
+  watch: {
+    // Room chips are category-specific (e.g. "Poster Area" only exists for
+    // posters) — a stale pick from the other category would just show
+    // nothing, so reset it whenever the category switches.
+    entryCategory() {
+      this.activeRoom = 'All Rooms'
     },
   },
 
@@ -722,7 +761,7 @@ export default {
       this.matchLoading = true
       try {
         const res = await axios.get(`${this.apiUrl}/programme/match-abstracts`, {
-          params: { event_id: 1, category: 'oral' },
+          params: { event_id: 1, category: this.entryCategory },
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.matchReport = res.data
@@ -737,7 +776,7 @@ export default {
       this.matchErr = ''
       try {
         const res = await axios.post(`${this.apiUrl}/programme/match-abstracts/apply`, {}, {
-          params: { event_id: 1, category: 'oral' },
+          params: { event_id: 1, category: this.entryCategory },
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.matchApplyResult = res.data
