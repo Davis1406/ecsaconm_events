@@ -7,38 +7,7 @@
       {{ flashMsg }}
     </div>
 
-    <!-- PIN gate -->
-    <div v-if="!unlocked" class="max-w-md mx-auto w-full mt-6">
-      <div class="rounded-xl border border-surface-container-high bg-surface-container-lowest p-6">
-        <div class="flex items-center gap-2 mb-1">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-          </svg>
-          <div class="font-bold">Rooms access is PIN-protected</div>
-        </div>
-        <p class="text-xs text-gray-500 mb-4">
-          Enter the admin Rooms PIN to view the timetable by room, preview slides and download presentations.
-        </p>
-        <div v-if="pinConfigured === false" class="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          No Rooms PIN is configured yet. Set one below — everyone viewing this page will need it.
-        </div>
-        <input v-model.trim="pinInput" type="password" class="field-input text-center tracking-[0.5em] py-3"
-          placeholder="••••••" maxlength="20" @keyup.enter="submitPin" />
-        <div v-if="pinError" class="mt-2 text-sm text-red-600">{{ pinError }}</div>
-        <div class="mt-4 flex flex-col gap-2">
-          <button @click="submitPin" :disabled="pinBusy" class="px-4 py-2.5 text-sm font-semibold text-white rounded-lg transition"
-            style="background-color: rgb(254,80,103);">
-            {{ pinBusy ? 'Checking…' : 'Unlock rooms' }}
-          </button>
-          <button v-if="isAdmin" @click="openPinSetup" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg border border-gray-200">
-            {{ pinConfigured === false ? 'Set PIN' : 'Change PIN' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- Rooms view -->
-    <template v-else>
       <!-- category toggle: abstracts (oral) vs posters -->
       <div class="flex items-center gap-2">
         <button v-for="c in categoryOptions" :key="c.key"
@@ -56,6 +25,14 @@
           {{ r }}
         </button>
         <div class="flex-1"></div>
+        <button v-if="isAdmin" @click="openAssignPresenters" :disabled="assignBusy"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
+          style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          Assign to Room
+        </button>
         <button v-if="isAdmin" @click="openMatch" :disabled="matchLoading"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
           style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
@@ -161,22 +138,6 @@
           </div>
         </div>
       </div>
-    </template>
-
-    <!-- PIN setup modal -->
-    <div v-if="pinSetupOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="pinSetupOpen = false">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5">
-        <div class="font-bold mb-1">{{ pinConfigured === false ? 'Set Rooms PIN' : 'Change Rooms PIN' }}</div>
-        <p class="text-xs text-gray-500 mb-3">Admins viewing the Presentations by Room page will be asked for this PIN before slides and downloads are shown.</p>
-        <input v-model.trim="newPin" type="text" class="field-input text-center tracking-[0.5em]" maxlength="20" />
-        <div v-if="pinSetupErr" class="mt-2 text-sm text-red-600">{{ pinSetupErr }}</div>
-        <div class="mt-4 flex justify-end gap-2">
-          <button @click="pinSetupOpen = false" class="px-4 py-2 text-sm font-medium text-gray-600 rounded-lg">Cancel</button>
-          <button @click="savePin" :disabled="pinBusy" class="px-4 py-2 text-sm font-semibold text-white rounded-lg"
-            style="background-color: rgb(254,80,103);">Save PIN</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Match to Abstracts modal -->
     <div v-if="matchOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="matchOpen = false">
@@ -311,6 +272,131 @@
       </div>
     </div>
 
+    <!-- Assign to Room modal -->
+    <div v-if="assignOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="assignOpen = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+          <div>
+            <div class="font-bold">Assign Uploaded Presentations to a Room</div>
+            <p class="text-xs text-gray-500 mt-0.5">
+              Pick the day, pick the room from that day's programme, then tick the presenters whose slides go into it.
+            </p>
+          </div>
+          <button @click="assignOpen = false" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="p-5 space-y-4">
+          <!-- Step 1 — day -->
+          <div class="rounded-lg border border-gray-200 p-4 space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center" style="background-color: rgb(254,80,103);">1</span>
+              <div class="font-semibold text-sm">Pick the day</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 pl-7">
+              <button v-for="d in assignDays" :key="d"
+                @click="selectAssignDay(d)"
+                class="chip" :class="assignForm.day === d ? 'chip--active' : 'chip--idle'">
+                {{ d }}
+              </button>
+              <span class="text-xs text-gray-400">Only days with room slots are shown.</span>
+            </div>
+          </div>
+
+          <!-- Step 2 — room -->
+          <div class="rounded-lg border border-gray-200 p-4 space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center" style="background-color: rgb(254,80,103);">2</span>
+              <div class="font-semibold text-sm">Pick the room — {{ assignForm.day }}</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 pl-7">
+              <button v-for="d in assignRoomsForDay" :key="d.room"
+                @click="selectAssignRoom(d.room)"
+                class="chip" :class="assignForm.room === d.room ? 'chip--active' : 'chip--idle'"
+                :title="`${d.total} slot${d.total === 1 ? '' : 's'} · ${d.with_slide} with slides`">
+                {{ d.room }}
+                <span class="ml-1 text-[10px] font-medium opacity-70">{{ d.total }}</span>
+              </button>
+              <input v-model.trim="assignForm.room" type="text" class="field-input !py-1.5 !text-xs !w-44" placeholder="or type a new room…" />
+            </div>
+            <div v-if="!assignRoomsForDay.length" class="pl-7 text-xs text-gray-400">
+              No rooms scheduled for {{ assignForm.day }} yet — type a room name above to create one.
+            </div>
+          </div>
+
+          <!-- Step 3 — presenters -->
+          <div class="rounded-lg border border-gray-200 p-4 space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center" style="background-color: rgb(254,80,103);">3</span>
+              <div class="font-semibold text-sm">Tick the presenters to assign{{ assignForm.room ? ` to ${assignForm.room} · ${assignForm.day}` : '' }}</div>
+            </div>
+
+            <div v-if="assignLoading" class="py-10"><SpinnerComponent /></div>
+            <template v-else>
+              <!-- Category + filter chips -->
+              <div class="flex flex-wrap items-center gap-2 pl-7">
+                <button v-for="c in assignCategoryOptions" :key="c.key"
+                  @click="assignCategory = c.key"
+                  class="chip" :class="assignCategory === c.key ? 'chip--active' : 'chip--idle'">
+                  {{ c.label }} ({{ c.count }})
+                </button>
+                <div class="flex-1"></div>
+                <div class="text-xs text-gray-500 space-x-2">
+                  <button @click="setAssignAll(true)" class="font-medium hover:underline" style="color: rgb(0,150,180);">Select all shown</button>
+                  <button @click="setAssignAll(false)" class="text-gray-400 font-medium hover:underline">Select none</button>
+                </div>
+              </div>
+
+              <!-- Presenter list -->
+              <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                <div v-if="assignFilteredRows.length === 0" class="px-4 py-6 text-center text-sm text-gray-400 italic">
+                  No uploaded presentations for this filter.
+                </div>
+                <label v-for="r in assignFilteredRows" :key="r.abstract_id"
+                  class="px-4 py-3 text-sm flex items-start gap-3 cursor-pointer hover:bg-gray-50">
+                  <input type="checkbox" v-model="assignSelected[r.abstract_id]" class="mt-1 accent-cp-secondary flex-shrink-0" />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span class="font-semibold">{{ r.presenter }}</span>
+                      <span v-if="r.assigned" class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 uppercase tracking-wide">
+                        <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        in room
+                      </span>
+                      <span v-if="r.presentation_ext" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase">{{ r.presentation_ext }}</span>
+                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase"
+                        :class="r.presentation_type === 'poster' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'">
+                        {{ r.presentation_type }}
+                      </span>
+                    </div>
+                    <div class="text-xs text-gray-500 truncate mt-0.5">{{ r.title }}</div>
+                    <div v-if="r.assigned && r.entries.length" class="text-[10px] text-green-700 mt-0.5">
+                      Current: {{ r.entries[0].day }} · {{ r.entries[0].room }}<template v-if="r.entries[0].session"> · {{ r.entries[0].session }}</template>
+                    </div>
+                  </div>
+                  <button v-if="r.has_presentation" @click.prevent.stop="previewAssignAbstract(r)"
+                    class="text-[11px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0"
+                    style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+                    Preview
+                  </button>
+                </label>
+              </div>
+            </template>
+          </div>
+
+          <div v-if="assignDone" class="px-3 py-2 rounded-md bg-green-50 text-green-700 text-sm">{{ assignDone }}</div>
+          <div v-if="assignErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ assignErr }}</div>
+        </div>
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
+          <button @click="assignOpen = false" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Close</button>
+          <button v-if="assignForm.room" @click="submitAssign" :disabled="assignBusy || assignSelectedCount === 0"
+            class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ assignBusy ? 'Assigning…' : `Assign ${assignSelectedCount} to ${assignForm.day} · ${assignForm.room}` }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Manage entry modal -->
     <div v-if="manageOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="closeManage">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -400,7 +486,6 @@ import { saveAs } from 'file-saver'
 import axios from 'axios'
 
 const DAY_ORDER = ['Day 1', 'Day 2', 'Day 3', 'Day 1-3', 'Unassigned']
-const PIN_STORAGE_KEY = 'ecsaconm_rooms_pin'
 
 export default {
   name: 'ProgrammeRoomsView',
@@ -410,11 +495,6 @@ export default {
     return {
       roomsData: [],
       loading: false,
-      unlocked: false,
-      pinInput: '',
-      pinConfigured: null,   // null = unknown, true/false
-      pinError: '',
-      pinBusy: false,
       activeRoom: 'All Rooms',
       entryCategory: 'oral',
       categoryOptions: [
@@ -423,7 +503,6 @@ export default {
       ],
       apiUrl: import.meta.env.VITE_API_URL,
       flashMsg: '', flashErr: false,
-      pinSetupOpen: false, newPin: '', pinSetupErr: '',
       manageOpen: false, manageTarget: null, manageForm: {}, manageBusy: false, manageErr: '',
       preview: { open: false, name: '', src: '', entry: null },
       zipBusy: false,
@@ -431,7 +510,10 @@ export default {
       matchApplying: false, matchApplyResult: null, matchSelected: {},
       linkChoice: {}, linkBusy: false,
       acceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp',
-      _roomPin: '',
+      // assign presenters state
+      assignOpen: false, assignLoading: false, assignRows: [], assignCategory: 'all',
+      assignErr: '', assignDone: null, assignBusy: false, assignSelected: {},
+      assignForm: { room: '', day: 'Day 1' },
     }
   },
 
@@ -488,6 +570,39 @@ export default {
     selectedMatchCount() {
       return Object.values(this.matchSelected).filter(Boolean).length
     },
+    assignDays() {
+      const days = new Set()
+      for (const d of this.roomsData) {
+        if (d.day) days.add(d.day)
+      }
+      return DAY_ORDER.filter(day => days.has(day))
+    },
+    assignRoomsForDay() {
+      return this.roomsData
+        .filter(d => d.day === this.assignForm.day && d.room)
+        .map(d => ({ room: d.room, total: d.total, with_slide: d.with_slide }))
+        .sort((a, b) => a.room.localeCompare(b.room))
+    },
+    assignFilteredRows() {
+      if (this.assignCategory === 'all') return this.assignRows
+      return this.assignRows.filter(r => (r.presentation_type || 'oral') === this.assignCategory)
+    },
+    assignSelectedCount() {
+      const rows = this.assignFilteredRows
+      return rows.filter(r => this.assignSelected[r.abstract_id]).length
+    },
+    assignCategoryOptions() {
+      const by = { oral: 0, poster: 0 }
+      for (const r of this.assignRows) {
+        const t = r.presentation_type || 'oral'
+        if (t in by) by[t]++
+      }
+      return [
+        { key: 'all', label: 'All', count: this.assignRows.length },
+        { key: 'oral', label: 'Oral', count: by.oral },
+        { key: 'poster', label: 'Poster', count: by.poster },
+      ]
+    },
   },
 
   watch: {
@@ -500,95 +615,20 @@ export default {
   },
 
   mounted() {
-    this.checkPin()
+    this.loadRooms()
   },
 
   methods: {
-    async checkPin() {
-      const stored = sessionStorage.getItem(PIN_STORAGE_KEY)
-      if (stored) {
-        this._roomPin = stored
-        this.unlocked = true
-        this.loadRooms()
-        return
-      }
-      try {
-        const res = await axios.get(`${this.apiUrl}/programme/pin/status`, {
-          headers: { Authorization: `Bearer ${this.accessToken}` },
-        })
-        this.pinConfigured = !!res.data.set
-      } catch (e) {
-        this.flash('Failed to check PIN status.', true)
-      }
-    },
-
-    async submitPin() {
-      const pin = this.pinInput.trim()
-      if (!pin) { this.pinError = 'Enter the rooms PIN.'; return }
-      this.pinBusy = true
-      this.pinError = ''
-      try {
-        const res = await axios.post(`${this.apiUrl}/programme/pin/verify`, { pin }, {
-          headers: { Authorization: `Bearer ${this.accessToken}` },
-        })
-        if (res.data.valid) {
-          this._roomPin = pin
-          sessionStorage.setItem(PIN_STORAGE_KEY, pin)
-          this.unlocked = true
-          this.pinConfigured = true
-          this.loadRooms()
-        } else {
-          this.pinError = 'Incorrect PIN.'
-        }
-      } catch (e) {
-        this.pinError = e.response?.data?.detail || 'Verification failed.'
-      } finally {
-        this.pinBusy = false
-      }
-    },
-
-    openPinSetup() {
-      this.newPin = ''
-      this.pinSetupErr = ''
-      this.pinSetupOpen = true
-    },
-    async savePin() {
-      if (!this.newPin.trim() || this.newPin.trim().length < 4) {
-        this.pinSetupErr = 'PIN must be at least 4 characters.'
-        return
-      }
-      this.pinBusy = true
-      this.pinSetupErr = ''
-      try {
-        await axios.put(`${this.apiUrl}/programme/pin`, { pin: this.newPin.trim() }, {
-          headers: { Authorization: `Bearer ${this.accessToken}` },
-        })
-        this.pinConfigured = true
-        this.pinSetupOpen = false
-        this.flash('Rooms PIN updated.')
-      } catch (e) {
-        this.pinSetupErr = e.response?.data?.detail || 'Failed to save PIN.'
-      } finally {
-        this.pinBusy = false
-      }
-    },
-
     async loadRooms() {
       this.loading = true
       try {
         const res = await axios.get(`${this.apiUrl}/programme/rooms`, {
           params: { event_id: 1 },
-          headers: { Authorization: `Bearer ${this.accessToken}`, 'X-Room-Pin': this._roomPin },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.roomsData = res.data.data || []
       } catch (e) {
-        if (e.response?.status === 401 || e.response?.status === 403) {
-          sessionStorage.removeItem(PIN_STORAGE_KEY)
-          this.unlocked = false
-          this.flash(e.response?.data?.detail || 'Invalid session PIN.', true)
-        } else {
-          this.flash('Failed to load rooms.', true)
-        }
+        this.flash('Failed to load rooms.', true)
       } finally {
         this.loading = false
       }
@@ -689,7 +729,6 @@ export default {
         const res = await axios.post(`${this.apiUrl}/programme/${this.manageTarget.id}/upload-presentation`, form, {
           headers: {
             Authorization: `Bearer ${this.accessToken}`,
-            'X-Room-Pin': this._roomPin,
             'Content-Type': 'multipart/form-data',
           },
         })
@@ -733,7 +772,7 @@ export default {
           is_substitution: !!this.manageForm.is_substitution,
           original_presenter: this.manageForm.is_substitution ? (this.manageForm.original_presenter || null) : null,
         }, {
-          headers: { Authorization: `Bearer ${this.accessToken}`, 'X-Room-Pin': this._roomPin },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         const updated = res.data
         this.updateAllEntries(updated)
@@ -752,7 +791,7 @@ export default {
       this.manageErr = ''
       try {
         await axios.delete(`${this.apiUrl}/programme/${this.manageTarget.id}/presentation`, {
-          headers: { Authorization: `Bearer ${this.accessToken}`, 'X-Room-Pin': this._roomPin },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.manageTarget.presentation_file = null
         this.manageTarget.presentation_uploaded_at = null
@@ -867,6 +906,87 @@ export default {
       this.flashMsg = msg
       this.flashErr = err
       setTimeout(() => { this.flashMsg = ''; this.flashErr = false }, 4000)
+    },
+
+    // ── assign presenters to rooms ───────────────────────────────────
+    async openAssignPresenters() {
+      this.assignOpen = true
+      this.assignLoading = true
+      this.assignErr = ''
+      this.assignDone = null
+      this.assignCategory = 'all'
+      // Default to the first day that actually has room slots.
+      this.assignForm.day = this.assignDays[0] || 'Day 1'
+      this.assignForm.room = ''
+      try {
+        const res = await axios.get(`${this.apiUrl}/programme/presenters-with-slides`, {
+          params: { event_id: 1 },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.assignRows = res.data.data || []
+        this.assignSelected = {}
+        for (const r of this.assignRows) {
+          if (!r.assigned) this.assignSelected[r.abstract_id] = true
+        }
+      } catch (e) {
+        this.assignErr = e.response?.data?.detail || 'Failed to load presenters.'
+      } finally {
+        this.assignLoading = false
+      }
+    },
+    selectAssignDay(day) {
+      this.assignForm.day = day
+      this.assignForm.room = ''
+    },
+    selectAssignRoom(room) {
+      this.assignForm.room = room === this.assignForm.room ? '' : room
+    },
+    setAssignAll(value) {
+      for (const r of this.assignFilteredRows) this.assignSelected[r.abstract_id] = value
+    },
+    previewAssignAbstract(r) {
+      const fileUrl = `${this.apiUrl}/abstracts/${r.abstract_id}/preview-presentation`
+      const ext = (r.presentation_ext || '').replace(/^\./, '').toLowerCase()
+      const src = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
+        ? fileUrl
+        : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
+      this.preview = {
+        open: true,
+        name: `${r.presenter} — ${r.title || ''}`,
+        src,
+        entry: null,
+      }
+    },
+    async submitAssign() {
+      const ids = this.assignFilteredRows
+        .filter(r => this.assignSelected[r.abstract_id])
+        .map(r => r.abstract_id)
+      if (!ids.length) return
+      if (!this.assignForm.day) { this.assignErr = 'Pick a day first.'; return }
+      if (!this.assignForm.room.trim()) { this.assignErr = 'Pick or type a room first.'; return }
+      const category = this.assignCategory === 'all' ? null : this.assignCategory
+      this.assignBusy = true
+      this.assignErr = ''
+      this.assignDone = null
+      try {
+        const res = await axios.post(`${this.apiUrl}/programme/assign-presenters`, {
+          abstract_ids: ids,
+          room: this.assignForm.room.trim(),
+          day: this.assignForm.day,
+          category,
+        }, {
+          params: { event_id: 1 },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.assignDone = res.data.detail
+        await this.loadRooms()
+        await this.openAssignPresenters()
+        this.flash(res.data.detail)
+      } catch (e) {
+        this.assignErr = e.response?.data?.detail || 'Assignment failed.'
+      } finally {
+        this.assignBusy = false
+      }
     },
   },
 }

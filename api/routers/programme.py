@@ -2,10 +2,9 @@ import os
 import re
 import io
 import uuid
-import hmac
 import zipfile
 from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
@@ -14,7 +13,7 @@ from sqlalchemy import or_, func
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
 from models.models import (
-    ProgrammeEntry, SystemSetting, User, Registration, Event,
+    ProgrammeEntry, User, Registration, Event,
     Abstract, AbstractAuthor, AbstractStatus, PresentationType,
 )
 
@@ -22,7 +21,6 @@ router = APIRouter()
 
 user_dependency = Annotated[dict, Depends(get_current_user)]
 
-ROOM_PIN_KEY = "programme_room_pin"
 PROGRAMME_UPLOAD_DIR = "uploads/presentations"
 os.makedirs(PROGRAMME_UPLOAD_DIR, exist_ok=True)
 ALLOWED_PRESENTATION_EXTS = {".pdf", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
@@ -250,21 +248,6 @@ def _load_reg_rows(db: Session, event_id: int):
     return out
 
 
-def _pin_setting(db: Session) -> str:
-    row = db.query(SystemSetting).filter(SystemSetting.key == ROOM_PIN_KEY).first()
-    return (row.value or "") if row else ""
-
-
-def _require_pin(db: Session, pin: str):
-    if not pin:
-        raise HTTPException(status_code=401, detail="Room PIN is required.")
-    stored = _pin_setting(db)
-    if not stored:
-        raise HTTPException(status_code=409, detail="No room PIN has been set yet.")
-    if not hmac.compare_digest(pin.strip(), stored):
-        raise HTTPException(status_code=403, detail="Invalid room PIN.")
-
-
 def _effective_presentation_file(entry: ProgrammeEntry):
     """The slide file to serve for this entry: the one uploaded directly
     against it (via the Rooms admin page) if there is one, else the file the
@@ -328,57 +311,6 @@ def _serialize(entry: ProgrammeEntry, match=None):
         "matched_last": match["last"] if match else None,
     })
     return base
-
-
-# ── PIN management ───────────────────────────────────────────────────────────
-@router.get("/pin/status")
-def pin_status(
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-):
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    return {"set": bool(_pin_setting(db))}
-
-
-class PinSetSchema(BaseModel):
-    pin: str
-
-
-@router.put("/pin")
-def pin_set(
-    payload: PinSetSchema,
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-):
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    pin = payload.pin.strip()
-    if len(pin) < 4:
-        raise HTTPException(status_code=400, detail="PIN must be at least 4 characters.")
-    row = db.query(SystemSetting).filter(SystemSetting.key == ROOM_PIN_KEY).first()
-    if row:
-        row.value = pin
-    else:
-        db.add(SystemSetting(key=ROOM_PIN_KEY, value=pin))
-    db.commit()
-    return {"detail": "Rooms PIN updated."}
-
-
-@router.post("/pin/verify")
-def pin_verify(
-    payload: PinSetSchema,
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-):
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    stored = _pin_setting(db)
-    if not stored:
-        raise HTTPException(status_code=409, detail="No room PIN has been set yet.")
-    if hmac.compare_digest(payload.pin.strip(), stored):
-        return {"valid": True}
-    return {"valid": False}
 
 
 # ── Programme listing ────────────────────────────────────────────────────────
@@ -494,11 +426,8 @@ def programme_rooms(
     db: Session = Depends(get_db),
     auth_dependency: Auth = Depends(get_auth_dep),
     event_id: int = Query(DEFAULT_EVENT_ID),
-    pin: str = Query(None),
-    x_room_pin: Optional[str] = Header(None),
 ):
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    _require_pin(db, pin or x_room_pin or "")
     entries = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
         ProgrammeEntry.event_id == event_id,
         ProgrammeEntry.deleted_at == None,
@@ -529,6 +458,179 @@ def programme_rooms(
         result.append({"day": bucket["day"], "room": bucket["room"], "total": bucket["total"],
                         "with_slide": bucket["with_slide"], "entries": bucket["entries"]})
     return {"data": result}
+
+
+# ── Presenters who have uploaded slides (for room assignment) ─────────────────
+def _load_presenter_candidates(db: Session, event_id: int, with_slides_only: bool = True):
+    """One row per accepted abstract of this event with its presenting author
+    (falling back to the first-listed author): the data the secretariat needs
+    to decide who still needs a room. with_slides_only keeps presenters who
+    haven't uploaded anything yet out of the assignable list."""
+    q = (
+        db.query(
+            Abstract.id, Abstract.title, Abstract.presentation_file,
+            Abstract.presentation_uploaded_at, Abstract.presentation_type,
+            AbstractAuthor.firstname, AbstractAuthor.lastname,
+            AbstractAuthor.is_presenting, AbstractAuthor.author_order,
+        )
+        .join(AbstractAuthor, AbstractAuthor.abstract_id == Abstract.id)
+        .filter(
+            Abstract.event_id == event_id,
+            Abstract.deleted_at == None,
+            Abstract.status == AbstractStatus.accepted,
+        )
+    )
+    if with_slides_only:
+        q = q.filter(Abstract.presentation_file.isnot(None))
+    rows = q.all()
+    by_abstract = {}
+    for r in rows:
+        by_abstract.setdefault(r.id, []).append(r)
+    out = []
+    for abstract_id, authors in by_abstract.items():
+        presenting = [a for a in authors if a.is_presenting]
+        chosen = presenting[0] if presenting else min(authors, key=lambda a: a.author_order)
+        out.append({
+            "abstract_id": abstract_id,
+            "title": authors[0].title,
+            "has_presentation": bool(authors[0].presentation_file),
+            "presentation_ext": os.path.splitext(authors[0].presentation_file)[-1].lower() if authors[0].presentation_file else None,
+            "presentation_uploaded_at": authors[0].presentation_uploaded_at.isoformat() if authors[0].presentation_uploaded_at else None,
+            "presentation_type": authors[0].presentation_type.value if authors[0].presentation_type else None,
+            "first": chosen.firstname,
+            "last": chosen.lastname,
+        })
+    return out
+
+
+@router.get("/presenters-with-slides")
+def presenters_with_slides(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+):
+    """Secretariat pick-list: accepted abstracts whose presenter has already
+    uploaded slides, with whether they already sit in a programme slot (and
+    where). Used to decide who still needs to be assigned to a room/day."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    candidates = _load_presenter_candidates(db, event_id, with_slides_only=True)
+
+    assigned_info = {}
+    entries = db.query(ProgrammeEntry).filter(
+        ProgrammeEntry.event_id == event_id,
+        ProgrammeEntry.deleted_at == None,
+        ProgrammeEntry.abstract_id != None,
+    ).all()
+    for e in entries:
+        assigned_info.setdefault(e.abstract_id, []).append({
+            "entry_id": e.id, "room": e.room, "day": e.day, "session": e.session,
+            "category": e.category, "code": e.code,
+        })
+
+    data = []
+    for c in candidates:
+        info = assigned_info.get(c["abstract_id"], [])
+        data.append({
+            "abstract_id": c["abstract_id"],
+            "title": c["title"],
+            "presenter": " ".join(p for p in [(c["first"] or "").strip(), (c["last"] or "").strip()] if p),
+            "presentation_ext": c["presentation_ext"],
+            "presentation_uploaded_at": c["presentation_uploaded_at"],
+            "presentation_type": c["presentation_type"],
+            "has_presentation": True,
+            "assigned": bool(info),
+            "entries": info,
+        })
+    data.sort(key=lambda d: (d["presenter"] or "").lower())
+    return {
+        "data": data,
+        "total": len(data),
+        "assigned": sum(1 for d in data if d["assigned"]),
+        "unassigned": sum(1 for d in data if not d["assigned"]),
+    }
+
+
+class AssignPresentersSchema(BaseModel):
+    abstract_ids: List[int]
+    room: str
+    day: Optional[str] = "Day 1"
+    session: Optional[str] = None
+    category: Optional[str] = None   # oral | poster (defaults from the abstract)
+
+
+@router.post("/assign-presenters")
+def assign_presenters(
+    payload: AssignPresentersSchema,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+):
+    """Creates a programme slot for each selected presenter (who already has
+    slides) in the given room/day/session. If a slot for that abstract already
+    exists, it's moved instead of duplicated."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    if not payload.abstract_ids:
+        raise HTTPException(status_code=400, detail="Select at least one presenter.")
+    room = (payload.room or "").strip()
+    if not room:
+        raise HTTPException(status_code=400, detail="Room is required.")
+    if payload.category not in (None, "oral", "poster"):
+        raise HTTPException(status_code=400, detail="Category must be oral or poster.")
+
+    selected = set(payload.abstract_ids)
+    candidates = [
+        c for c in _load_presenter_candidates(db, event_id, with_slides_only=True)
+        if c["abstract_id"] in selected
+    ]
+    if not candidates:
+        raise HTTPException(status_code=404, detail="None of the selected presenters have an uploaded presentation.")
+
+    max_order = db.query(func.max(ProgrammeEntry.sort_order)).filter(
+        ProgrammeEntry.event_id == event_id, ProgrammeEntry.deleted_at == None,
+    ).scalar() or 0
+
+    created, updated = 0, 0
+    for c in candidates:
+        category = payload.category
+        if not category:
+            category = "poster" if c["presentation_type"] == "poster" else "oral"
+        name = " ".join(p for p in [(c["first"] or "").strip(), (c["last"] or "").strip()] if p)
+        existing = db.query(ProgrammeEntry).filter(
+            ProgrammeEntry.abstract_id == c["abstract_id"],
+            ProgrammeEntry.event_id == event_id,
+            ProgrammeEntry.deleted_at == None,
+        ).first()
+        if existing:
+            existing.room = room
+            existing.day = payload.day or "Day 1"
+            if payload.session is not None:
+                existing.session = payload.session
+            existing.category = category
+            existing.title = c["title"]
+            existing.presenter_name = name
+            updated += 1
+        else:
+            max_order += 1
+            db.add(ProgrammeEntry(
+                event_id=event_id,
+                category=category,
+                day=payload.day or "Day 1",
+                session=payload.session,
+                room=room,
+                title=c["title"],
+                presenter_name=name,
+                abstract_id=c["abstract_id"],
+                sort_order=max_order,
+            ))
+            created += 1
+    db.commit()
+    return {
+        "detail": f"Assigned {created} new and moved {updated}.",
+        "created": created,
+        "updated": updated,
+    }
 
 
 # ── Room-leader view (public, shareable link) ─────────────────────────────────
