@@ -861,10 +861,15 @@ class ProgrammeEntry(BaseWithSoftDelete):
     presentation_file = Column(String(500), nullable=True)
     presentation_uploaded_at = Column(TIMESTAMP(timezone=True), nullable=True)
     sort_order = Column(Integer, nullable=False, server_default="0", default=0)
+    # Set once this slot has been matched to its submitted Abstract (by
+    # presenter-name matching — the schedule book's presenter_name/title are
+    # typed by hand and often drift from what was actually submitted).
+    abstract_id = Column(Integer, ForeignKey("abstract.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     event = relationship("Event", back_populates="programme_entries")
+    abstract = relationship("Abstract")
 
     __table_args__ = (Index("ix_programme_entry", "event_id", "category", "day", "deleted_at"),)
 

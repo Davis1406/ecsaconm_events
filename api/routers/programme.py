@@ -13,7 +13,10 @@ from sqlalchemy import or_, func
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import ProgrammeEntry, SystemSetting, User, Registration
+from models.models import (
+    ProgrammeEntry, SystemSetting, User, Registration,
+    Abstract, AbstractAuthor, AbstractStatus, PresentationType,
+)
 
 router = APIRouter()
 
@@ -63,35 +66,160 @@ def _firstname(n) -> str:
     return "".join(p[:-1])
 
 
+def _name_score(pname, cand_first, cand_last):
+    """Fuzzy surname+firstname score between a free-typed name (pname, e.g.
+    from the programme book) and a candidate (first, last) on record.
+    Returns None if the surname doesn't plausibly match at all."""
+    sn, fn = _surname(pname), _firstname(pname)
+    rsn = _norm(cand_last or "")
+    rfn = _norm(cand_first or "")
+    if not rsn:
+        return None
+    if not (rsn == sn or (len(rsn) >= 5 and rsn[:4] == sn[:4])):
+        return None
+    sc = 2
+    if fn and rfn:
+        if _norm(fn) == rfn:
+            sc += 4
+        elif fn[0] == rfn[0]:
+            sc += 1
+        else:
+            sc -= 1
+        for w in fn.split(" "):
+            if w and w in rfn.split(" "):
+                sc += 2
+    return sc
+
+
 def best_registration_match(pname, reg_rows):
     """reg_rows: list of dicts {user_id, first, last, is_paid}. Mirrors the JS bestMatch."""
-    sn, fn = _surname(pname), _firstname(pname)
     best, best_score = None, -1
     for r in reg_rows:
-        rsn = _norm(r["last"] or "")
-        rfn = _norm(r["first"] or "")
-        if not rsn:
-            continue
-        if not (rsn == sn or (len(rsn) >= 5 and rsn[:4] == sn[:4])):
-            continue
-        sc = 2
-        if fn and rfn:
-            if _norm(fn) == rfn:
-                sc += 4
-            elif fn[0] == rfn[0]:
-                sc += 1
-            else:
-                sc -= 1
-            for w in fn.split(" "):
-                if w and w in rfn.split(" "):
-                    sc += 2
-        if sc > best_score:
+        sc = _name_score(pname, r["first"], r["last"])
+        if sc is not None and sc > best_score:
             best_score = sc
             best = r
     if not best or best_score < 3:
         return None
     return {"id": best["user_id"], "first": best["first"], "last": best["last"],
             "paid": best["is_paid"], "score": best_score}
+
+
+# ── Matching programme slots to submitted Abstracts ──────────────────────────
+# The programme book's presenter_name/title are typed by hand from the
+# official schedule and often drift from what was actually submitted (typos,
+# reworded titles, middle names dropped, etc.) — so we match by presenter
+# name only, not title, and let the title differ.
+def _presentation_types_for(category):
+    if category == "oral":
+        return [PresentationType.oral, PresentationType.either]
+    if category == "poster":
+        return [PresentationType.poster, PresentationType.either]
+    return [PresentationType.oral, PresentationType.poster, PresentationType.either]
+
+
+def _load_abstract_candidates(db: Session, event_id: int, category: str):
+    """One row per accepted abstract of the given category: its presenting
+    author (falling back to the first-listed author if none is flagged)."""
+    rows = (
+        db.query(Abstract.id, Abstract.title, AbstractAuthor.firstname,
+                  AbstractAuthor.lastname, AbstractAuthor.is_presenting,
+                  AbstractAuthor.author_order)
+        .join(AbstractAuthor, AbstractAuthor.abstract_id == Abstract.id)
+        .filter(
+            Abstract.event_id == event_id,
+            Abstract.deleted_at == None,
+            Abstract.status == AbstractStatus.accepted,
+            Abstract.presentation_type.in_(_presentation_types_for(category)),
+        )
+        .all()
+    )
+    by_abstract = {}
+    for r in rows:
+        by_abstract.setdefault(r.id, []).append(r)
+    out = []
+    for abstract_id, authors in by_abstract.items():
+        presenting = [a for a in authors if a.is_presenting]
+        chosen = presenting[0] if presenting else min(authors, key=lambda a: a.author_order)
+        out.append({
+            "abstract_id": abstract_id,
+            "title": authors[0].title,
+            "first": chosen.firstname,
+            "last": chosen.lastname,
+        })
+    return out
+
+
+def _compute_abstract_matches(db: Session, event_id: int, category: str):
+    """Greedy one-to-one best-score pairing of programme entries to abstracts
+    by presenter name. Returns matches plus what's left unmatched on both
+    sides, for manual follow-up."""
+    entries = (
+        db.query(ProgrammeEntry)
+        .filter(
+            ProgrammeEntry.event_id == event_id,
+            ProgrammeEntry.deleted_at == None,
+            ProgrammeEntry.category == category,
+        )
+        .order_by(ProgrammeEntry.sort_order.asc())
+        .all()
+    )
+    candidates = _load_abstract_candidates(db, event_id, category)
+
+    pairs = []
+    for e in entries:
+        if not e.presenter_name:
+            continue
+        for c in candidates:
+            score = _name_score(e.presenter_name, c["first"], c["last"])
+            if score is not None and score >= 3:
+                pairs.append((score, e, c))
+    pairs.sort(key=lambda p: -p[0])
+
+    used_entries, used_abstracts = set(), set()
+    matches = []
+    for score, e, c in pairs:
+        if e.id in used_entries or c["abstract_id"] in used_abstracts:
+            continue
+        used_entries.add(e.id)
+        used_abstracts.add(c["abstract_id"])
+        corrected = " ".join(p for p in [(c["first"] or "").strip(), (c["last"] or "").strip()] if p)
+        matches.append({
+            "entry_id": e.id,
+            "code": e.code,
+            "day": e.day,
+            "room": e.room,
+            "session": e.session,
+            "current_presenter_name": e.presenter_name,
+            "current_title": e.title,
+            "corrected_name": corrected,
+            "name_changed": _norm(corrected) != _norm(e.presenter_name or ""),
+            "abstract_id": c["abstract_id"],
+            "abstract_title": c["title"],
+            "score": score,
+            "already_linked": e.abstract_id == c["abstract_id"],
+        })
+    matches.sort(key=lambda m: -m["score"])
+
+    matched_entry_ids = {m["entry_id"] for m in matches}
+    matched_abstract_ids = {m["abstract_id"] for m in matches}
+    unmatched_entries = [
+        {"entry_id": e.id, "code": e.code, "day": e.day, "room": e.room,
+         "presenter_name": e.presenter_name, "title": e.title}
+        for e in entries if e.id not in matched_entry_ids
+    ]
+    unmatched_abstracts = [
+        {"abstract_id": c["abstract_id"], "title": c["title"],
+         "presenter": " ".join(p for p in [(c["first"] or "").strip(), (c["last"] or "").strip()] if p)}
+        for c in candidates if c["abstract_id"] not in matched_abstract_ids
+    ]
+    return {
+        "matches": matches,
+        "unmatched_entries": unmatched_entries,
+        "unmatched_abstracts": unmatched_abstracts,
+        "total_entries": len(entries),
+        "total_abstracts": len(candidates),
+    }
 
 
 def _load_reg_rows(db: Session, event_id: int):
@@ -358,6 +486,63 @@ def programme_rooms(
         result.append({"day": bucket["day"], "room": bucket["room"], "total": bucket["total"],
                         "with_slide": bucket["with_slide"], "entries": bucket["entries"]})
     return {"data": result}
+
+
+# ── Matching programme slots to submitted Abstracts ──────────────────────────
+@router.get("/match-abstracts")
+def match_abstracts_preview(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+    category: str = Query("oral"),
+):
+    """Dry-run: proposes presenter-name corrections + abstract links for every
+    programme entry of `category`, matched by presenter name against accepted
+    Abstracts (title text is intentionally ignored — see _compute_abstract_matches).
+    Nothing is written; call POST .../match-abstracts/apply to commit."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    return _compute_abstract_matches(db, event_id, category)
+
+
+@router.post("/match-abstracts/apply")
+def match_abstracts_apply(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+    category: str = Query("oral"),
+):
+    """Recomputes the same matches as the preview and writes them: each
+    matched entry gets abstract_id set and its presenter_name corrected to
+    the name on file for the abstract's presenting author."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    report = _compute_abstract_matches(db, event_id, category)
+    entry_ids = [m["entry_id"] for m in report["matches"]]
+    entries_by_id = {
+        e.id: e for e in
+        db.query(ProgrammeEntry).filter(ProgrammeEntry.id.in_(entry_ids)).all()
+    } if entry_ids else {}
+    renamed = 0
+    linked = 0
+    for m in report["matches"]:
+        entry = entries_by_id.get(m["entry_id"])
+        if not entry:
+            continue
+        if entry.abstract_id != m["abstract_id"]:
+            entry.abstract_id = m["abstract_id"]
+            linked += 1
+        if m["corrected_name"] and entry.presenter_name != m["corrected_name"]:
+            entry.presenter_name = m["corrected_name"]
+            renamed += 1
+    db.commit()
+    return {
+        "applied": len(report["matches"]),
+        "renamed": renamed,
+        "linked": linked,
+        "unmatched_entries": len(report["unmatched_entries"]),
+        "unmatched_abstracts": len(report["unmatched_abstracts"]),
+    }
 
 
 # ── Create / Update / Delete ────────────────────────────────────────────────

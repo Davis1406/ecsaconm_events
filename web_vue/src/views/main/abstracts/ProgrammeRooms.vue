@@ -47,6 +47,14 @@
           {{ r }}
         </button>
         <div class="flex-1"></div>
+        <button v-if="isAdmin" @click="openMatch" :disabled="matchLoading"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
+          style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {{ matchLoading ? 'Matching…' : 'Match to Abstracts' }}
+        </button>
         <span class="text-xs text-gray-500">{{ slideCountSummary }}</span>
       </div>
 
@@ -149,6 +157,97 @@
           <button @click="pinSetupOpen = false" class="px-4 py-2 text-sm font-medium text-gray-600 rounded-lg">Cancel</button>
           <button @click="savePin" :disabled="pinBusy" class="px-4 py-2 text-sm font-semibold text-white rounded-lg"
             style="background-color: rgb(254,80,103);">Save PIN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match to Abstracts modal -->
+    <div v-if="matchOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="matchOpen = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white">
+          <div>
+            <div class="font-bold">Match Presenters to Abstracts</div>
+            <p class="text-xs text-gray-500 mt-0.5">
+              Matches each oral schedule slot to its submitted abstract by presenter name
+              (titles are ignored — the schedule book's wording often differs from the
+              submitted title). Corrects the presenter name to what's on file.
+            </p>
+          </div>
+          <button @click="matchOpen = false" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div v-if="matchLoading" class="py-10"><SpinnerComponent /></div>
+          <template v-else-if="matchReport">
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div class="rounded-lg bg-teal-50 p-3">
+                <div class="text-xl font-bold text-teal-700">{{ matchReport.matches.length }}</div>
+                <div class="text-[11px] text-teal-700/80">matched</div>
+              </div>
+              <div class="rounded-lg bg-amber-50 p-3">
+                <div class="text-xl font-bold text-amber-700">{{ matchReport.unmatched_entries.length }}</div>
+                <div class="text-[11px] text-amber-700/80">slots w/o abstract</div>
+              </div>
+              <div class="rounded-lg bg-orange-50 p-3">
+                <div class="text-xl font-bold text-orange-700">{{ matchReport.unmatched_abstracts.length }}</div>
+                <div class="text-[11px] text-orange-700/80">abstracts w/o slot</div>
+              </div>
+            </div>
+
+            <div v-if="matchApplyResult" class="px-3 py-2 rounded-md bg-green-50 text-green-700 text-sm">
+              Applied — {{ matchApplyResult.renamed }} name{{ matchApplyResult.renamed === 1 ? '' : 's' }} corrected,
+              {{ matchApplyResult.linked }} newly linked to an abstract.
+            </div>
+
+            <div v-if="matchReport.matches.length" class="space-y-2">
+              <div class="font-semibold text-sm">Proposed matches</div>
+              <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                <div v-for="m in matchReport.matches" :key="m.entry_id" class="px-3 py-2 text-sm">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono text-xs text-gray-400">{{ m.code || '—' }}</span>
+                    <template v-if="m.name_changed">
+                      <span class="text-gray-400 line-through">{{ m.current_presenter_name }}</span>
+                      <span>→</span>
+                      <span class="font-semibold">{{ m.corrected_name }}</span>
+                    </template>
+                    <span v-else class="font-semibold">{{ m.corrected_name }}</span>
+                    <span class="text-[10px] text-gray-400 ml-auto">score {{ m.score }}</span>
+                  </div>
+                  <div class="text-xs text-gray-500 truncate mt-0.5">{{ m.abstract_title }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="matchReport.unmatched_entries.length" class="space-y-2">
+              <div class="font-semibold text-sm text-amber-700">Schedule slots with no matching abstract</div>
+              <div class="rounded-lg border border-amber-100 bg-amber-50/50 divide-y divide-amber-100 max-h-40 overflow-y-auto">
+                <div v-for="u in matchReport.unmatched_entries" :key="u.entry_id" class="px-3 py-2 text-sm">
+                  <span class="font-mono text-xs text-gray-400 mr-2">{{ u.code || '—' }}</span>
+                  <span class="font-semibold">{{ u.presenter_name || '—' }}</span>
+                  <div class="text-xs text-gray-500 truncate">{{ u.title }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="matchReport.unmatched_abstracts.length" class="space-y-2">
+              <div class="font-semibold text-sm text-orange-700">Accepted abstracts with no schedule slot</div>
+              <div class="rounded-lg border border-orange-100 bg-orange-50/50 divide-y divide-orange-100 max-h-40 overflow-y-auto">
+                <div v-for="u in matchReport.unmatched_abstracts" :key="u.abstract_id" class="px-3 py-2 text-sm">
+                  <span class="font-semibold">{{ u.presenter }}</span>
+                  <div class="text-xs text-gray-500 truncate">{{ u.title }}</div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-if="matchErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ matchErr }}</div>
+        </div>
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
+          <button @click="matchOpen = false" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Close</button>
+          <button v-if="matchReport && matchReport.matches.length" @click="applyMatch" :disabled="matchApplying"
+            class="px-4 py-2 text-sm font-semibold text-white rounded-lg" style="background-color: rgb(254,80,103);">
+            {{ matchApplying ? 'Applying…' : `Apply ${matchReport.matches.length} matches` }}
+          </button>
         </div>
       </div>
     </div>
@@ -264,6 +363,8 @@ export default {
       manageOpen: false, manageTarget: null, manageForm: {}, manageBusy: false, manageErr: '',
       preview: { open: false, name: '', src: '', entry: null },
       zipBusy: false,
+      matchOpen: false, matchLoading: false, matchReport: null, matchErr: '',
+      matchApplying: false, matchApplyResult: null,
       acceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp',
       _roomPin: '',
     }
@@ -561,6 +662,43 @@ export default {
 
     dayColor(day) {
       return { 'Day 1': '#005988', 'Day 2': '#0a7ea4', 'Day 3': '#0d5c8a', 'Day 1-3': '#b45309', Unassigned: '#6b7280' }[day] || '#6b7280'
+    },
+
+    // ── match presenters to submitted abstracts ────────────────────────
+    async openMatch() {
+      this.matchOpen = true
+      this.matchReport = null
+      this.matchApplyResult = null
+      this.matchErr = ''
+      this.matchLoading = true
+      try {
+        const res = await axios.get(`${this.apiUrl}/programme/match-abstracts`, {
+          params: { event_id: 1, category: 'oral' },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.matchReport = res.data
+      } catch (e) {
+        this.matchErr = e.response?.data?.detail || 'Failed to compute matches.'
+      } finally {
+        this.matchLoading = false
+      }
+    },
+    async applyMatch() {
+      this.matchApplying = true
+      this.matchErr = ''
+      try {
+        const res = await axios.post(`${this.apiUrl}/programme/match-abstracts/apply`, {}, {
+          params: { event_id: 1, category: 'oral' },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.matchApplyResult = res.data
+        await this.loadRooms()
+        this.flash(`Applied: ${res.data.renamed} name(s) corrected, ${res.data.linked} newly linked.`)
+      } catch (e) {
+        this.matchErr = e.response?.data?.detail || 'Failed to apply matches.'
+      } finally {
+        this.matchApplying = false
+      }
     },
 
     flash(msg, err = false) {
