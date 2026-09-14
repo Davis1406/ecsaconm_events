@@ -543,15 +543,13 @@ async def upload_presentation(
 def preview_presentation(
     entry_id: int,
     db: Session = Depends(get_db),
-    pin: str = Query(None),
-    x_room_pin: Optional[str] = Header(None),
 ):
-    """Serve slides inline for browser preview. Requires the Rooms PIN.
+    """Serve slides inline for browser preview.
 
-    Public-by-URL (no JWT) so the Office Online viewer can fetch it, but the
-    room PIN must be supplied (query param for iframe / header for axios).
+    Public-by-URL (no JWT, no PIN) — same model as the abstract preview links:
+    the admin generates this URL and shares it, so the Office Online viewer can
+    fetch it and anyone with the link can view the slides.
     """
-    _require_pin(db, pin or x_room_pin or "")
     entry = db.query(ProgrammeEntry).filter(
         ProgrammeEntry.id == entry_id, ProgrammeEntry.deleted_at == None,
     ).first()
@@ -569,14 +567,15 @@ def preview_presentation(
 @router.get("/{entry_id}/download-presentation")
 def download_presentation(
     entry_id: int,
-    current_user: user_dependency,
     db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-    pin: str = Query(None),
-    x_room_pin: Optional[str] = Header(None),
 ):
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    _require_pin(db, pin or x_room_pin or "")
+    """Serve the slides file for direct download.
+
+    Public-by-URL (no JWT, no PIN) — mirrors the abstract file links: the admin
+    generates this URL in the dashboard and shares it, so anyone with the URL
+    can fetch the file. This is also why the whole-room ZIP is public-by-URL
+    below.
+    """
     entry = db.query(ProgrammeEntry).filter(
         ProgrammeEntry.id == entry_id, ProgrammeEntry.deleted_at == None,
     ).first()
@@ -592,17 +591,17 @@ def download_presentation(
 
 @router.get("/download-room-zip")
 def download_room_zip(
-    current_user: user_dependency,
     db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
     event_id: int = Query(DEFAULT_EVENT_ID),
     room: str = Query(None),
     day: str = Query(None),
-    pin: str = Query(None),
-    x_room_pin: Optional[str] = Header(None),
 ):
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    _require_pin(db, pin or x_room_pin or "")
+    """Serve all slides for a room/day as one ZIP.
+
+    Public-by-URL (no JWT, no PIN) — same trust model as the abstract links
+    and the whole-office ZIP page: the admin generates this URL in the
+    dashboard and shares it, so anyone with the URL can fetch the ZIP.
+    """
     q = db.query(ProgrammeEntry).filter(
         ProgrammeEntry.event_id == event_id,
         ProgrammeEntry.deleted_at == None,

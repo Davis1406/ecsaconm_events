@@ -407,7 +407,7 @@ export default {
     },
     previewSrc(entry) {
       const ext = (entry.presentation_file || '').split('.').pop().toLowerCase()
-      const fileUrl = `${this.apiUrl}/programme/${entry.id}/preview-presentation?pin=${encodeURIComponent(this._roomPin)}`
+      const fileUrl = `${this.apiUrl}/programme/${entry.id}/preview-presentation`
       return ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
         ? fileUrl
         : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
@@ -423,8 +423,6 @@ export default {
     async downloadSingle(entry) {
       try {
         const res = await axios.get(`${this.apiUrl}/programme/${entry.id}/download-presentation`, {
-          params: { pin: this._roomPin },
-          headers: { Authorization: `Bearer ${this.accessToken}`, 'X-Room-Pin': this._roomPin },
           responseType: 'blob',
         })
         const ext = (entry.presentation_file || '').split('.').pop()
@@ -445,8 +443,7 @@ export default {
       this.zipBusy = true
       try {
         const res = await axios.get(`${this.apiUrl}/programme/download-room-zip`, {
-          params: { event_id: 1, room: room.room, day: room.day, pin: this._roomPin },
-          headers: { Authorization: `Bearer ${this.accessToken}`, 'X-Room-Pin': this._roomPin },
+          params: { event_id: 1, room: room.room, day: room.day },
           responseType: 'blob',
         })
         saveAs(res.data, `room_${(room.room || 'all').replace(/[^A-Za-z0-9_]+/g, '_')}.zip`)
