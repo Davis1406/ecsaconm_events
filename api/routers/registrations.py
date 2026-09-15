@@ -634,6 +634,76 @@ async def send_gala_invitations(
     }
 
 
+@router.get("/gala_invitations/failed_count")
+async def gala_invitations_failed_count(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """How many gala-dinner-invitation sends are currently logged as
+    failed — a read-only check before deciding whether to resend."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    from models.models import EmailLog
+    count = db.query(EmailLog).filter(
+        EmailLog.email_type == "gala_dinner_invitation",
+        EmailLog.status == "failed",
+    ).count()
+    return {"failed_count": count}
+
+
+@router.post("/gala_invitations/resend_failed")
+async def resend_failed_gala_invitations(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Retry every failed gala-dinner-invitation send. Doesn't use the
+    generic /email_logs/failed/resend — that replays a log row's stored
+    body, but this email type intentionally stores an empty body (the
+    entire email is the invitation image), so a generic resend would
+    silently skip every one of these ("no stored content"). This rebuilds
+    the image-embedded message properly instead."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    from models.models import EmailLog
+
+    failed_logs = db.query(EmailLog).filter(
+        EmailLog.email_type == "gala_dinner_invitation",
+        EmailLog.status == "failed",
+    ).all()
+    if not failed_logs:
+        return {"failed_count": 0, "queued": 0, "message": "No failed gala dinner invitations found."}
+
+    import utils.mailer_util as mailer_util
+    try:
+        image_bytes = _load_gala_invitation_image()
+    except OSError:
+        raise HTTPException(status_code=500, detail="Invitation image not found on server.")
+
+    jobs = [
+        {
+            "recipient_email": log.recipient_email,
+            "subject": log.subject,
+            "email_body": "",
+            "email_type": "gala_dinner_invitation",
+            "sent_by_user_id": current_user["user_id"],
+            # Reuse this same log row on resend instead of inserting a new
+            # one, so a successful resend replaces the "failed" entry.
+            "existing_log_id": log.id,
+        }
+        for log in failed_logs
+    ]
+    background_tasks.add_task(
+        mailer_util.send_bulk_emails, jobs, 0.3, None, None,
+        image_bytes, GALA_INVITATION_IMAGE_FILENAME,
+    )
+    return {
+        "failed_count": len(failed_logs),
+        "queued": len(jobs),
+        "message": f"Found {len(failed_logs)} failed gala dinner invitation(s) — resending now.",
+    }
+
+
 @router.get("/export")
 async def export_registrations(
     current_user: user_dependency,

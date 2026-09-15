@@ -659,7 +659,20 @@
           </div>
           <div v-if="galaModal.result" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ galaModal.result }}</div>
           <div v-if="galaModal.testResult" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ galaModal.testResult }}</div>
+          <div v-if="galaModal.resendResult" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ galaModal.resendResult }}</div>
           <div v-if="galaModal.error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{{ galaModal.error }}</div>
+
+          <!-- Failed sends -->
+          <div v-if="galaModal.failedCount > 0" class="p-3 rounded-xl border border-red-200 bg-red-50 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-sm text-red-700">
+              <strong>{{ galaModal.failedCount }}</strong> invitation{{ galaModal.failedCount !== 1 ? 's' : '' }} failed to send.
+            </span>
+            <button @click="resendFailedGalaInvitations" :disabled="galaModal.resending"
+              class="px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(220,50,75);">
+              {{ galaModal.resending ? 'Resending…' : `Resend ${galaModal.failedCount}` }}
+            </button>
+          </div>
 
           <!-- Trial send -->
           <div class="p-3 rounded-xl border border-amber-200 bg-amber-50 flex flex-wrap items-center gap-2">
@@ -838,10 +851,10 @@ export default {
         uploading: false, result: '', error: '',
       },
       galaModal: {
-        show: false, loading: false, saving: false, sending: false, testSending: false,
-        recipientCount: 0, testEmail: 'dkondo146@gmail.com',
+        show: false, loading: false, saving: false, sending: false, testSending: false, resending: false,
+        recipientCount: 0, testEmail: 'dkondo146@gmail.com', failedCount: 0,
         subject: '', originalSubject: '', imagePreviewUrl: '', imageLoadFailed: false,
-        result: '', testResult: '', error: '',
+        result: '', testResult: '', resendResult: '', error: '',
         previewSubject: '', previewTimer: null,
       },
       deleteModal: { show: false, reg: null, deleting: false },
@@ -1239,10 +1252,10 @@ export default {
     async openGalaModal() {
       if (!this.selectedEventId) return
       this.galaModal = {
-        show: true, loading: true, saving: false, sending: false, testSending: false,
-        recipientCount: 0, testEmail: this.galaModal?.testEmail || 'dkondo146@gmail.com',
+        show: true, loading: true, saving: false, sending: false, testSending: false, resending: false,
+        recipientCount: 0, testEmail: this.galaModal?.testEmail || 'dkondo146@gmail.com', failedCount: 0,
         subject: '', originalSubject: '', imagePreviewUrl: '', imageLoadFailed: false,
-        result: '', testResult: '', error: '',
+        result: '', testResult: '', resendResult: '', error: '',
         previewSubject: '', previewTimer: null,
       }
       // Plain unauthenticated URL (cache-busted so an edited flyer doesn't
@@ -1252,9 +1265,17 @@ export default {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        const tplRes = await api.get('/email_templates/gala_dinner_invitation')
-        this.galaModal.subject = tplRes.data.subject || ''
-        this.galaModal.originalSubject = this.galaModal.subject
+        const [tplRes, failedRes] = await Promise.allSettled([
+          api.get('/email_templates/gala_dinner_invitation'),
+          api.get('/registrations/gala_invitations/failed_count'),
+        ])
+        if (tplRes.status === 'fulfilled') {
+          this.galaModal.subject = tplRes.value.data.subject || ''
+          this.galaModal.originalSubject = this.galaModal.subject
+        }
+        if (failedRes.status === 'fulfilled') {
+          this.galaModal.failedCount = failedRes.value.data?.failed_count || 0
+        }
         this.refreshGalaPreview()
       } catch (e) {
         this.galaModal.error = 'Failed to load template.'
@@ -1338,6 +1359,24 @@ export default {
         this.galaModal.error = e.response?.data?.detail || 'Failed to send trial invitation.'
       } finally {
         this.galaModal.testSending = false
+      }
+    },
+    async resendFailedGalaInvitations() {
+      if (!confirm(`Resend the ${this.galaModal.failedCount} failed invitation(s)?`)) return
+      this.galaModal.resending = true
+      this.galaModal.resendResult = ''
+      this.galaModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.post('/registrations/gala_invitations/resend_failed')
+        this.galaModal.resendResult = res.data?.message || `Resending ${res.data?.queued || 0} invitation(s).`
+        this.galaModal.failedCount = 0
+      } catch (e) {
+        this.galaModal.error = e.response?.data?.detail || 'Failed to resend invitations.'
+      } finally {
+        this.galaModal.resending = false
       }
     },
     async sendGalaInvitations() {
