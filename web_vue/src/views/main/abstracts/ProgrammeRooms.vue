@@ -609,6 +609,8 @@ export default {
     // Every day that currently has data, in DAY_ORDER, each flagged with
     // whether its calendar date has already passed (unaffected by the day
     // filter/past-day toggle — those apply on top, in roomDays below).
+    // Filtered by the active room selection, so it drives what actually
+    // renders as room cards.
     allRoomDays() {
       const grouped = {}
       for (const d of this.categoryRoomsData) {
@@ -622,11 +624,27 @@ export default {
         isPast: this.isDayPast(day),
       }))
     },
+    // Every day that has data across ALL rooms, ignoring the active room
+    // filter — the day chip row and the "N past days" toggle should stay
+    // stable no matter which room is currently selected, otherwise picking
+    // a room can make a day chip disappear just because that particular
+    // room has no entries on it, which reads as the filter randomly hiding
+    // days.
+    allDaysGlobal() {
+      const grouped = {}
+      for (const d of this.categoryRoomsData) {
+        ;(grouped[d.day] = grouped[d.day] || []).push(d)
+      }
+      return DAY_ORDER.filter(day => grouped[day]).map(day => ({
+        day,
+        isPast: this.isDayPast(day),
+      }))
+    },
     pastDaysCount() {
-      return this.allRoomDays.filter(d => d.isPast).length
+      return this.allDaysGlobal.filter(d => d.isPast).length
     },
     dayFilterChips() {
-      const days = this.allRoomDays.filter(d => this.showPastDays || !d.isPast)
+      const days = this.allDaysGlobal.filter(d => this.showPastDays || !d.isPast)
       return ['All Days', ...days.map(d => d.day)]
     },
     // What actually renders: allRoomDays narrowed by the day filter and by
