@@ -88,6 +88,12 @@
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
           Upload Names
         </button>
+        <button @click="openGalaModal" :disabled="!selectedEventId"
+          title="Select an event above first — invitation goes to every registrant of that event, paid or unpaid"
+          class="px-4 py-2 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-50"
+          style="border-color: rgb(180,83,9); color: rgb(180,83,9);">
+          Gala Dinner Invitation
+        </button>
       </div>
 
       <!-- Spinner -->
@@ -629,6 +635,102 @@
       </div>
     </div>
 
+    <!-- ── Gala Dinner Invitation Modal ─────────────────────────────────────── -->
+    <div v-if="galaModal.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      @click.self="closeGalaModal">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl flex flex-col max-h-[92vh] overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
+          style="background-color: rgba(180,83,9,0.05);">
+          <div>
+            <p class="font-bold text-gray-800">Gala Dinner Invitation</p>
+            <p class="text-xs text-gray-400 mt-0.5">Sent to every registrant of the selected event — paid or unpaid alike. Embedded as the email body and attached as an HTML file.</p>
+          </div>
+          <button @click="closeGalaModal" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 overflow-y-auto flex-1 space-y-4">
+          <div class="p-3 rounded-xl bg-blue-50 border border-blue-100 text-sm text-blue-700">
+            Will be sent to <strong>{{ galaModal.recipientCount }}</strong> registrant(s) of this event, regardless of payment status.
+          </div>
+          <div v-if="galaModal.result" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ galaModal.result }}</div>
+          <div v-if="galaModal.testResult" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ galaModal.testResult }}</div>
+          <div v-if="galaModal.error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{{ galaModal.error }}</div>
+
+          <!-- Trial send -->
+          <div class="p-3 rounded-xl border border-amber-200 bg-amber-50 flex flex-wrap items-center gap-2">
+            <label class="text-xs font-semibold text-amber-800 uppercase tracking-wide">Trial send to</label>
+            <input v-model="galaModal.testEmail" type="email" placeholder="you@example.com"
+              class="flex-1 min-w-[200px] border border-amber-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+            <button @click="sendGalaTrial" :disabled="galaModal.testSending || !galaModal.testEmail"
+              class="px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(180,83,9);">
+              {{ galaModal.testSending ? 'Sending…' : 'Send Trial' }}
+            </button>
+          </div>
+
+          <!-- Subject -->
+          <div>
+            <label class="edit-label">Email Subject</label>
+            <input v-model="galaModal.subject" type="text" class="edit-input" />
+            <p class="text-xs text-gray-400 mt-1">
+              Sent as: <strong class="text-gray-600">{{ renderGalaSubjectPreview(galaModal.subject) }}</strong>
+            </p>
+          </div>
+
+          <!-- Body editor -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">HTML Body</label>
+              <button @click="galaModal.editMode = galaModal.editMode === 'edit' ? 'preview' : 'edit'"
+                class="text-xs px-3 py-1 rounded-lg border transition"
+                :class="galaModal.editMode === 'preview'
+                  ? 'border-pink-400 text-pink-600 bg-pink-50'
+                  : 'border-gray-200 text-gray-500 hover:border-gray-300'">
+                {{ galaModal.editMode === 'preview' ? '✎ Edit HTML' : '👁 Preview' }}
+              </button>
+            </div>
+            <div v-if="galaModal.editMode === 'preview'" class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+              <iframe :srcdoc="renderGalaPreview(galaModal.body_html)" style="width:100%; height:360px; border:none;"></iframe>
+            </div>
+            <textarea v-else v-model="galaModal.body_html" rows="16"
+              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:border-pink-400"
+              style="resize: vertical;"></textarea>
+            <p class="text-xs text-gray-400 mt-1">
+              This same HTML is both the email body and the attached
+              <code class="bg-gray-100 px-1 rounded">Gala_Dinner_Invitation.html</code> file. Variables:
+              <code class="bg-gray-100 px-1 rounded">firstname</code>
+              <code class="bg-gray-100 px-1 rounded">event_name</code>
+              <code class="bg-gray-100 px-1 rounded">info_email</code>
+              <code class="bg-gray-100 px-1 rounded">year</code>
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100">
+          <button @click="closeGalaModal" class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <div class="flex gap-3">
+            <button @click="saveGalaTemplate" :disabled="galaModal.saving"
+              class="px-5 py-2.5 border rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+              style="border-color: rgb(254,80,103);">
+              {{ galaModal.saving ? 'Saving…' : 'Save Template' }}
+            </button>
+            <button @click="sendGalaInvitations" :disabled="galaModal.sending || galaModal.recipientCount === 0"
+              class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(180,83,9);">
+              {{ galaModal.sending ? 'Sending…' : `Send to ${galaModal.recipientCount}` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Bulk Upload Names Modal ─────────────────────────────────────────── -->
     <div v-if="uploadModal.show"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
@@ -746,6 +848,13 @@ export default {
         show: false, eventId: '', file: null, fileName: '',
         uploading: false, result: '', error: '',
       },
+      galaModal: {
+        show: false, loading: false, saving: false, sending: false, testSending: false,
+        recipientCount: 0, testEmail: 'dkondo146@gmail.com',
+        subject: '', body_html: '', originalSubject: '', originalBody: '',
+        editMode: 'preview', result: '', testResult: '', error: '',
+        previewSubject: '', previewBody: '', previewTimer: null,
+      },
       deleteModal: { show: false, reg: null, deleting: false },
       toast: { show: false, message: '', type: 'success' },
       proofModal: {
@@ -811,6 +920,8 @@ export default {
     'reminderModal.deadline'() { this.refreshReminderPreview() },
     'reminderModal.subject'() { this.refreshReminderPreview() },
     'reminderModal.body_html'() { this.refreshReminderPreview() },
+    'galaModal.subject'() { this.refreshGalaPreview() },
+    'galaModal.body_html'() { this.refreshGalaPreview() },
   },
   mounted() {
     const q = this.$route.query
@@ -1133,6 +1244,151 @@ export default {
         this.reminderModal.error = e.response?.data?.detail || 'Failed to send reminders.'
       } finally {
         this.reminderModal.sending = false
+      }
+    },
+
+    // ── Gala dinner invitation ───────────────────────────────────────────
+    async openGalaModal() {
+      if (!this.selectedEventId) return
+      this.galaModal = {
+        show: true, loading: true, saving: false, sending: false, testSending: false,
+        recipientCount: 0, testEmail: this.galaModal?.testEmail || 'dkondo146@gmail.com',
+        subject: '', body_html: '', originalSubject: '', originalBody: '',
+        editMode: 'preview', result: '', testResult: '', error: '',
+        previewSubject: '', previewBody: '', previewTimer: null,
+      }
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const tplRes = await api.get('/email_templates/gala_dinner_invitation')
+        this.galaModal.subject = tplRes.data.subject || ''
+        this.galaModal.body_html = tplRes.data.body_html || ''
+        this.galaModal.originalSubject = this.galaModal.subject
+        this.galaModal.originalBody = this.galaModal.body_html
+        this.refreshGalaPreview()
+      } catch (e) {
+        this.galaModal.error = 'Failed to load template.'
+      } finally {
+        this.galaModal.loading = false
+      }
+    },
+    closeGalaModal() {
+      clearTimeout(this.galaModal.previewTimer)
+      this.galaModal.show = false
+    },
+    refreshGalaPreview() {
+      // Server-renders the subject + body with the real Jinja engine using
+      // the current editor values; debounced so typing doesn't spam the API.
+      clearTimeout(this.galaModal.previewTimer)
+      if (!this.galaModal.show) return
+      this.galaModal.previewTimer = setTimeout(async () => {
+        try {
+          const token = this.authStore.accessToken
+          const api = axios.create({ baseURL: API_URL })
+          if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+          const res = await api.post('/registrations/send_gala_invitations/preview', {
+            event_id: this.selectedEventId || null,
+            subject: this.galaModal.subject,
+            body_html: this.galaModal.body_html,
+          })
+          this.galaModal.previewSubject = res.data?.subject || ''
+          this.galaModal.previewBody = res.data?.body_html || ''
+          this.galaModal.recipientCount = res.data?.recipient_count || 0
+        } catch (e) {
+          this.galaModal.previewSubject = ''
+          this.galaModal.previewBody = ''
+        }
+      }, 500)
+    },
+    renderGalaPreview(bodyHtml) {
+      if (this.galaModal.previewBody) return this.galaModal.previewBody
+      const sample = {
+        subject: this.galaModal.subject || 'Gala Dinner Invitation',
+        firstname: 'Jane Presenter',
+        event_name: 'ECSACONM Scientific Conference',
+        info_email: 'info@ecsaconm.org',
+        year: new Date().getFullYear(),
+      }
+      return (bodyHtml || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key) => {
+        return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
+      })
+    },
+    renderGalaSubjectPreview(subject) {
+      if (this.galaModal.previewSubject) return this.galaModal.previewSubject
+      const sample = {
+        event_name: 'ECSACONM Scientific Conference',
+        year: new Date().getFullYear(),
+      }
+      let out = (subject || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key) => {
+        return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
+      })
+      out = out.replace(/\{(\w+)\}/g, (m, key) => {
+        return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
+      })
+      return out
+    },
+    async saveGalaTemplate() {
+      this.galaModal.saving = true
+      this.galaModal.result = ''
+      this.galaModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        await api.put('/email_templates/gala_dinner_invitation', {
+          subject: this.galaModal.subject,
+          body_html: this.galaModal.body_html,
+        })
+        this.galaModal.originalSubject = this.galaModal.subject
+        this.galaModal.originalBody = this.galaModal.body_html
+        this.galaModal.result = 'Template saved. It will be used on send.'
+      } catch (e) {
+        this.galaModal.error = e.response?.data?.detail || 'Failed to save template.'
+      } finally {
+        this.galaModal.saving = false
+      }
+    },
+    async sendGalaTrial() {
+      this.galaModal.testSending = true
+      this.galaModal.testResult = ''
+      this.galaModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.post('/registrations/send_gala_invitations', {
+          event_id: this.selectedEventId || null,
+          subject: this.galaModal.subject,
+          body_html: this.galaModal.body_html,
+          test_email: this.galaModal.testEmail,
+        })
+        this.galaModal.testResult = res.data?.message || `Trial invitation sent to ${this.galaModal.testEmail}.`
+      } catch (e) {
+        this.galaModal.error = e.response?.data?.detail || 'Failed to send trial invitation.'
+      } finally {
+        this.galaModal.testSending = false
+      }
+    },
+    async sendGalaInvitations() {
+      if (!confirm(`Send the gala dinner invitation to all ${this.galaModal.recipientCount} registrant(s) of this event (paid and unpaid)?`)) return
+      this.galaModal.sending = true
+      this.galaModal.result = ''
+      this.galaModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.post('/registrations/send_gala_invitations', {
+          event_id: this.selectedEventId || null,
+          subject: this.galaModal.subject,
+          body_html: this.galaModal.body_html,
+        })
+        this.galaModal.result = res.data?.message || `Invitation queued for ${res.data?.sent || 0} registrant(s).`
+      } catch (e) {
+        this.galaModal.error = e.response?.data?.detail || 'Failed to send invitations.'
+      } finally {
+        this.galaModal.sending = false
       }
     },
 

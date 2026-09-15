@@ -103,6 +103,7 @@ async def update_email_template(
             "attendance_confirmation_form": "attendance_form_template.html",
             "payment_reminder": "payment_reminder_template.html",
             "presenter_instructions": "presenter_instructions_template.html",
+            "gala_dinner_invitation": "gala_dinner_invitation_template.html",
         }
         fname = fname_map.get(template_key)
         if fname:

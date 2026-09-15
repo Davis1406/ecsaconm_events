@@ -77,7 +77,7 @@
 
     <router-link :to="{ name: 'ProgrammeSummary' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('ProgrammeSummary')"
-        class="nav-item" :class="isProgrammeActive ? 'nav-item--active' : 'nav-item--idle'">
+        class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
         <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
           <path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5zM8 7h8M8 11h8M8 15h5"/>
         </svg>
@@ -163,7 +163,6 @@
 import { useAuthStore } from '@/store/authStore'
 
 const ABSTRACT_ROUTES = ['Abstracts', 'Abstract', 'PresentationTemplates', 'UploadedPresentations']
-const PROGRAMME_ROUTES = ['ProgrammeSummary', 'ProgrammeRooms']
 const EVENT_ROUTES    = ['Events', 'Event', 'AddEvent', 'EditEvent']
 const USER_ROUTES     = ['Users', 'User', 'AddUser', 'EditUser']
 const MY_ACCOUNT      = ['MyDashboard', 'MyAccountProfile', 'MyEvents', 'MyEvent']
@@ -178,7 +177,6 @@ export default {
   },
   computed: {
     isAbstractActive() { return ABSTRACT_ROUTES.includes(this.$route.name) },
-    isProgrammeActive() { return PROGRAMME_ROUTES.includes(this.$route.name) },
     isEventActive()    { return EVENT_ROUTES.includes(this.$route.name) },
     isUserActive()     { return USER_ROUTES.includes(this.$route.name) },
     isMyAccountActive(){ return MY_ACCOUNT.includes(this.$route.name) },

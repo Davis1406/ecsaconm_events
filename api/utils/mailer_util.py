@@ -234,7 +234,7 @@ def _load_recent_send_times(window_seconds=3600):
         db.close()
 
 
-def send_bulk_emails(jobs, delay_seconds=0.3):
+def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_filename=None):
     """Send multiple emails over a single, reused SMTP connection.
 
     `send_email()` opens (and logs into) a brand-new SMTP connection per
@@ -247,6 +247,10 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
     `jobs` is a list of dicts, each with keys:
       recipient_email, subject, email_body, email_type (optional),
       sent_by_user_id (optional), reply_to_email (optional)
+
+    `attachment_bytes`/`attachment_filename`, if given, are attached to every
+    message in the batch (e.g. the same invitation HTML embedded in the body
+    also handed over as a downloadable/keepsake file).
 
     Returns {"sent": int, "failed": int}.
     """
@@ -363,7 +367,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
                                             sent_by_user_id, reply_to_email, email_body)
             final_body = _inject_tracking_pixel(email_body, log_id)
 
-            message = MIMEMultipart("alternative")
+            message = MIMEMultipart("mixed") if attachment_bytes else MIMEMultipart("alternative")
             message["From"] = f"{from_name} <{from_email}>"
             message["To"] = recipient_email
             message["Cc"] = ADMIN_CC_EMAIL
@@ -372,7 +376,19 @@ def send_bulk_emails(jobs, delay_seconds=0.3):
             message["Message-ID"] = make_msgid(domain="ecsaconm.org")
             message["Reply-To"] = reply_to_email or f"{from_name} <{from_email}>"
             message["X-Mailer"] = "ECSACONM Events Portal"
-            message.attach(MIMEText(final_body, "html", "utf-8"))
+            if attachment_bytes:
+                alt_part = MIMEMultipart("alternative")
+                alt_part.attach(MIMEText(final_body, "html", "utf-8"))
+                message.attach(alt_part)
+                file_part = MIMEBase("application", "octet-stream")
+                file_part.set_payload(attachment_bytes)
+                encoders.encode_base64(file_part)
+                file_part.add_header(
+                    "Content-Disposition", f'attachment; filename="{attachment_filename or "attachment"}"'
+                )
+                message.attach(file_part)
+            else:
+                message.attach(MIMEText(final_body, "html", "utf-8"))
             envelope_to = _cc_recipients(recipient_email)
 
             if msgs_on_connection >= max_msgs_per_connection:

@@ -105,6 +105,12 @@ TEMPLATES = {
         "file": "presenter_instructions_template.html",
         "variables": "subject, firstname, event_name, abstract_title, presentation_type_label, show_oral, show_poster, year",
     },
+    "gala_dinner_invitation": {
+        "name": "Gala Dinner Invitation",
+        "subject": "You're Invited: Gala Dinner — {event_name}",
+        "file": "gala_dinner_invitation_template.html",
+        "variables": "subject, firstname, event_name, info_email, year",
+    },
 }
 
 
