@@ -506,6 +506,10 @@
             <QrCodeIcon class="w-4 h-4" />
             QR Code
           </button>
+          <button @click="triggerReplaceDocument(doc)" :disabled="replaceUploading && replacingDocId === doc.id"
+            title="Replace file" class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition disabled:opacity-50">
+            <ArrowPathIcon class="w-4 h-4" :class="{ 'animate-spin': replaceUploading && replacingDocId === doc.id }" />
+          </button>
           <button @click="deleteDocument(doc.id)"
             class="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition">
             <TrashIcon class="w-4 h-4" />
@@ -519,6 +523,9 @@
         </div>
         <p class="text-gray-400 text-sm">No documents uploaded yet.</p>
       </div>
+      <!-- Hidden input backing the per-row Replace button -->
+      <input ref="replaceFileInput" type="file" class="hidden"
+        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" @change="handleReplaceFile" />
       <PdfPreviewModal
         v-model:show="showDocumentQrPreview"
         title="Document QR Code"
@@ -1235,7 +1242,7 @@ import {
   XCircleIcon, CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon,
   ChartBarIcon, ArrowDownTrayIcon, LinkIcon, FolderOpenIcon,
   TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon,
-  QrCodeIcon, PrinterIcon,
+  QrCodeIcon, PrinterIcon, ArrowPathIcon,
 } from '@heroicons/vue/24/solid';
 
 import HeaderView from '@/includes/Header.vue';
@@ -1339,6 +1346,8 @@ export default {
       docUploading: false,
       docSuccess: '',
       docError: '',
+      replacingDocId: null,
+      replaceUploading: false,
       // Links
       links: [],
       newLink: { name: '', link: '', access_level: 'public' },
@@ -2204,6 +2213,38 @@ export default {
     },
     docFileUrl(doc) {
       return `${API_URL}/${doc.path || doc.file_path || doc.file}`;
+    },
+    triggerReplaceDocument(doc) {
+      this.replacingDocId = doc.id;
+      this.docError = ''; this.docSuccess = '';
+      if (this.$refs.replaceFileInput) this.$refs.replaceFileInput.value = '';
+      this.$refs.replaceFileInput && this.$refs.replaceFileInput.click();
+    },
+    async handleReplaceFile(e) {
+      const file = e.target.files[0];
+      const docId = this.replacingDocId;
+      if (!file || !docId) return;
+      this.replaceUploading = true; this.docError = ''; this.docSuccess = '';
+      try {
+        const token = this.authStore.accessToken;
+        const form = new FormData();
+        form.append('file', file);
+        const api = axios.create({ baseURL: API_URL });
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        await api.put(`/events/replace_document/${docId}`, form);
+        await this.getEvent(true);
+        // Surface the fresh QR right away — the file URL it encodes has
+        // changed, so any previously printed/downloaded copy is now stale.
+        this.documentQrUrl = `/events/documents/${docId}/qr`;
+        this.showDocumentQrPreview = true;
+        this.docSuccess = 'Document replaced. Its QR code now points to the new file — reprint/redistribute it.';
+        setTimeout(() => { this.docSuccess = ''; }, 6000);
+      } catch (err) {
+        this.docError = err.response?.data?.detail || 'Failed to replace document.';
+      } finally {
+        this.replaceUploading = false;
+        this.replacingDocId = null;
+      }
     },
 
     // ── Links ──────────────────────────────────────────

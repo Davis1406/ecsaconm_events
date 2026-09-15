@@ -217,3 +217,84 @@ other data/method name collisions (only legitimate data+`watch` pairings).
    `deploy/deploy.sh web` (rsync-based) to ship `web_vue/dist/`, and hard-refresh
    after. Clean the server tree back to a single `git pull`-able state when
    convenient.
+
+---
+
+## 2026-09-14 — Local `main` had diverged 62 vs 182 commits from `origin/main` (two PCs, same repo)
+
+**What happened**
+
+A local checkout of this repo on a second PC (used since ~June 2026) had never
+been pushed and had drifted **62 commits** ahead of the point it last synced
+(`4515fdd`, 2026-06-01), while `origin/main` had independently moved **182
+commits** ahead of that same point (through 2026-09-14, `e177fe0`). Neither
+side had ever seen the other's commits — a true fork, not just "behind."
+
+A dry-run 3-way merge (`git merge-tree`) showed the two histories touched **63
+of the same files**, with **23 of those containing real overlapping-line
+conflicts** — centrally `api/routers/abstracts.py`, `api/models/models.py`,
+`Abstract.vue`/`Abstracts.vue`, `router/index.js`, `Sidebar.vue`, and
+`Dashboard.vue`. Both PCs had clearly built overlapping features
+independently (most visibly: a "Programme Rooms" feature existed on the
+production server as uncommitted work *and* had been separately built and
+merged to `origin/main` as `ProgrammeRooms.vue` / `api/routers/programme.py`).
+
+**Resolution**
+
+Decided the local-only 62 commits were superseded/no longer needed (the
+functionality had already been reimplemented and merged upstream), so instead
+of merging or rebasing, reset the diverged local branch straight to origin:
+
+```bash
+git fetch origin
+git reset --hard origin/main
+```
+
+Separately, the production server was found to be running an even *older*
+commit (`2206b09`, 96 commits behind `origin/main`) with its own uncommitted
+Programme-feature work sitting directly in `/var/www/ecsaconm_events` — same
+anti-pattern as the 2026-08-13 and 2026-09-02 incidents, just at a much larger
+scale (a whole feature + 4 migrations, not a few lines). Diffing confirmed
+every server-side file was either byte-identical to `origin/main` or a
+functional duplicate of code already merged, so no unique work was at risk;
+cleanup follows the same `git checkout -- .` + remove-superseded-untracked-files
++ `git pull` pattern as the 2026-08-13 incident.
+
+**Root cause — no habit of syncing before starting work, on any machine**
+
+This repo is being worked on from at least two developer PCs plus hand-edits
+on the production server, all pushing/editing `main` directly, with no branch
+protection and no "pull before you start" discipline. Nothing forces any of
+the three write points to check they're current before making changes, so
+divergence compounds silently until someone tries to reconcile — at which
+point it's 60-180 commits deep instead of a same-day 5-minute fix.
+
+**Takeaways — how to avoid this going forward**
+
+1. **Pull before every session, on every machine.** Before opening the repo
+   to work, always `git fetch && git status` (or just `git pull`) first —
+   not "when you remember." This is the single highest-leverage habit; almost
+   every incident in this log traces back to skipping it somewhere.
+2. **Never edit code directly on the production server.** Treat
+   `/var/www/ecsaconm_events` as a deploy target only (per the 2026-08-13
+   takeaway, restated because it keeps recurring). If a live hotfix is
+   unavoidable, commit and `git push` it back to `origin/main` from the
+   server itself *before* touching any other machine, so the next `git pull`
+   anywhere never has to reconcile a diverged working tree.
+3. **Push early and often instead of batching local commits.** Don't let
+   work sit local-only for weeks — the longer commits accumulate unpushed,
+   the worse the eventual reconciliation. Prefer small, frequently-pushed
+   commits (ideally on a short-lived feature branch) over long local-only
+   streaks.
+4. **Use feature branches + PRs instead of committing straight to `main`
+   from multiple machines.** `TEAM.md` §5 already documents this workflow;
+   it just isn't being followed. GitHub will visibly flag "this branch is
+   behind main" on a PR before it silently spirals into a 100+ commit fork.
+   Consider enabling branch protection on `main` (require PRs, no direct
+   pushes) to make this the only option rather than a convention.
+5. **Make `deploy.sh`/`server-deploy.sh` fail loud on a dirty or stale
+   server tree** instead of attempting the pull anyway — check
+   `git status --short` and `git rev-list --count HEAD..origin/main` up
+   front and abort with a clear message if either is non-empty/non-zero,
+   rather than failing confusingly mid-pull (as in 2026-08-13) or silently
+   pulling over drift.

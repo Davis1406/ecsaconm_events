@@ -214,6 +214,17 @@ git push origin feature/your-feature-name
 
 Then open a Pull Request on GitHub targeting `main`. Get it reviewed before merging.
 
+> **Working from more than one PC?** Step 1 (`git pull origin main`) is not
+> optional — always run it before you start editing, on every machine,
+> every session. This repo has been worked on from multiple developer PCs
+> plus (against the rules below) direct edits on the production server, and
+> skipping the pull-first habit is what has caused every multi-week merge
+> conflict and stale-deploy incident logged in `deployment.md` — see its
+> 2026-09-14 entry for the largest example (a local checkout that drifted
+> 62 unpushed commits while `origin/main` moved on 182). Also: **never edit
+> code directly on `/var/www/ecsaconm_events` on the production server** —
+> treat it as a deploy target only; see §7 and `deployment.md`.
+
 ### Commit message conventions
 
 - Use present tense: `Add email preview for template notifications`

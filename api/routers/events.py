@@ -1671,6 +1671,71 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
+@router.put("/replace_document/{document_id}")
+async def replace_document(
+    document_id: int,
+    current_user: user_dependency,
+    file: UploadFile = File(...),
+    file_name: str = Form(None),
+    doc_type: str = Form(None),
+    access_level: str = Form(None),
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dependency),
+):
+    """Replace an existing document's file in place, keeping the same
+    document id. The QR flyer at /documents/{id}/qr is rendered fresh on
+    every request from document.path, so it automatically points at the new
+    file the next time it's generated — no separate QR-regeneration step
+    needed. Any already-printed/downloaded QR flyers still encode the old
+    file URL, so they should be reprinted after a replace."""
+    auth_dependency.secure_access("UPDATE_EVENT", current_user["user_id"])
+
+    document = get_object(document_id, db, Document)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    old_folder = os.path.dirname(document.path)
+
+    try:
+        unique_dir = os.path.join(
+            EVENT_DOCUMENT_DIR,
+            f"{document.event_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}",
+        )
+        os.makedirs(unique_dir, exist_ok=True)
+        file_path = os.path.join(unique_dir, file.filename)
+        with open(file_path, "wb+") as file_object:
+            file_object.write(await file.read())
+
+        document.path = file_path
+        document.file_name = file.filename
+        document.file_type = file.content_type
+        if file_name:
+            document.name = file_name
+        if doc_type:
+            document.document_type = doc_type
+        if access_level:
+            document.access_level = access_level
+        db.commit()
+        db.refresh(document)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+    # Best-effort cleanup of the old file's folder — don't fail the request over it
+    if old_folder and old_folder != os.path.dirname(document.path) and os.path.exists(old_folder):
+        try:
+            shutil.rmtree(old_folder)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "message": f"Document replaced with '{file.filename}'.",
+        "file_path": document.path,
+    }
+
+
 @router.post("/upload_banner/{event_id}")
 async def upload_banner(
     event_id: int,
