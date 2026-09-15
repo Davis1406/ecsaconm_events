@@ -1,5 +1,6 @@
 import io
 import math
+import os
 from datetime import timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -82,43 +83,27 @@ def _render_payment_reminder(subject_tpl, body_html_tpl, firstname, event_name, 
     return subject, body_html
 
 
-def _render_gala_invitation(subject_tpl, body_html_tpl, event_name, firstname="Guest"):
-    """Render the gala-dinner-invitation subject + body exactly as a send
-    would, so the UI preview, the emailed body, and the attached HTML copy
-    all match. ``subject_tpl``/``body_html_tpl`` may be None (falls back to
-    the default subject / the file template)."""
-    import utils.mailer_util as mailer_util
-    from jinja2 import Template as Jinja2Template
+GALA_INVITATION_IMAGE_PATH = os.path.join("assets", "gala_dinner_invitation.jpg")
+GALA_INVITATION_IMAGE_FILENAME = "ECSACONM_Gala_Dinner_Invitation.jpg"
 
-    render_vars = dict(
-        subject="",
-        firstname=firstname,
-        event_name=event_name,
-        info_email="info@ecsaconm.org",
-        year=mailer_util.YEAR,
-    )
-    subject = subject_tpl or "You're Invited: Gala Dinner — {event_name}"
+
+def _render_gala_subject(subject_tpl, event_name):
+    """Render the gala-invitation subject line. The body is never templated
+    text — it's just the invitation image, embedded inline and attached."""
+    import utils.mailer_util as mailer_util
+
+    render_vars = dict(event_name=event_name, year=mailer_util.YEAR)
+    subject = subject_tpl or "You're Invited: ECSACONM Gala Dinner — {event_name}"
     for k, v in render_vars.items():
-        if k == "subject":
-            continue
         subject = subject.replace("{{ " + k + " }}", str(v)).replace(
             "{{" + k + "}}", str(v)
         ).replace("{" + k + "}", str(v))
-    render_vars["subject"] = subject
+    return subject
 
-    try:
-        if body_html_tpl:
-            body_html = Jinja2Template(body_html_tpl).render(**render_vars)
-        else:
-            file_tpl = mailer_util.templates.get_template("gala_dinner_invitation_template.html")
-            body_html = file_tpl.render(**render_vars)
-    except Exception:
-        body_html = (
-            f"<p>Dear {render_vars['firstname']},</p>"
-            f"<p>You are cordially invited to the Gala Dinner at "
-            f"<strong>{render_vars['event_name']}</strong>.</p>"
-        )
-    return subject, body_html
+
+def _load_gala_invitation_image():
+    with open(GALA_INVITATION_IMAGE_PATH, "rb") as f:
+        return f.read()
 
 
 def _serialize_reg(r: Registration) -> dict:
@@ -498,14 +483,26 @@ async def preview_payment_reminders(
 class GalaInvitationPreviewSchema(BaseModel):
     event_id: Optional[int] = None
     subject: Optional[str] = None    # working-copy subject (or use the template)
-    body_html: Optional[str] = None  # working-copy body (or use the template)
 
 
 class SendGalaInvitationsSchema(BaseModel):
     event_id: Optional[int] = None
     subject: Optional[str] = None
-    body_html: Optional[str] = None
     test_email: Optional[str] = None  # trial send: only this address, sent immediately
+
+
+@router.get("/gala_invitation_image")
+async def gala_invitation_image(
+    current_user: user_dependency,
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """The invitation flyer image itself — used by the admin preview modal
+    (and is the same file embedded/attached on send)."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    from fastapi.responses import FileResponse
+    if not os.path.isfile(GALA_INVITATION_IMAGE_PATH):
+        raise HTTPException(status_code=404, detail="Invitation image not found")
+    return FileResponse(GALA_INVITATION_IMAGE_PATH, media_type="image/jpeg")
 
 
 @router.post("/send_gala_invitations/preview")
@@ -515,9 +512,10 @@ async def preview_gala_invitations(
     auth_dependency: Auth = Depends(get_auth_dep),
     body: GalaInvitationPreviewSchema = None,
 ):
-    """Render the gala-invitation subject + body exactly as they would be
-    sent, plus how many registrations (paid and unpaid combined) it would
-    reach, so the UI can show an accurate preview before anything is sent."""
+    """Render the gala-invitation subject exactly as it would be sent, plus
+    how many registrations (paid and unpaid combined) it would reach, so the
+    UI can show an accurate preview before anything is sent. The body is
+    always just the invitation image — nothing to render there."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
 
     body = body or GalaInvitationPreviewSchema()
@@ -534,11 +532,7 @@ async def preview_gala_invitations(
         .first()
     )
 
-    subject, body_html = _render_gala_invitation(
-        body.subject or (db_tpl.subject if db_tpl else None),
-        body.body_html or (db_tpl.body_html if db_tpl else None),
-        event_name, "Jane Presenter",
-    )
+    subject = _render_gala_subject(body.subject or (db_tpl.subject if db_tpl else None), event_name)
 
     q = (
         db.query(func.count(func.distinct(User.email)))
@@ -552,7 +546,6 @@ async def preview_gala_invitations(
 
     return {
         "subject": subject,
-        "body_html": body_html,
         "recipient_count": recipient_count,
     }
 
@@ -567,9 +560,10 @@ async def send_gala_invitations(
 ):
     """Email every registrant of an event a gala-dinner invitation —
     deliberately not filtered by payment status, since the invitation goes to
-    paid and unpaid registrants alike. The same rendered HTML is both the
-    email body and an attached .html copy. Pass ``test_email`` for a one-off
-    trial send (sent immediately, not queued/logged as a bulk job)."""
+    paid and unpaid registrants alike. The email body is just the invitation
+    image (embedded inline, no other text), attached again as a file. Pass
+    ``test_email`` for a one-off trial send (sent immediately, not
+    queued/logged as a bulk job)."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
 
     body = body or SendGalaInvitationsSchema()
@@ -588,19 +582,16 @@ async def send_gala_invitations(
         .filter_by(template_key="gala_dinner_invitation")
         .first()
     )
-    subject_tpl = body.subject or (db_tpl.subject if db_tpl else None)
-    body_tpl = body.body_html or (db_tpl.body_html if db_tpl else None)
+    subject = _render_gala_subject(body.subject or (db_tpl.subject if db_tpl else None), event_name)
 
-    # The attached copy is a single generic rendering (not personalized per
-    # recipient) — the same file goes out with every email in the batch.
-    attach_subject, attach_body = _render_gala_invitation(subject_tpl, body_tpl, event_name, "Guest")
-    attachment_bytes = attach_body.encode("utf-8")
-    attachment_filename = "Gala_Dinner_Invitation.html"
+    try:
+        image_bytes = _load_gala_invitation_image()
+    except OSError:
+        raise HTTPException(status_code=500, detail="Invitation image not found on server.")
 
     if body.test_email:
-        subject, email_body = _render_gala_invitation(subject_tpl, body_tpl, event_name, "Guest")
-        mailer_util.send_email_with_attachment(
-            body.test_email, subject, email_body, attachment_bytes, attachment_filename,
+        mailer_util.send_image_invitation_email(
+            body.test_email, subject, image_bytes, GALA_INVITATION_IMAGE_FILENAME,
             email_type="gala_dinner_invitation", sent_by_user_id=current_user["user_id"],
         )
         return {"sent": 1, "message": f"Trial invitation sent to {body.test_email}."}
@@ -622,14 +613,11 @@ async def send_gala_invitations(
         if not user or not user.email or user.email.lower() in seen_emails:
             continue
         seen_emails.add(user.email.lower())
-        subject, email_body = _render_gala_invitation(
-            subject_tpl, body_tpl, event_name, user.firstname or "Guest",
-        )
         jobs.append(
             {
                 "recipient_email": user.email,
                 "subject": subject,
-                "email_body": email_body,
+                "email_body": "",
                 "email_type": "gala_dinner_invitation",
                 "sent_by_user_id": current_user["user_id"],
             }
@@ -638,7 +626,8 @@ async def send_gala_invitations(
     sent = len(jobs)
     if jobs:
         background_tasks.add_task(
-            mailer_util.send_bulk_emails, jobs, 0.3, attachment_bytes, attachment_filename,
+            mailer_util.send_bulk_emails, jobs, 0.3, None, None,
+            image_bytes, GALA_INVITATION_IMAGE_FILENAME,
         )
 
     return {

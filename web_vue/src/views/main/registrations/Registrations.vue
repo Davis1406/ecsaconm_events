@@ -644,7 +644,7 @@
           style="background-color: rgba(180,83,9,0.05);">
           <div>
             <p class="font-bold text-gray-800">Gala Dinner Invitation</p>
-            <p class="text-xs text-gray-400 mt-0.5">Sent to every registrant of the selected event — paid or unpaid alike. Embedded as the email body and attached as an HTML file.</p>
+            <p class="text-xs text-gray-400 mt-0.5">Sent to every registrant of the selected event — paid or unpaid alike. The flyer is embedded in the email body and attached as an image file.</p>
           </div>
           <button @click="closeGalaModal" class="text-gray-400 hover:text-gray-600 transition">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -682,31 +682,18 @@
             </p>
           </div>
 
-          <!-- Body editor -->
+          <!-- Flyer preview — this image is the entire email body (embedded inline)
+               and is attached again as a file; there is no other text. -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">HTML Body</label>
-              <button @click="galaModal.editMode = galaModal.editMode === 'edit' ? 'preview' : 'edit'"
-                class="text-xs px-3 py-1 rounded-lg border transition"
-                :class="galaModal.editMode === 'preview'
-                  ? 'border-pink-400 text-pink-600 bg-pink-50'
-                  : 'border-gray-200 text-gray-500 hover:border-gray-300'">
-                {{ galaModal.editMode === 'preview' ? '✎ Edit HTML' : '👁 Preview' }}
-              </button>
+            <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Invitation Flyer</label>
+            <div class="mt-2 border border-gray-200 rounded-xl overflow-hidden bg-gray-50 flex items-center justify-center" style="max-height: 420px;">
+              <img v-if="galaModal.imagePreviewUrl" :src="galaModal.imagePreviewUrl" alt="Gala Dinner Invitation"
+                style="max-height: 420px; width: auto; max-width: 100%;" />
+              <div v-else class="py-16 text-sm text-gray-400">Loading flyer…</div>
             </div>
-            <div v-if="galaModal.editMode === 'preview'" class="border border-gray-200 rounded-xl overflow-hidden bg-white">
-              <iframe :srcdoc="renderGalaPreview(galaModal.body_html)" style="width:100%; height:360px; border:none;"></iframe>
-            </div>
-            <textarea v-else v-model="galaModal.body_html" rows="16"
-              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:border-pink-400"
-              style="resize: vertical;"></textarea>
             <p class="text-xs text-gray-400 mt-1">
-              This same HTML is both the email body and the attached
-              <code class="bg-gray-100 px-1 rounded">Gala_Dinner_Invitation.html</code> file. Variables:
-              <code class="bg-gray-100 px-1 rounded">firstname</code>
-              <code class="bg-gray-100 px-1 rounded">event_name</code>
-              <code class="bg-gray-100 px-1 rounded">info_email</code>
-              <code class="bg-gray-100 px-1 rounded">year</code>
+              This image is the entire email — embedded inline in the body and attached again as
+              <code class="bg-gray-100 px-1 rounded">{{ 'ECSACONM_Gala_Dinner_Invitation.jpg' }}</code>. No other text is added.
             </p>
           </div>
         </div>
@@ -719,7 +706,7 @@
             <button @click="saveGalaTemplate" :disabled="galaModal.saving"
               class="px-5 py-2.5 border rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
               style="border-color: rgb(254,80,103);">
-              {{ galaModal.saving ? 'Saving…' : 'Save Template' }}
+              {{ galaModal.saving ? 'Saving…' : 'Save Subject' }}
             </button>
             <button @click="sendGalaInvitations" :disabled="galaModal.sending || galaModal.recipientCount === 0"
               class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
@@ -851,9 +838,9 @@ export default {
       galaModal: {
         show: false, loading: false, saving: false, sending: false, testSending: false,
         recipientCount: 0, testEmail: 'dkondo146@gmail.com',
-        subject: '', body_html: '', originalSubject: '', originalBody: '',
-        editMode: 'preview', result: '', testResult: '', error: '',
-        previewSubject: '', previewBody: '', previewTimer: null,
+        subject: '', originalSubject: '', imagePreviewUrl: '',
+        result: '', testResult: '', error: '',
+        previewSubject: '', previewTimer: null,
       },
       deleteModal: { show: false, reg: null, deleting: false },
       toast: { show: false, message: '', type: 'success' },
@@ -921,7 +908,6 @@ export default {
     'reminderModal.subject'() { this.refreshReminderPreview() },
     'reminderModal.body_html'() { this.refreshReminderPreview() },
     'galaModal.subject'() { this.refreshGalaPreview() },
-    'galaModal.body_html'() { this.refreshGalaPreview() },
   },
   mounted() {
     const q = this.$route.query
@@ -1253,19 +1239,25 @@ export default {
       this.galaModal = {
         show: true, loading: true, saving: false, sending: false, testSending: false,
         recipientCount: 0, testEmail: this.galaModal?.testEmail || 'dkondo146@gmail.com',
-        subject: '', body_html: '', originalSubject: '', originalBody: '',
-        editMode: 'preview', result: '', testResult: '', error: '',
-        previewSubject: '', previewBody: '', previewTimer: null,
+        subject: '', originalSubject: '', imagePreviewUrl: '',
+        result: '', testResult: '', error: '',
+        previewSubject: '', previewTimer: null,
       }
       try {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        const tplRes = await api.get('/email_templates/gala_dinner_invitation')
-        this.galaModal.subject = tplRes.data.subject || ''
-        this.galaModal.body_html = tplRes.data.body_html || ''
-        this.galaModal.originalSubject = this.galaModal.subject
-        this.galaModal.originalBody = this.galaModal.body_html
+        const [tplRes, imgRes] = await Promise.allSettled([
+          api.get('/email_templates/gala_dinner_invitation'),
+          api.get('/registrations/gala_invitation_image', { responseType: 'blob' }),
+        ])
+        if (tplRes.status === 'fulfilled') {
+          this.galaModal.subject = tplRes.value.data.subject || ''
+          this.galaModal.originalSubject = this.galaModal.subject
+        }
+        if (imgRes.status === 'fulfilled') {
+          this.galaModal.imagePreviewUrl = URL.createObjectURL(imgRes.value.data)
+        }
         this.refreshGalaPreview()
       } catch (e) {
         this.galaModal.error = 'Failed to load template.'
@@ -1275,11 +1267,12 @@ export default {
     },
     closeGalaModal() {
       clearTimeout(this.galaModal.previewTimer)
+      if (this.galaModal.imagePreviewUrl) URL.revokeObjectURL(this.galaModal.imagePreviewUrl)
       this.galaModal.show = false
     },
     refreshGalaPreview() {
-      // Server-renders the subject + body with the real Jinja engine using
-      // the current editor values; debounced so typing doesn't spam the API.
+      // Server-renders the subject with the real Jinja engine using the
+      // current editor value; debounced so typing doesn't spam the API.
       clearTimeout(this.galaModal.previewTimer)
       if (!this.galaModal.show) return
       this.galaModal.previewTimer = setTimeout(async () => {
@@ -1290,29 +1283,13 @@ export default {
           const res = await api.post('/registrations/send_gala_invitations/preview', {
             event_id: this.selectedEventId || null,
             subject: this.galaModal.subject,
-            body_html: this.galaModal.body_html,
           })
           this.galaModal.previewSubject = res.data?.subject || ''
-          this.galaModal.previewBody = res.data?.body_html || ''
           this.galaModal.recipientCount = res.data?.recipient_count || 0
         } catch (e) {
           this.galaModal.previewSubject = ''
-          this.galaModal.previewBody = ''
         }
       }, 500)
-    },
-    renderGalaPreview(bodyHtml) {
-      if (this.galaModal.previewBody) return this.galaModal.previewBody
-      const sample = {
-        subject: this.galaModal.subject || 'Gala Dinner Invitation',
-        firstname: 'Jane Presenter',
-        event_name: 'ECSACONM Scientific Conference',
-        info_email: 'info@ecsaconm.org',
-        year: new Date().getFullYear(),
-      }
-      return (bodyHtml || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key) => {
-        return Object.prototype.hasOwnProperty.call(sample, key) ? String(sample[key]) : m
-      })
     },
     renderGalaSubjectPreview(subject) {
       if (this.galaModal.previewSubject) return this.galaModal.previewSubject
@@ -1338,13 +1315,11 @@ export default {
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
         await api.put('/email_templates/gala_dinner_invitation', {
           subject: this.galaModal.subject,
-          body_html: this.galaModal.body_html,
         })
         this.galaModal.originalSubject = this.galaModal.subject
-        this.galaModal.originalBody = this.galaModal.body_html
-        this.galaModal.result = 'Template saved. It will be used on send.'
+        this.galaModal.result = 'Subject saved. It will be used on send.'
       } catch (e) {
-        this.galaModal.error = e.response?.data?.detail || 'Failed to save template.'
+        this.galaModal.error = e.response?.data?.detail || 'Failed to save subject.'
       } finally {
         this.galaModal.saving = false
       }
@@ -1360,7 +1335,6 @@ export default {
         const res = await api.post('/registrations/send_gala_invitations', {
           event_id: this.selectedEventId || null,
           subject: this.galaModal.subject,
-          body_html: this.galaModal.body_html,
           test_email: this.galaModal.testEmail,
         })
         this.galaModal.testResult = res.data?.message || `Trial invitation sent to ${this.galaModal.testEmail}.`
@@ -1382,7 +1356,6 @@ export default {
         const res = await api.post('/registrations/send_gala_invitations', {
           event_id: this.selectedEventId || null,
           subject: this.galaModal.subject,
-          body_html: this.galaModal.body_html,
         })
         this.galaModal.result = res.data?.message || `Invitation queued for ${res.data?.sent || 0} registrant(s).`
       } catch (e) {

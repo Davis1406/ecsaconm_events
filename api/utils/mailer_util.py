@@ -7,6 +7,7 @@ from collections import deque
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
 from email import encoders
 from email.utils import formatdate, make_msgid
 from passlib.context import CryptContext
@@ -147,6 +148,97 @@ def _inject_tracking_pixel(email_body, log_id):
     return email_body + pixel
 
 
+def _build_image_invitation_message(from_name, from_email, recipient_email, subject, reply_to_email,
+                                     image_bytes, image_filename, image_subtype, final_body_html):
+    """A message whose body is nothing but the given image — embedded inline
+    (via a cid: reference, so it renders directly in the email body) and
+    attached again as a separate downloadable file, per the same bytes."""
+    outer = MIMEMultipart("mixed")
+    outer["From"] = f"{from_name} <{from_email}>"
+    outer["To"] = recipient_email
+    outer["Cc"] = ADMIN_CC_EMAIL
+    outer["Subject"] = subject
+    outer["Date"] = formatdate(localtime=True)
+    outer["Message-ID"] = make_msgid(domain="ecsaconm.org")
+    outer["Reply-To"] = reply_to_email or f"{from_name} <{from_email}>"
+    outer["X-Mailer"] = "ECSACONM Events Portal"
+
+    related = MIMEMultipart("related")
+    related.attach(MIMEText(final_body_html, "html", "utf-8"))
+    inline_img = MIMEImage(image_bytes, _subtype=image_subtype)
+    inline_img.add_header("Content-ID", "<gala_invite_image>")
+    inline_img.add_header("Content-Disposition", "inline", filename=image_filename)
+    related.attach(inline_img)
+    outer.attach(related)
+
+    attach_img = MIMEImage(image_bytes, _subtype=image_subtype)
+    attach_img.add_header("Content-Disposition", "attachment", filename=image_filename)
+    outer.attach(attach_img)
+    return outer
+
+
+def _image_invitation_body_html(cid="gala_invite_image"):
+    """The entire email body: just the inline image, no other words."""
+    return (
+        '<!DOCTYPE html><html><body style="margin:0;padding:0;">'
+        f'<img src="cid:{cid}" alt="Invitation" style="display:block;width:100%;max-width:650px;margin:0 auto;" />'
+        '</body></html>'
+    )
+
+
+def send_image_invitation_email(recipient_email, subject, image_bytes, image_filename, image_subtype="jpeg",
+                                 email_type="general", sent_by_user_id=None, reply_to_email=None):
+    """Send a one-off email whose entire body is the given image — embedded
+    inline in the HTML and attached again as a file. Used for trial sends."""
+    smtp_host = os.getenv("SMTP_HOST", "")
+    smtp_port = os.getenv("SMTP_PORT", "")
+    smtp_username = os.getenv("SMTP_USERNAME", "")
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+
+    if not smtp_host or not smtp_port:
+        logger.error("SMTP host/port not configured.")
+        log_id = _create_email_log(recipient_email, subject, email_type,
+                                    sent_by_user_id, reply_to_email, "[image invitation]")
+        _update_email_log(log_id, "failed", "SMTP not configured")
+        return
+
+    try:
+        smtp_port = int(smtp_port)
+    except ValueError:
+        logger.error("SMTP_PORT must be an integer.")
+        return
+
+    log_id = _create_email_log(recipient_email, subject, email_type,
+                                sent_by_user_id, reply_to_email, "[image invitation]")
+    final_body = _inject_tracking_pixel(_image_invitation_body_html(), log_id)
+
+    try:
+        from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
+        from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
+        message = _build_image_invitation_message(
+            from_name, from_email, recipient_email, subject, reply_to_email,
+            image_bytes, image_filename, image_subtype, final_body,
+        )
+
+        envelope_to = _cc_recipients(recipient_email)
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_username, smtp_password)
+                server.sendmail(smtp_username, envelope_to, message.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_username, smtp_password)
+                server.sendmail(smtp_username, envelope_to, message.as_string())
+
+        logger.info("Image invitation email sent to %s", recipient_email)
+        _update_email_log(log_id, "sent")
+    except Exception as e:
+        logger.error("Failed to send image invitation to %s: %s", recipient_email, str(e))
+        _update_email_log(log_id, "failed", str(e))
+        raise
+
+
 def send_email(recipient_email, subject, email_body, email_type="general",
                 sent_by_user_id=None, reply_to_email=None):
     smtp_host = os.getenv("SMTP_HOST", "")
@@ -234,7 +326,8 @@ def _load_recent_send_times(window_seconds=3600):
         db.close()
 
 
-def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_filename=None):
+def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_filename=None,
+                      inline_image_bytes=None, inline_image_filename=None, inline_image_subtype="jpeg"):
     """Send multiple emails over a single, reused SMTP connection.
 
     `send_email()` opens (and logs into) a brand-new SMTP connection per
@@ -251,6 +344,11 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
     `attachment_bytes`/`attachment_filename`, if given, are attached to every
     message in the batch (e.g. the same invitation HTML embedded in the body
     also handed over as a downloadable/keepsake file).
+
+    `inline_image_bytes`/`inline_image_filename`/`inline_image_subtype`, if
+    given, take over the whole message body for every job in the batch: the
+    body becomes just that image, embedded inline and attached again as a
+    file (job["email_body"] is ignored in that case).
 
     Returns {"sent": int, "failed": int}.
     """
@@ -365,6 +463,51 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
             else:
                 log_id = _create_email_log(recipient_email, subject, email_type,
                                             sent_by_user_id, reply_to_email, email_body)
+            if inline_image_bytes:
+                final_body = _inject_tracking_pixel(_image_invitation_body_html(), log_id)
+                message = _build_image_invitation_message(
+                    from_name, from_email, recipient_email, subject, reply_to_email,
+                    inline_image_bytes, inline_image_filename, inline_image_subtype, final_body,
+                )
+                if msgs_on_connection >= max_msgs_per_connection:
+                    try:
+                        server.quit()
+                    except Exception:
+                        pass
+                    server = _open_connection()
+                    msgs_on_connection = 0
+                envelope_to = _cc_recipients(recipient_email)
+                try:
+                    server.sendmail(smtp_username, envelope_to, message.as_string())
+                    msgs_on_connection += 1
+                    logger.info("Email sent successfully to %s", recipient_email)
+                    _update_email_log(log_id, "sent")
+                    sent_count += 1
+                    send_times.append(time.time())
+                except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
+                    logger.warning("SMTP connection dropped sending to %s (%s) - reconnecting and retrying once",
+                                    recipient_email, e)
+                    try:
+                        server = _open_connection()
+                        msgs_on_connection = 0
+                        server.sendmail(smtp_username, envelope_to, message.as_string())
+                        msgs_on_connection += 1
+                        logger.info("Email sent successfully to %s (after reconnect)", recipient_email)
+                        _update_email_log(log_id, "sent")
+                        sent_count += 1
+                        send_times.append(time.time())
+                    except Exception as e2:
+                        logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
+                        _update_email_log(log_id, "failed", str(e2))
+                        failed_count += 1
+                except Exception as e:
+                    logger.error("Failed to send email to %s: %s", recipient_email, str(e))
+                    _update_email_log(log_id, "failed", str(e))
+                    failed_count += 1
+                if delay_seconds and i < len(jobs) - 1:
+                    time.sleep(delay_seconds)
+                continue
+
             final_body = _inject_tracking_pixel(email_body, log_id)
 
             message = MIMEMultipart("mixed") if attachment_bytes else MIMEMultipart("alternative")
