@@ -444,8 +444,25 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
             while send_times and now - send_times[0] >= quota_window:
                 send_times.popleft()
 
+    # Circuit breaker: if the mail host starts actively refusing connections
+    # (e.g. after an hourly-quota rejection triggers anti-abuse blocking),
+    # retrying immediately for every remaining job in the batch just burns
+    # through the whole list in seconds, marking everyone "failed" instead
+    # of genuinely attempting them — worse, it hammers a server that's
+    # already refusing us, risking a longer/harsher block. After a few
+    # consecutive reconnect failures, stop processing the rest of the batch
+    # entirely and leave those jobs unattempted (not "failed") so a later
+    # retry (e.g. the missing-recipients recovery flow) picks them up
+    # cleanly instead of needing to distinguish "really tried and failed"
+    # from "gave up early".
+    consecutive_reconnect_failures = 0
+    max_consecutive_reconnect_failures = 3
+    circuit_open = False
+
     try:
         for i, job in enumerate(jobs):
+            if circuit_open:
+                break
             # Respect the rolling-hour quota before doing any work for this job.
             _await_quota_slot()
 
@@ -484,9 +501,11 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                     _update_email_log(log_id, "sent")
                     sent_count += 1
                     send_times.append(time.time())
+                    consecutive_reconnect_failures = 0
                 except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
-                    logger.warning("SMTP connection dropped sending to %s (%s) - reconnecting and retrying once",
+                    logger.warning("SMTP connection dropped sending to %s (%s) - pausing then reconnecting and retrying once",
                                     recipient_email, e)
+                    time.sleep(5)
                     try:
                         server = _open_connection()
                         msgs_on_connection = 0
@@ -496,10 +515,20 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                         _update_email_log(log_id, "sent")
                         sent_count += 1
                         send_times.append(time.time())
+                        consecutive_reconnect_failures = 0
                     except Exception as e2:
                         logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
                         _update_email_log(log_id, "failed", str(e2))
                         failed_count += 1
+                        consecutive_reconnect_failures += 1
+                        if consecutive_reconnect_failures >= max_consecutive_reconnect_failures:
+                            logger.error(
+                                "Mail host unreachable after %d consecutive reconnect failures — "
+                                "stopping this batch early (%d of %d jobs left unattempted, not marked failed).",
+                                consecutive_reconnect_failures, len(jobs) - i - 1, len(jobs),
+                            )
+                            circuit_open = True
+                            break
                 except Exception as e:
                     logger.error("Failed to send email to %s: %s", recipient_email, str(e))
                     _update_email_log(log_id, "failed", str(e))
@@ -549,12 +578,15 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                 _update_email_log(log_id, "sent")
                 sent_count += 1
                 send_times.append(time.time())
+                consecutive_reconnect_failures = 0
             except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
                 # The server dropped/refused the connection mid-batch (the
                 # same per-connection cap, or a transient network blip) —
-                # reconnect once and retry this one message before giving up.
-                logger.warning("SMTP connection dropped sending to %s (%s) - reconnecting and retrying once",
+                # pause briefly, then reconnect once and retry this one
+                # message before giving up.
+                logger.warning("SMTP connection dropped sending to %s (%s) - pausing then reconnecting and retrying once",
                                 recipient_email, e)
+                time.sleep(5)
                 try:
                     server = _open_connection()
                     msgs_on_connection = 0
@@ -564,10 +596,20 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                     _update_email_log(log_id, "sent")
                     sent_count += 1
                     send_times.append(time.time())
+                    consecutive_reconnect_failures = 0
                 except Exception as e2:
                     logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
                     _update_email_log(log_id, "failed", str(e2))
                     failed_count += 1
+                    consecutive_reconnect_failures += 1
+                    if consecutive_reconnect_failures >= max_consecutive_reconnect_failures:
+                        logger.error(
+                            "Mail host unreachable after %d consecutive reconnect failures — "
+                            "stopping this batch early (%d of %d jobs left unattempted, not marked failed).",
+                            consecutive_reconnect_failures, len(jobs) - i - 1, len(jobs),
+                        )
+                        circuit_open = True
+                        break
             except Exception as e:
                 logger.error("Failed to send email to %s: %s", recipient_email, str(e))
                 _update_email_log(log_id, "failed", str(e))
@@ -584,8 +626,15 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
         except Exception:
             pass
 
-    logger.info("Bulk email send complete: %s sent, %s failed", sent_count, failed_count)
-    return {"sent": sent_count, "failed": failed_count}
+    # logger.warning (not .info) so this summary is visible even if INFO-level
+    # logging is filtered out at the deployment's logging config/handler —
+    # this final tally matters operationally regardless of log verbosity.
+    logger.warning(
+        "Bulk email send complete: %s sent, %s failed, %s left unattempted (circuit breaker%s)",
+        sent_count, failed_count, len(jobs) - sent_count - failed_count,
+        " tripped" if circuit_open else " not tripped",
+    )
+    return {"sent": sent_count, "failed": failed_count, "circuit_open": circuit_open}
 
 
 def send_email_with_attachment(recipient_email, subject, email_body, attachment_bytes, attachment_filename,
