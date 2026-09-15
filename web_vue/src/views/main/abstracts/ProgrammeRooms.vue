@@ -312,7 +312,7 @@
                 class="chip" :class="assignForm.day === d ? 'chip--active' : 'chip--idle'">
                 {{ d }}
               </button>
-              <span class="text-xs text-gray-400">Only days with room slots are shown.</span>
+              <span class="text-xs text-gray-400">Day 1 is already assigned, so it's not offered here.</span>
             </div>
           </div>
 
@@ -537,7 +537,7 @@ export default {
       assignOpen: false, assignLoading: false, assignRows: [], assignCategory: 'all',
       assignSearch: '',
       assignErr: '', assignDone: null, assignBusy: false, assignSelected: {},
-      assignForm: { room: '', day: 'Day 1' },
+      assignForm: { room: '', day: 'Day 2' },
     }
   },
 
@@ -615,11 +615,10 @@ export default {
       return Object.values(this.matchSelected).filter(Boolean).length
     },
     assignDays() {
-      const days = new Set()
-      for (const d of this.roomsData) {
-        if (d.day) days.add(d.day)
-      }
-      return DAY_ORDER.filter(day => days.has(day))
+      // Day 1 assignments are already done, so it's no longer offered here.
+      // Every other single conference day is offered regardless of whether
+      // it already has room entries — rooms can be freeform-typed in step 2.
+      return DAY_ORDER.filter(day => /^Day \d+$/.test(day) && day !== 'Day 1')
     },
     assignRoomsForDay() {
       return this.roomsData
@@ -994,7 +993,7 @@ export default {
       this.assignCategory = 'all'
       this.assignSearch = ''
       // Default to the first day that actually has room slots.
-      this.assignForm.day = this.assignDays[0] || 'Day 1'
+      this.assignForm.day = this.assignDays[0] || 'Day 2'
       this.assignForm.room = ''
       try {
         const res = await axios.get(`${this.apiUrl}/programme/presenters-with-slides`, {
