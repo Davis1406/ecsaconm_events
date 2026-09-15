@@ -914,6 +914,34 @@ def update_entry(
     return _serialize(entry, m)
 
 
+@router.delete("/room")
+def delete_room(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+    room: str = Query(...),
+):
+    """Soft-delete every programme entry in the given room (exact label
+    match, e.g. clearing out a duplicate room created by a typo'd name like
+    "GTCC 1" vs "GTCC-1") — not just unassigning them, the entries
+    themselves are removed. Literal route, must stay before /{entry_id}."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    entries = db.query(ProgrammeEntry).filter(
+        ProgrammeEntry.event_id == event_id,
+        ProgrammeEntry.room == room,
+        ProgrammeEntry.deleted_at == None,
+    ).all()
+    if not entries:
+        raise HTTPException(status_code=404, detail=f"No entries found in room '{room}'.")
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    for e in entries:
+        e.deleted_at = now
+    db.commit()
+    return {"detail": f"Deleted {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} in room '{room}'.", "deleted": len(entries)}
+
+
 @router.delete("/{entry_id}")
 def delete_entry(
     entry_id: int,

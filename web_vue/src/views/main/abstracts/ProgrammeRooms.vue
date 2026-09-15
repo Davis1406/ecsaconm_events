@@ -98,6 +98,13 @@
                     </svg>
                     All slides
                   </button>
+                  <button v-if="isAdmin" @click="deleteRoom(room)" :disabled="roomDeleting === room.room"
+                    title="Delete every entry in this room"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold bg-white/15 text-white hover:bg-red-500/80 disabled:opacity-50">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
               <div class="divide-y divide-gray-50">
@@ -553,6 +560,7 @@ export default {
       preview: { open: false, name: '', src: '', entry: null },
       zipBusy: false,
       zipProgress: { active: false, room: '', percent: 0, loadedMB: '0.0', totalMB: null },
+      roomDeleting: null,
       matchOpen: false, matchLoading: false, matchReport: null, matchErr: '',
       matchApplying: false, matchApplyResult: null, matchSelected: {},
       linkChoice: {}, linkBusy: false,
@@ -786,6 +794,29 @@ export default {
       } finally {
         this.zipBusy = false
         this.zipProgress.active = false
+      }
+    },
+
+    async deleteRoom(room) {
+      // The backend deletes by room name across every day (a room isn't a
+      // per-day thing) — so total the count across all day-buckets sharing
+      // this exact room name, not just the one card that was clicked.
+      const totalAcrossDays = this.roomsData
+        .filter(d => d.room === room.room)
+        .reduce((s, d) => s + d.total, 0)
+      if (!confirm(`Delete every entry in room "${room.room}" — across all days, ${totalAcrossDays} presentation${totalAcrossDays !== 1 ? 's' : ''} total? This removes them from the programme entirely, not just unassigning them. This cannot be undone.`)) return
+      this.roomDeleting = room.room
+      try {
+        const res = await axios.delete(`${this.apiUrl}/programme/room`, {
+          params: { event_id: 1, room: room.room },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.flash(res.data?.detail || 'Room deleted.', false)
+        await this.loadRooms()
+      } catch (e) {
+        this.flash(e.response?.data?.detail || 'Failed to delete room.', true)
+      } finally {
+        this.roomDeleting = null
       }
     },
 
