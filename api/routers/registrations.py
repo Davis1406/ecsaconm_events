@@ -704,6 +704,125 @@ async def resend_failed_gala_invitations(
     }
 
 
+@router.get("/gala_invitations/missing_count")
+async def gala_invitations_missing_count(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = None,
+):
+    """How many intended recipients have NO successful gala-dinner-invitation
+    send logged — a recovery check that doesn't depend on failed EmailLog
+    rows still existing (those can be, and have been, cleared/deleted; a
+    'sent' log surviving is the only reliable signal that someone actually
+    got it). Catches genuine failures *and* anyone never attempted."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    from models.models import EmailLog
+
+    q = (
+        db.query(Registration)
+        .join(Registration.user)
+        .options(joinedload(Registration.user))
+        .filter(Registration.deleted_at == None)
+    )
+    if event_id:
+        q = q.filter(Registration.event_id == event_id)
+    regs = q.all()
+    seen_emails = set()
+    for r in regs:
+        if r.user and r.user.email:
+            seen_emails.add(r.user.email.lower())
+
+    already_sent = {
+        e.lower() for (e,) in db.query(EmailLog.recipient_email).filter(
+            EmailLog.email_type == "gala_dinner_invitation",
+            EmailLog.status == "sent",
+        ).all()
+    }
+    missing = seen_emails - already_sent
+    return {"target_count": len(seen_emails), "already_sent_count": len(already_sent & seen_emails), "missing_count": len(missing)}
+
+
+@router.post("/gala_invitations/resend_missing")
+async def resend_missing_gala_invitations(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    event_id: int = None,
+):
+    """Send the gala-dinner-invitation to every intended recipient who
+    doesn't have a successful send logged yet — recovers from a situation
+    where the failed EmailLog rows were cleared/deleted before they could be
+    resent (as happened here), since it re-derives who's missing from the
+    current recipient list instead of trusting failed-log rows to still
+    exist."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    from models.models import EmailLog, EmailTemplate as EmailTemplateModel
+
+    q = (
+        db.query(Registration)
+        .join(Registration.user)
+        .options(joinedload(Registration.user))
+        .filter(Registration.deleted_at == None)
+    )
+    if event_id:
+        q = q.filter(Registration.event_id == event_id)
+    regs = q.all()
+
+    already_sent = {
+        e.lower() for (e,) in db.query(EmailLog.recipient_email).filter(
+            EmailLog.email_type == "gala_dinner_invitation",
+            EmailLog.status == "sent",
+        ).all()
+    }
+
+    event_name = "ECSACONM Scientific Conference"
+    if event_id:
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if event:
+            event_name = event.event
+    db_tpl = db.query(EmailTemplateModel).filter_by(template_key="gala_dinner_invitation").first()
+    subject = _render_gala_subject(db_tpl.subject if db_tpl else None, event_name)
+
+    import utils.mailer_util as mailer_util
+    try:
+        image_bytes = _load_gala_invitation_image()
+    except OSError:
+        raise HTTPException(status_code=500, detail="Invitation image not found on server.")
+
+    seen_emails = set()
+    jobs = []
+    for r in regs:
+        user = r.user
+        if not user or not user.email:
+            continue
+        key = user.email.lower()
+        if key in seen_emails or key in already_sent:
+            continue
+        seen_emails.add(key)
+        jobs.append(
+            {
+                "recipient_email": user.email,
+                "subject": subject,
+                "email_body": "",
+                "email_type": "gala_dinner_invitation",
+                "sent_by_user_id": current_user["user_id"],
+            }
+        )
+
+    sent = len(jobs)
+    if jobs:
+        background_tasks.add_task(
+            mailer_util.send_bulk_emails, jobs, 0.3, None, None,
+            image_bytes, GALA_INVITATION_IMAGE_FILENAME,
+        )
+    return {
+        "queued": sent,
+        "message": f"Sending the gala dinner invitation to {sent} recipient(s) who don't have a successful send logged yet.",
+    }
+
+
 @router.get("/export")
 async def export_registrations(
     current_user: user_dependency,
