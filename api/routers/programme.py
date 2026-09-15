@@ -1097,10 +1097,16 @@ def download_room_zip(
             added += 1
     if added == 0:
         raise HTTPException(status_code=404, detail="No slide files were found on disk for this room/day.")
+    content_length = buf.getbuffer().nbytes
     buf.seek(0)
     label = f"_{room}" if room else ""
     filename = f"room{label}_slides.zip"
     return StreamingResponse(
         buf, media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            # Set explicitly — the whole ZIP is already built in memory, and
+            # without it the client can't show a real download percentage.
+            "Content-Length": str(content_length),
+        },
     )

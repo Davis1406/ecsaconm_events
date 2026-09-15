@@ -494,6 +494,29 @@
     </div>
 
     <input type="file" ref="slideInput" class="hidden" :accept="acceptedExtensions" @change="onSlideSelected" />
+
+    <!-- Batch ZIP download progress overlay -->
+    <div v-if="zipProgress.active" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <svg class="animate-spin w-6 h-6 flex-shrink-0" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          <div class="min-w-0">
+            <p class="text-sm font-bold text-gray-800 truncate">Downloading slides — {{ zipProgress.room }}</p>
+            <p class="text-xs text-gray-500">
+              {{ zipProgress.totalMB ? `${zipProgress.loadedMB} MB of ${zipProgress.totalMB} MB` : `${zipProgress.loadedMB} MB downloaded…` }}
+            </p>
+          </div>
+        </div>
+        <div v-if="zipProgress.totalMB" class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-300"
+            :style="{ width: zipProgress.percent + '%', backgroundColor: 'rgb(254,80,103)' }"></div>
+        </div>
+        <p v-if="zipProgress.totalMB" class="text-right text-xs text-gray-400 mt-1">{{ zipProgress.percent }}%</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -529,6 +552,7 @@ export default {
       manageOpen: false, manageTarget: null, manageForm: {}, manageBusy: false, manageErr: '',
       preview: { open: false, name: '', src: '', entry: null },
       zipBusy: false,
+      zipProgress: { active: false, room: '', percent: 0, loadedMB: '0.0', totalMB: null },
       matchOpen: false, matchLoading: false, matchReport: null, matchErr: '',
       matchApplying: false, matchApplyResult: null, matchSelected: {},
       linkChoice: {}, linkBusy: false,
@@ -735,10 +759,20 @@ export default {
 
     async downloadRoomZip(room) {
       this.zipBusy = true
+      this.zipProgress = { active: true, room: room.room || 'All Rooms', percent: 0, loadedMB: '0.0', totalMB: null }
       try {
         const res = await axios.get(`${this.apiUrl}/programme/download-room-zip`, {
           params: { event_id: 1, room: room.room, day: room.day },
           responseType: 'blob',
+          onDownloadProgress: (evt) => {
+            this.zipProgress.loadedMB = (evt.loaded / 1048576).toFixed(1)
+            // evt.total is only known if the server sends Content-Length —
+            // falls back to just the running MB count otherwise.
+            if (evt.total) {
+              this.zipProgress.totalMB = (evt.total / 1048576).toFixed(1)
+              this.zipProgress.percent = Math.round((evt.loaded / evt.total) * 100)
+            }
+          },
         })
         saveAs(res.data, `room_${(room.room || 'all').replace(/[^A-Za-z0-9_]+/g, '_')}.zip`)
       } catch (e) {
@@ -751,6 +785,7 @@ export default {
         }
       } finally {
         this.zipBusy = false
+        this.zipProgress.active = false
       }
     },
 
