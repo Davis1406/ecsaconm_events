@@ -674,6 +674,19 @@
             </button>
           </div>
 
+          <!-- Missing sends (recovery — doesn't rely on failed-log rows still existing) -->
+          <div v-if="galaModal.missingCount > 0" class="p-3 rounded-xl border border-amber-300 bg-amber-50 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-sm text-amber-800">
+              <strong>{{ galaModal.missingCount }}</strong> of {{ galaModal.targetCount }} intended recipient{{ galaModal.targetCount !== 1 ? 's' : '' }} have no successful send logged
+              (catches failures even if their failed-log entry was cleared).
+            </span>
+            <button @click="resendMissingGalaInvitations" :disabled="galaModal.resendingMissing"
+              class="px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(180,83,9);">
+              {{ galaModal.resendingMissing ? 'Sending…' : `Send to ${galaModal.missingCount} missing` }}
+            </button>
+          </div>
+
           <!-- Trial send -->
           <div class="p-3 rounded-xl border border-amber-200 bg-amber-50 flex flex-wrap items-center gap-2">
             <label class="text-xs font-semibold text-amber-800 uppercase tracking-wide">Trial send to</label>
@@ -851,8 +864,8 @@ export default {
         uploading: false, result: '', error: '',
       },
       galaModal: {
-        show: false, loading: false, saving: false, sending: false, testSending: false, resending: false,
-        recipientCount: 0, testEmail: 'dkondo146@gmail.com', failedCount: 0,
+        show: false, loading: false, saving: false, sending: false, testSending: false, resending: false, resendingMissing: false,
+        recipientCount: 0, testEmail: 'dkondo146@gmail.com', failedCount: 0, missingCount: 0, targetCount: 0,
         subject: '', originalSubject: '', imagePreviewUrl: '', imageLoadFailed: false,
         result: '', testResult: '', resendResult: '', error: '',
         previewSubject: '', previewTimer: null,
@@ -1252,8 +1265,8 @@ export default {
     async openGalaModal() {
       if (!this.selectedEventId) return
       this.galaModal = {
-        show: true, loading: true, saving: false, sending: false, testSending: false, resending: false,
-        recipientCount: 0, testEmail: this.galaModal?.testEmail || 'dkondo146@gmail.com', failedCount: 0,
+        show: true, loading: true, saving: false, sending: false, testSending: false, resending: false, resendingMissing: false,
+        recipientCount: 0, testEmail: this.galaModal?.testEmail || 'dkondo146@gmail.com', failedCount: 0, missingCount: 0, targetCount: 0,
         subject: '', originalSubject: '', imagePreviewUrl: '', imageLoadFailed: false,
         result: '', testResult: '', resendResult: '', error: '',
         previewSubject: '', previewTimer: null,
@@ -1265,9 +1278,10 @@ export default {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        const [tplRes, failedRes] = await Promise.allSettled([
+        const [tplRes, failedRes, missingRes] = await Promise.allSettled([
           api.get('/email_templates/gala_dinner_invitation'),
           api.get('/registrations/gala_invitations/failed_count'),
+          api.get('/registrations/gala_invitations/missing_count', { params: { event_id: this.selectedEventId || null } }),
         ])
         if (tplRes.status === 'fulfilled') {
           this.galaModal.subject = tplRes.value.data.subject || ''
@@ -1275,6 +1289,10 @@ export default {
         }
         if (failedRes.status === 'fulfilled') {
           this.galaModal.failedCount = failedRes.value.data?.failed_count || 0
+        }
+        if (missingRes.status === 'fulfilled') {
+          this.galaModal.missingCount = missingRes.value.data?.missing_count || 0
+          this.galaModal.targetCount = missingRes.value.data?.target_count || 0
         }
         this.refreshGalaPreview()
       } catch (e) {
@@ -1377,6 +1395,26 @@ export default {
         this.galaModal.error = e.response?.data?.detail || 'Failed to resend invitations.'
       } finally {
         this.galaModal.resending = false
+      }
+    },
+    async resendMissingGalaInvitations() {
+      if (!confirm(`Send the gala invitation to the ${this.galaModal.missingCount} recipient(s) with no successful send logged?`)) return
+      this.galaModal.resendingMissing = true
+      this.galaModal.resendResult = ''
+      this.galaModal.error = ''
+      try {
+        const token = this.authStore.accessToken
+        const api = axios.create({ baseURL: API_URL })
+        if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        const res = await api.post('/registrations/gala_invitations/resend_missing', null, {
+          params: { event_id: this.selectedEventId || null },
+        })
+        this.galaModal.resendResult = res.data?.message || `Sending to ${res.data?.queued || 0} recipient(s).`
+        this.galaModal.missingCount = 0
+      } catch (e) {
+        this.galaModal.error = e.response?.data?.detail || 'Failed to send to missing recipients.'
+      } finally {
+        this.galaModal.resendingMissing = false
       }
     },
     async sendGalaInvitations() {
