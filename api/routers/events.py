@@ -2041,6 +2041,49 @@ async def get_document_qr_flyer(
     )
 
 
+@router.get("/links/{link_id}/qr")
+async def get_link_qr_flyer(
+    link_id: int,
+    user: user_dependency,
+    db: Session = Depends(get_db),
+):
+    """A4 flyer PDF with a QR code pointing straight at the link's URL, so
+    secretariat can print and hand it out / post it at the venue — same
+    pattern as the Documents tab's per-document QR."""
+    link = get_object(link_id, db, Link)
+    if not link:
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    event = db.query(Event).filter(Event.id == link.event_id).first()
+
+    logo_left = convert_png_to_rgb("assets/logo_left.png")
+    logo_right = convert_png_to_rgb("assets/logo.png")
+    link_title = link.name or "Link"
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    _render_qr_flyer(
+        c,
+        getattr(event, "event", None),
+        "Link",
+        link_title,
+        "Scan with your phone camera to open:",
+        str(link.link),
+        logo_left,
+        logo_right,
+    )
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", link.name or f"link_{link.id}").strip("_") or f"link_{link.id}"
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}_QR.pdf"'},
+    )
+
+
 @router.get("/{event_id}/onsite_registration/qr")
 async def get_onsite_registration_qr_flyer(
     event_id: int,

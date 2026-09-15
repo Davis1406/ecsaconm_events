@@ -612,6 +612,12 @@
               style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
               Open
             </a>
+            <button @click="linkQrUrl = `/events/links/${link.id}/qr`; showLinkQrPreview = true"
+              class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+              style="background-color: rgb(254,80,103);">
+              <QrCodeIcon class="w-4 h-4" />
+              QR Code
+            </button>
             <button @click="startEditLink(link)"
               class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-500 transition">
               <PencilIcon class="w-4 h-4" />
@@ -631,6 +637,12 @@
         <p class="text-gray-400 text-sm">No links added yet.</p>
         <p class="text-gray-300 text-xs mt-1">Add links to photo galleries, videos, or other resources.</p>
       </div>
+      <PdfPreviewModal
+        v-model:show="showLinkQrPreview"
+        title="Link QR Code"
+        :fetch-url="linkQrUrl"
+        filename="Link_QR.pdf"
+      />
     </div>
 
     <!-- ── Import Participants Tab ───────────────────── -->
@@ -1323,6 +1335,8 @@ export default {
       onsiteQrUrl: '',
       showDocumentQrPreview: false,
       documentQrUrl: '',
+      showLinkQrPreview: false,
+      linkQrUrl: '',
       badgesDownloading: false,
       clearingBadgeExports: false,
       selectingAll: false,

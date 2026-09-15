@@ -687,8 +687,10 @@
           <div>
             <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Invitation Flyer</label>
             <div class="mt-2 border border-gray-200 rounded-xl overflow-hidden bg-gray-50 flex items-center justify-center" style="max-height: 420px;">
-              <img v-if="galaModal.imagePreviewUrl" :src="galaModal.imagePreviewUrl" alt="Gala Dinner Invitation"
+              <img v-if="galaModal.imagePreviewUrl && !galaModal.imageLoadFailed" :src="galaModal.imagePreviewUrl"
+                alt="Gala Dinner Invitation" @error="galaModal.imageLoadFailed = true"
                 style="max-height: 420px; width: auto; max-width: 100%;" />
+              <div v-else-if="galaModal.imageLoadFailed" class="py-16 text-sm text-red-500">Flyer image failed to load.</div>
               <div v-else class="py-16 text-sm text-gray-400">Loading flyer…</div>
             </div>
             <p class="text-xs text-gray-400 mt-1">
@@ -838,7 +840,7 @@ export default {
       galaModal: {
         show: false, loading: false, saving: false, sending: false, testSending: false,
         recipientCount: 0, testEmail: 'dkondo146@gmail.com',
-        subject: '', originalSubject: '', imagePreviewUrl: '',
+        subject: '', originalSubject: '', imagePreviewUrl: '', imageLoadFailed: false,
         result: '', testResult: '', error: '',
         previewSubject: '', previewTimer: null,
       },
@@ -1239,25 +1241,20 @@ export default {
       this.galaModal = {
         show: true, loading: true, saving: false, sending: false, testSending: false,
         recipientCount: 0, testEmail: this.galaModal?.testEmail || 'dkondo146@gmail.com',
-        subject: '', originalSubject: '', imagePreviewUrl: '',
+        subject: '', originalSubject: '', imagePreviewUrl: '', imageLoadFailed: false,
         result: '', testResult: '', error: '',
         previewSubject: '', previewTimer: null,
       }
+      // Plain unauthenticated URL (cache-busted so an edited flyer doesn't
+      // show a stale image) — no auth header needed for an <img> src.
+      this.galaModal.imagePreviewUrl = `${API_URL}/registrations/gala_invitation_image?t=${Date.now()}`
       try {
         const token = this.authStore.accessToken
         const api = axios.create({ baseURL: API_URL })
         if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        const [tplRes, imgRes] = await Promise.allSettled([
-          api.get('/email_templates/gala_dinner_invitation'),
-          api.get('/registrations/gala_invitation_image', { responseType: 'blob' }),
-        ])
-        if (tplRes.status === 'fulfilled') {
-          this.galaModal.subject = tplRes.value.data.subject || ''
-          this.galaModal.originalSubject = this.galaModal.subject
-        }
-        if (imgRes.status === 'fulfilled') {
-          this.galaModal.imagePreviewUrl = URL.createObjectURL(imgRes.value.data)
-        }
+        const tplRes = await api.get('/email_templates/gala_dinner_invitation')
+        this.galaModal.subject = tplRes.data.subject || ''
+        this.galaModal.originalSubject = this.galaModal.subject
         this.refreshGalaPreview()
       } catch (e) {
         this.galaModal.error = 'Failed to load template.'
@@ -1267,7 +1264,6 @@ export default {
     },
     closeGalaModal() {
       clearTimeout(this.galaModal.previewTimer)
-      if (this.galaModal.imagePreviewUrl) URL.revokeObjectURL(this.galaModal.imagePreviewUrl)
       this.galaModal.show = false
     },
     refreshGalaPreview() {

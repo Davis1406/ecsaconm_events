@@ -428,6 +428,7 @@ def programme_rooms(
     event_id: int = Query(DEFAULT_EVENT_ID),
 ):
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    event = db.query(Event).filter(Event.id == event_id).first()
     entries = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
         ProgrammeEntry.event_id == event_id,
         ProgrammeEntry.deleted_at == None,
@@ -457,7 +458,13 @@ def programme_rooms(
         bucket["entries"].sort(key=lambda x: (x["session"] or "", x["code"] or "", x["title"] or ""))
         result.append({"day": bucket["day"], "room": bucket["room"], "total": bucket["total"],
                         "with_slide": bucket["with_slide"], "entries": bucket["entries"]})
-    return {"data": result}
+    return {
+        "data": result,
+        # "Day N" labels map to event.start_date + (N-1) days — lets the UI
+        # filter by day and auto-hide days that have already passed.
+        "event_start_date": event.start_date.date().isoformat() if event and event.start_date else None,
+        "event_end_date": event.end_date.date().isoformat() if event and event.end_date else None,
+    }
 
 
 # ── Presenters who have uploaded slides (for room assignment) ─────────────────

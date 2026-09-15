@@ -492,13 +492,11 @@ class SendGalaInvitationsSchema(BaseModel):
 
 
 @router.get("/gala_invitation_image")
-async def gala_invitation_image(
-    current_user: user_dependency,
-    auth_dependency: Auth = Depends(get_auth_dep),
-):
-    """The invitation flyer image itself — used by the admin preview modal
-    (and is the same file embedded/attached on send)."""
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+async def gala_invitation_image():
+    """The invitation flyer image itself — plain, unauthenticated (same
+    content already gets emailed out to every registrant, so nothing is
+    exposed by letting the admin <img> preview load it directly by URL,
+    the same way payment-proof images etc. are served in this app)."""
     from fastapi.responses import FileResponse
     if not os.path.isfile(GALA_INVITATION_IMAGE_PATH):
         raise HTTPException(status_code=404, detail="Invitation image not found")

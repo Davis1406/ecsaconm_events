@@ -17,6 +17,19 @@
         </button>
       </div>
 
+      <!-- day filter chips -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button v-for="d in dayFilterChips" :key="d"
+          @click="activeDay = d"
+          class="chip" :class="activeDay === d ? 'chip--active' : 'chip--idle'">
+          {{ d }}
+        </button>
+        <button v-if="pastDaysCount > 0" @click="showPastDays = !showPastDays"
+          class="text-xs font-semibold hover:underline" style="color: rgb(0,150,180);">
+          {{ showPastDays ? 'Hide past days' : `Show ${pastDaysCount} past day${pastDaysCount !== 1 ? 's' : ''}` }}
+        </button>
+      </div>
+
       <!-- room summary chips -->
       <div class="flex flex-wrap items-center gap-2">
         <button v-for="r in roomFilterChips" :key="r"
@@ -502,6 +515,10 @@ export default {
       roomsData: [],
       loading: false,
       activeRoom: 'All Rooms',
+      activeDay: 'All Days',
+      showPastDays: false,
+      eventStartDate: null,
+      eventEndDate: null,
       entryCategory: 'oral',
       categoryOptions: [
         { key: 'oral', label: 'Abstracts' },
@@ -557,7 +574,10 @@ export default {
       const all = [...rooms]
       return all.sort((a, b) => (a === 'All Rooms' ? -1 : b === 'All Rooms' ? 1 : a.localeCompare(b)))
     },
-    roomDays() {
+    // Every day that currently has data, in DAY_ORDER, each flagged with
+    // whether its calendar date has already passed (unaffected by the day
+    // filter/past-day toggle — those apply on top, in roomDays below).
+    allRoomDays() {
       const grouped = {}
       for (const d of this.categoryRoomsData) {
         if (this.activeRoom !== 'All Rooms' && d.room !== this.activeRoom) continue
@@ -567,7 +587,24 @@ export default {
         day,
         rooms: grouped[day],
         total: grouped[day].reduce((s, r) => s + r.total, 0),
+        isPast: this.isDayPast(day),
       }))
+    },
+    pastDaysCount() {
+      return this.allRoomDays.filter(d => d.isPast).length
+    },
+    dayFilterChips() {
+      const days = this.allRoomDays.filter(d => this.showPastDays || !d.isPast)
+      return ['All Days', ...days.map(d => d.day)]
+    },
+    // What actually renders: allRoomDays narrowed by the day filter and by
+    // the past-days toggle (past days hidden by default).
+    roomDays() {
+      return this.allRoomDays.filter(d => {
+        if (!this.showPastDays && d.isPast) return false
+        if (this.activeDay !== 'All Days' && d.day !== this.activeDay) return false
+        return true
+      })
     },
     slideCountSummary() {
       const total = this.categoryRoomsData.reduce((s, d) => s + d.entries.length, 0)
@@ -628,6 +665,7 @@ export default {
     // nothing, so reset it whenever the category switches.
     entryCategory() {
       this.activeRoom = 'All Rooms'
+      this.activeDay = 'All Days'
     },
   },
 
@@ -644,6 +682,8 @@ export default {
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
         this.roomsData = res.data.data || []
+        this.eventStartDate = res.data.event_start_date || null
+        this.eventEndDate = res.data.event_end_date || null
       } catch (e) {
         this.flash('Failed to load rooms.', true)
       } finally {
@@ -831,6 +871,26 @@ export default {
 
     dayColor(day) {
       return { 'Day 1': '#005988', 'Day 2': '#0a7ea4', 'Day 3': '#0d5c8a', 'Day 1-3': '#b45309', Unassigned: '#6b7280' }[day] || '#6b7280'
+    },
+    // Maps a "Day N" label to the event's actual calendar date
+    // (event_start_date + N-1 days) so past days can be filtered/hidden.
+    dayDate(day) {
+      const m = /^Day (\d+)$/.exec(day)
+      if (!m || !this.eventStartDate) return null
+      const d = new Date(this.eventStartDate + 'T00:00:00')
+      d.setDate(d.getDate() + (parseInt(m[1], 10) - 1))
+      return d
+    },
+    isDayPast(day) {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (day === 'Day 1-3') {
+        // Spans the whole event — only "past" once the event itself ends.
+        return this.eventEndDate ? new Date(this.eventEndDate + 'T00:00:00') < today : false
+      }
+      const d = this.dayDate(day)
+      // Unassigned, or no event date to compare against — never auto-hide.
+      return d ? d < today : false
     },
 
     // ── match presenters to submitted abstracts ────────────────────────
