@@ -755,7 +755,7 @@
     <div v-if="departureModal.show"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       @click.self="closeDepartureModal">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl flex flex-col max-h-[92vh] overflow-hidden">
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
           style="background-color: rgba(0,150,180,0.05);">
           <div>
@@ -855,23 +855,42 @@
                   {{ departureModal.exporting ? 'Exporting…' : 'Export Excel' }}
                 </button>
               </div>
-              <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
-                <div v-if="departureModal.rows.length === 0" class="px-4 py-6 text-center text-sm text-gray-400 italic">
-                  No submissions yet.
-                </div>
-                <div v-for="r in departureModal.rows" :key="r.id" class="px-3 py-2 text-sm flex items-center gap-3">
-                  <div class="flex-1 min-w-0">
-                    <div class="font-semibold truncate">{{ r.name || r.email }}</div>
-                    <div class="text-xs text-gray-500 truncate">{{ r.email }} · {{ r.hotel || '—' }} · {{ r.departure_date || '—' }} {{ r.departure_time || '' }}</div>
-                  </div>
-                  <button @click="deleteDepartureSubmission(r)" :disabled="departureModal.deletingId === r.id"
-                    title="Delete this submission"
-                    class="text-gray-300 hover:text-red-500 transition disabled:opacity-50 flex-shrink-0">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                    </svg>
-                  </button>
-                </div>
+              <div v-if="departureModal.rows.length === 0" class="rounded-lg border border-gray-200 px-4 py-6 text-center text-sm text-gray-400 italic">
+                No submissions yet.
+              </div>
+              <div v-else class="rounded-lg border border-gray-200 max-h-80 overflow-y-auto overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="sticky top-0 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                    <tr>
+                      <th class="px-3 py-2 text-left">Name</th>
+                      <th class="px-3 py-2 text-left">Email</th>
+                      <th class="px-3 py-2 text-left">Hotel</th>
+                      <th class="px-3 py-2 text-left">Departure Date</th>
+                      <th class="px-3 py-2 text-left">Departure Time</th>
+                      <th class="px-3 py-2 text-left">Submitted At</th>
+                      <th class="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <tr v-for="r in departureModal.rows" :key="r.id" class="hover:bg-gray-50">
+                      <td class="px-3 py-2 font-semibold whitespace-nowrap">{{ r.name || '—' }}</td>
+                      <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.email }}</td>
+                      <td class="px-3 py-2 text-gray-600">{{ r.hotel || '—' }}</td>
+                      <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_date || '—' }}</td>
+                      <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_time || '—' }}</td>
+                      <td class="px-3 py-2 text-gray-500 whitespace-nowrap">{{ formatSubmittedAt(r.submitted_at) }}</td>
+                      <td class="px-3 py-2 text-right">
+                        <button @click="deleteDepartureSubmission(r)" :disabled="departureModal.deletingId === r.id"
+                          title="Delete this submission"
+                          class="text-gray-300 hover:text-red-500 transition disabled:opacity-50">
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </template>
@@ -1591,6 +1610,12 @@ export default {
     },
 
     // ── Travel & hotel details form ──────────────────────────────────────
+    formatSubmittedAt(iso) {
+      if (!iso) return '—'
+      const d = new Date(iso)
+      if (isNaN(d)) return '—'
+      return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    },
     _departureApi() {
       const token = this.authStore.accessToken
       const api = axios.create({ baseURL: API_URL })
