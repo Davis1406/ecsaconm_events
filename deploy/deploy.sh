@@ -75,11 +75,13 @@ sync_dir() {
 
   if command -v rsync >/dev/null 2>&1; then
     local rsync_excludes=()
-    for e in "${excludes[@]}"; do rsync_excludes+=(--exclude "$e"); done
+    if [ "${#excludes[@]}" -gt 0 ]; then
+      for e in "${excludes[@]}"; do rsync_excludes+=(--exclude "$e"); done
+    fi
     local flags=(-az -v --itemize-changes)
     [ "$DRY_RUN" = "1" ] && flags+=(-n)
     [ "$delete_extra" = "1" ] && flags+=(--delete)
-    rsync "${flags[@]}" "${rsync_excludes[@]}" \
+    rsync "${flags[@]}" ${rsync_excludes[@]+"${rsync_excludes[@]}"} \
       -e "ssh ${SSH_OPTS[*]}" \
       "$local_dir/" "$HOST:$remote_dir/"
     return
@@ -87,15 +89,17 @@ sync_dir() {
 
   echo "(rsync not found locally — falling back to tar-over-ssh; full-tree copy, no delta/--delete)"
   local tar_excludes=()
-  for e in "${excludes[@]}"; do tar_excludes+=(--exclude "$e"); done
+  if [ "${#excludes[@]}" -gt 0 ]; then
+    for e in "${excludes[@]}"; do tar_excludes+=(--exclude "$e"); done
+  fi
 
   if [ "$DRY_RUN" = "1" ]; then
     echo "==> [dry-run] Files that would be sent from $local_dir:"
-    tar -C "$local_dir" "${tar_excludes[@]}" -cf - . | tar -tf -
+    tar -C "$local_dir" ${tar_excludes[@]+"${tar_excludes[@]}"} -cf - . | tar -tf -
     return
   fi
 
-  tar -C "$local_dir" "${tar_excludes[@]}" -czf - . \
+  tar -C "$local_dir" ${tar_excludes[@]+"${tar_excludes[@]}"} -czf - . \
     | ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p '$remote_dir' && tar -xzf - -C '$remote_dir'"
 }
 

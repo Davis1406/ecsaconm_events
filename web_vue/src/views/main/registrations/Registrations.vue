@@ -787,6 +787,28 @@
               </div>
             </div>
 
+            <!-- Email activity -->
+            <div class="rounded-xl border border-gray-200 p-4">
+              <div class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Emails Sent</div>
+              <div class="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <div class="text-lg font-bold text-gray-700">{{ departureModal.emailStats.invitation.sent }}</div>
+                  <div class="text-[11px] text-gray-500">invitations</div>
+                  <div v-if="departureModal.emailStats.invitation.failed" class="text-[11px] text-red-500">{{ departureModal.emailStats.invitation.failed }} failed</div>
+                </div>
+                <div>
+                  <div class="text-lg font-bold text-gray-700">{{ departureModal.emailStats.receipt.sent }}</div>
+                  <div class="text-[11px] text-gray-500">receipts</div>
+                  <div v-if="departureModal.emailStats.receipt.failed" class="text-[11px] text-red-500">{{ departureModal.emailStats.receipt.failed }} failed</div>
+                </div>
+                <div>
+                  <div class="text-lg font-bold text-gray-700">{{ departureModal.emailStats.digest.sent }}</div>
+                  <div class="text-[11px] text-gray-500">digests (lemmym@/info@)</div>
+                  <div v-if="departureModal.emailStats.digest.failed" class="text-[11px] text-red-500">{{ departureModal.emailStats.digest.failed }} failed</div>
+                </div>
+              </div>
+            </div>
+
             <div v-if="departureModal.result" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ departureModal.result }}</div>
             <div v-if="departureModal.testResult" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ departureModal.testResult }}</div>
             <div v-if="departureModal.error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{{ departureModal.error }}</div>
@@ -997,6 +1019,7 @@ export default {
         eligibleCount: 0, submittedCount: 0, rows: [],
         formLink: '', viewLink: '', testEmail: 'dkondo146@gmail.com',
         result: '', testResult: '', error: '',
+        emailStats: { invitation: { sent: 0, failed: 0 }, receipt: { sent: 0, failed: 0 }, digest: { sent: 0, failed: 0 } },
       },
       digestBatchSize: 10,
       deleteModal: { show: false, reg: null, deleting: false },
@@ -1583,11 +1606,12 @@ export default {
       const api = this._departureApi()
       const eventId = this.selectedEventId || null
       try {
-        const [recipientsRes, listRes, linkRes, viewLinkRes] = await Promise.allSettled([
+        const [recipientsRes, listRes, linkRes, viewLinkRes, emailStatsRes] = await Promise.allSettled([
           api.get('/departure-details/recipients', { params: { event_id: eventId } }),
           api.get('/departure-details/list', { params: { event_id: eventId } }),
           api.get('/departure-details/form-link', { params: { event_id: eventId } }),
           api.get('/departure-details/view-link', { params: { event_id: eventId } }),
+          api.get('/departure-details/email-stats'),
         ])
         if (recipientsRes.status === 'fulfilled') this.departureModal.eligibleCount = (recipientsRes.value.data || []).length
         if (listRes.status === 'fulfilled') {
@@ -1596,6 +1620,7 @@ export default {
         }
         if (linkRes.status === 'fulfilled') this.departureModal.formLink = linkRes.value.data?.link || ''
         if (viewLinkRes.status === 'fulfilled') this.departureModal.viewLink = viewLinkRes.value.data?.link || ''
+        if (emailStatsRes.status === 'fulfilled') this.departureModal.emailStats = emailStatsRes.value.data || this.departureModal.emailStats
       } catch (e) {
         this.departureModal.error = 'Failed to load travel-details data.'
       } finally {

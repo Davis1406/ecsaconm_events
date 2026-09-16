@@ -7,12 +7,14 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
 from models.models import (
     DepartureDetail,
+    EmailLog,
     Event,
     ParticipationRole,
     Registration,
@@ -233,6 +235,39 @@ def list_submissions(
         "total_submitted": sum(1 for r in records if r.submitted_at),
         "data": [_serialize(r) for r in records],
     }
+
+
+EMAIL_TYPE_LABELS = {
+    "departure_details_invitation": "invitation",
+    "departure_details_receipt": "receipt",
+    "departure_details_digest": "digest",
+}
+
+
+@router.get("/email-stats")
+def email_stats(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """Admin: how many invitation/receipt/digest emails this feature has
+    sent (and how many failed), for the Registrations page's Travel Details
+    panel — lets the sender confirm the volume they're seeing matches real
+    activity (submissions + every-10 digests) rather than a runaway send."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    rows = (
+        db.query(EmailLog.email_type, EmailLog.status, func.count(EmailLog.id))
+        .filter(EmailLog.email_type.in_(EMAIL_TYPE_LABELS.keys()))
+        .group_by(EmailLog.email_type, EmailLog.status)
+        .all()
+    )
+    stats = {label: {"sent": 0, "failed": 0} for label in EMAIL_TYPE_LABELS.values()}
+    for email_type, status, count in rows:
+        label = EMAIL_TYPE_LABELS.get(email_type)
+        if not label:
+            continue
+        stats[label][status] = stats[label].get(status, 0) + count
+    return stats
 
 
 @router.delete("/{detail_id}")
