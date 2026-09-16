@@ -862,23 +862,23 @@
                 <table class="w-full text-sm">
                   <thead class="sticky top-0 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
                     <tr>
+                      <th class="px-3 py-2 text-left">#</th>
                       <th class="px-3 py-2 text-left">Name</th>
                       <th class="px-3 py-2 text-left">Email</th>
                       <th class="px-3 py-2 text-left">Hotel</th>
                       <th class="px-3 py-2 text-left">Departure Date</th>
                       <th class="px-3 py-2 text-left">Departure Time</th>
-                      <th class="px-3 py-2 text-left">Submitted At</th>
                       <th class="px-3 py-2"></th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100">
-                    <tr v-for="r in departureModal.rows" :key="r.id" class="hover:bg-gray-50">
+                    <tr v-for="(r, idx) in departureModal.rows" :key="r.id" class="hover:bg-gray-50">
+                      <td class="px-3 py-2 text-gray-400">{{ idx + 1 }}</td>
                       <td class="px-3 py-2 font-semibold whitespace-nowrap">{{ r.name || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.email }}</td>
                       <td class="px-3 py-2 text-gray-600">{{ r.hotel || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_date || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_time || '—' }}</td>
-                      <td class="px-3 py-2 text-gray-500 whitespace-nowrap">{{ formatSubmittedAt(r.submitted_at) }}</td>
                       <td class="px-3 py-2 text-right">
                         <button @click="deleteDepartureSubmission(r)" :disabled="departureModal.deletingId === r.id"
                           title="Delete this submission"
@@ -1610,12 +1610,6 @@ export default {
     },
 
     // ── Travel & hotel details form ──────────────────────────────────────
-    formatSubmittedAt(iso) {
-      if (!iso) return '—'
-      const d = new Date(iso)
-      if (isNaN(d)) return '—'
-      return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-    },
     _departureApi() {
       const token = this.authStore.accessToken
       const api = axios.create({ baseURL: API_URL })
