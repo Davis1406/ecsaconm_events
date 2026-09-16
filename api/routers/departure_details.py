@@ -230,7 +230,9 @@ def list_submissions(
     q = db.query(DepartureDetail).filter(DepartureDetail.deleted_at == None)
     if event_id:
         q = q.filter(DepartureDetail.event_id == event_id)
-    records = q.order_by(DepartureDetail.submitted_at.desc().nullslast(), DepartureDetail.created_at.desc()).all()
+    records = q.order_by(
+        DepartureDetail.submitted_at.is_(None), DepartureDetail.submitted_at.desc(), DepartureDetail.created_at.desc()
+    ).all()
     return {
         "total_submitted": sum(1 for r in records if r.submitted_at),
         "data": [_serialize(r) for r in records],
@@ -553,7 +555,9 @@ def public_view(
     q = db.query(DepartureDetail).filter(DepartureDetail.deleted_at == None)
     if event_id:
         q = q.filter(DepartureDetail.event_id == event_id)
-    records = q.order_by(DepartureDetail.submitted_at.desc().nullslast(), DepartureDetail.created_at.desc()).all()
+    records = q.order_by(
+        DepartureDetail.submitted_at.is_(None), DepartureDetail.submitted_at.desc(), DepartureDetail.created_at.desc()
+    ).all()
 
     event = db.query(Event).filter(Event.id == event_id).first() if event_id else None
     return {
