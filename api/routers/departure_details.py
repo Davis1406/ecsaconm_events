@@ -222,6 +222,28 @@ def list_submissions(
     }
 
 
+@router.delete("/{detail_id}")
+def delete_submission(
+    detail_id: int,
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """Admin: remove one submission (e.g. a test entry) — soft delete, same
+    convention as the rest of the app. The registrant can simply submit the
+    form again afterwards if this was a real, mistakenly-removed entry."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    rec = db.query(DepartureDetail).filter(
+        DepartureDetail.id == detail_id, DepartureDetail.deleted_at == None,
+    ).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+    from datetime import datetime, timezone
+    rec.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"detail": "Submission deleted."}
+
+
 @router.get("/export")
 def export_submissions(
     current_user: user_dependency,

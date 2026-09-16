@@ -840,8 +840,15 @@
                 <div v-for="r in departureModal.rows" :key="r.id" class="px-3 py-2 text-sm flex items-center gap-3">
                   <div class="flex-1 min-w-0">
                     <div class="font-semibold truncate">{{ r.name || r.email }}</div>
-                    <div class="text-xs text-gray-500 truncate">{{ r.hotel || '—' }} · {{ r.departure_date || '—' }} {{ r.departure_time || '' }}</div>
+                    <div class="text-xs text-gray-500 truncate">{{ r.email }} · {{ r.hotel || '—' }} · {{ r.departure_date || '—' }} {{ r.departure_time || '' }}</div>
                   </div>
+                  <button @click="deleteDepartureSubmission(r)" :disabled="departureModal.deletingId === r.id"
+                    title="Delete this submission"
+                    class="text-gray-300 hover:text-red-500 transition disabled:opacity-50 flex-shrink-0">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
@@ -986,7 +993,7 @@ export default {
         previewSubject: '', previewTimer: null,
       },
       departureModal: {
-        show: false, loading: false, sending: false, testSending: false, exporting: false,
+        show: false, loading: false, sending: false, testSending: false, exporting: false, deletingId: null,
         eligibleCount: 0, submittedCount: 0, rows: [],
         formLink: '', viewLink: '', testEmail: 'dkondo146@gmail.com',
         result: '', testResult: '', error: '',
@@ -1646,6 +1653,22 @@ export default {
         this.departureModal.error = e.response?.data?.detail || 'Failed to send invitations.'
       } finally {
         this.departureModal.sending = false
+      }
+    },
+    async deleteDepartureSubmission(row) {
+      if (!confirm(`Delete the submission from "${row.name || row.email}"? This cannot be undone.`)) return
+      this.departureModal.deletingId = row.id
+      this.departureModal.error = ''
+      try {
+        const api = this._departureApi()
+        await api.delete(`/departure-details/${row.id}`)
+        this.departureModal.rows = this.departureModal.rows.filter(r => r.id !== row.id)
+        this.departureModal.submittedCount = Math.max(0, this.departureModal.submittedCount - 1)
+        this.showToast('Submission deleted.')
+      } catch (e) {
+        this.departureModal.error = e.response?.data?.detail || 'Failed to delete submission.'
+      } finally {
+        this.departureModal.deletingId = null
       }
     },
     async exportDepartureDetails() {
