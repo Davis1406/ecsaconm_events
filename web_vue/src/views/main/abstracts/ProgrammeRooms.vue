@@ -326,7 +326,6 @@
                 class="chip" :class="assignForm.day === d ? 'chip--active' : 'chip--idle'">
                 {{ d }}
               </button>
-              <span class="text-xs text-gray-400">Day 1 is already assigned, so it's not offered here.</span>
             </div>
           </div>
 
@@ -673,10 +672,9 @@ export default {
       return Object.values(this.matchSelected).filter(Boolean).length
     },
     assignDays() {
-      // Day 1 assignments are already done, so it's no longer offered here.
-      // Every other single conference day is offered regardless of whether
-      // it already has room entries — rooms can be freeform-typed in step 2.
-      return DAY_ORDER.filter(day => /^Day \d+$/.test(day) && day !== 'Day 1')
+      // Every single conference day is offered regardless of whether it
+      // already has room entries — rooms can be freeform-typed in step 2.
+      return DAY_ORDER.filter(day => /^Day \d+$/.test(day))
     },
     assignRoomsForDay() {
       return this.roomsData
