@@ -181,7 +181,7 @@
             <div>
               <label class="field-label">Room</label>
               <input v-model.trim="form.room" type="text" class="field-input"
-                list="room-options" placeholder="e.g. GTCC 1, Jahazi 2, Main Hall" />
+                list="room-options" placeholder="e.g. GTCC-1, Jahazi-2, Main Hall" />
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -241,10 +241,10 @@
 
     <datalist id="room-options">
       <option value="Main Hall"></option>
-      <option value="GTCC 1"></option>
-      <option value="GTCC 2"></option>
-      <option value="Jahazi 1"></option>
-      <option value="Jahazi 2"></option>
+      <option value="GTCC-1"></option>
+      <option value="GTCC-2"></option>
+      <option value="Jahazi-1"></option>
+      <option value="Jahazi-2"></option>
     </datalist>
   </div>
 </template>
