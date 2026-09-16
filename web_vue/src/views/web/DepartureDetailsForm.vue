@@ -1,15 +1,12 @@
 <template>
   <div class="min-h-screen flex items-start justify-center py-10 px-4">
-    <SpinnerComponent v-if="isLoading" />
-
-    <div v-else class="w-full max-w-lg">
+    <div class="w-full max-w-lg">
       <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
         <div class="h-2" style="background-color: rgb(254,80,103);"></div>
 
         <div class="flex flex-col items-center pt-6 pb-4 px-6 border-b border-gray-100">
           <img src="@/assets/images/logo.png" alt="ECSACONM" class="h-14 object-contain mb-3" />
           <h1 class="text-base font-bold text-gray-800 text-center leading-snug">Travel &amp; Hotel Details</h1>
-          <p v-if="form.event_name" class="text-xs text-gray-400 mt-1">{{ form.event_name }}</p>
         </div>
 
         <div class="flex items-center justify-center gap-2 px-6 py-3 text-xs font-medium text-white"
@@ -44,9 +41,21 @@
 
           <form v-else @submit.prevent="submit" class="space-y-4">
             <p class="text-sm text-gray-600 text-center leading-relaxed">
-              Dear <strong>{{ form.name || 'Delegate' }}</strong>, kindly share your hotel and departure details below.
+              Please use the email address you registered with — we use it to confirm your registration.
             </p>
 
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Name</label>
+              <input v-model.trim="fields.name" type="text" required
+                class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                style="--tw-ring-color: rgb(254,80,103);" placeholder="Your full name" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+              <input v-model.trim="fields.email" type="email" required
+                class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                style="--tw-ring-color: rgb(254,80,103);" placeholder="you@example.com" />
+            </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Hotel</label>
               <input v-model.trim="fields.hotel" type="text" required
@@ -84,50 +93,25 @@
 
 <script>
 import axios from 'axios'
-import SpinnerComponent from '@/components/Spinner.vue'
 
 export default {
   name: 'DepartureDetailsFormView',
-  components: { SpinnerComponent },
   data() {
     return {
-      isLoading: true,
       isSubmitting: false,
       errorMsg: '',
       submitted: false,
-      form: {},
-      fields: { hotel: '', departure_date: '', departure_time: '' },
+      fields: { name: '', email: '', hotel: '', departure_date: '', departure_time: '' },
       apiUrl: import.meta.env.VITE_API_URL,
     }
   },
-  mounted() {
-    this.loadForm()
-  },
   methods: {
-    async loadForm() {
-      this.isLoading = true
-      this.errorMsg = ''
-      try {
-        const token = this.$route.params.token
-        const res = await axios.get(`${this.apiUrl}/departure-details/form/${token}`)
-        this.form = res.data || {}
-        if (this.form.already_submitted) {
-          this.fields.hotel = this.form.hotel || ''
-          this.fields.departure_date = this.form.departure_date || ''
-          this.fields.departure_time = this.form.departure_time || ''
-        }
-      } catch (error) {
-        this.errorMsg = error.response?.data?.detail || 'This link is invalid or has expired.'
-      } finally {
-        this.isLoading = false
-      }
-    },
     async submit() {
       this.isSubmitting = true
       this.errorMsg = ''
       try {
-        const token = this.$route.params.token
-        await axios.post(`${this.apiUrl}/departure-details/form/${token}`, this.fields)
+        const eventId = this.$route.query.event_id || 1
+        await axios.post(`${this.apiUrl}/departure-details/submit`, { ...this.fields, event_id: Number(eventId) })
         this.submitted = true
       } catch (error) {
         this.errorMsg = error.response?.data?.detail || 'Failed to submit. Please try again.'

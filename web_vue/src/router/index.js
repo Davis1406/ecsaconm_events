@@ -188,7 +188,7 @@ const routes = [
         component: routeComponents.AttendanceFormView,
       },
       {
-        path: "/travel-details/:token",
+        path: "/travel-details",
         name: "DepartureDetailsForm",
         component: routeComponents.DepartureDetailsFormView,
       },

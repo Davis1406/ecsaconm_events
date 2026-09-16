@@ -21,6 +21,7 @@ user_dependency = Annotated[dict, Depends(get_current_user)]
 
 DIGEST_BATCH_SIZE = 20
 VIEW_TOKEN_SETTING_KEY = "departure_details_view_token"
+DEFAULT_EVENT_ID = 1
 
 
 def get_auth_dep(db: Session = Depends(get_db)) -> Auth:
@@ -44,10 +45,30 @@ def _get_or_create_view_token(db: Session) -> str:
     return token
 
 
-def _eligible_registrants(db: Session, event_id: Optional[int] = None):
-    """Paid, non-secretariat registrants — the audience for the travel
-    details form. Secretariat is excluded outright regardless of its
+def _eligible_registration(db: Session, event_id: int, email: str):
+    """The paid, non-secretariat registration matching this email for this
+    event, or None. Secretariat is excluded outright regardless of its
     always-true is_paid status; everyone else must actually be paid."""
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    return (
+        db.query(Registration)
+        .join(Registration.user)
+        .filter(
+            Registration.deleted_at == None,
+            Registration.event_id == event_id,
+            Registration.paid == True,
+            Registration.participation_role != ParticipationRole.secretariat,
+            User.email.ilike(email),
+        )
+        .first()
+    )
+
+
+def _eligible_registrants(db: Session, event_id: Optional[int] = None):
+    """Every paid, non-secretariat registrant — the audience this form's
+    invitation email is sent to."""
     q = (
         db.query(Registration)
         .join(Registration.user)
@@ -95,125 +116,10 @@ def _serialize(rec: DepartureDetail):
     }
 
 
-@router.get("/recipients")
-def list_recipients(
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-    event_id: int = Query(None),
-):
-    """Admin view: eligible (paid, non-secretariat) registrants with their
-    form/submission status."""
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    people = _eligible_registrants(db, event_id)
-    out = []
-    for p in people:
-        rec = (
-            db.query(DepartureDetail)
-            .filter(
-                DepartureDetail.email == p["email"],
-                DepartureDetail.event_id == p["event_id"],
-                DepartureDetail.deleted_at == None,
-            )
-            .first()
-        )
-        out.append({
-            **p,
-            "has_form": rec is not None,
-            "token": rec.token if rec else None,
-            "submitted": bool(rec and rec.submitted_at),
-        })
-    return out
-
-
-class SendFormBody(BaseModel):
-    event_id: Optional[int] = None
-    selected_emails: Optional[list] = None
-    test_email: Optional[str] = None
-
-
-@router.post("/send")
-def send_departure_forms(
-    current_user: user_dependency,
-    db: Session = Depends(get_db),
-    auth_dependency: Auth = Depends(get_auth_dep),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    body: SendFormBody = None,
-):
-    """Generate a personal form link for each selected (or all) eligible
-    registrant and email it to them. Pass `test_email` to fire a single
-    trial send immediately (using a sample link, nothing persisted/queued)."""
-    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-
-    body = body or SendFormBody()
-    import utils.mailer_util as mailer_util
-
-    event = db.query(Event).filter(Event.id == body.event_id).first() if body.event_id else db.query(Event).first()
-    event_name = event.event if event else "ECSACONM Scientific Conference"
-
-    if body.test_email:
-        subject, html = _build_invitation_email(event_name, "Sample Participant", f"{mailer_util.CLIENT_ORIGIN}/#/travel-details/sample-token")
-        mailer_util.send_email(body.test_email, subject, html, email_type="departure_details_invitation", sent_by_user_id=current_user["user_id"])
-        return {"sent": 1, "message": f"Sample invitation sent to {body.test_email}."}
-
-    event_id = body.event_id
-    selected_set = (
-        {e.strip().lower() for e in body.selected_emails} if body.selected_emails else None
-    )
-
-    people = _eligible_registrants(db, event_id)
-    recipients = []
-    for p in people:
-        if selected_set is not None and p["email"] not in selected_set:
-            continue
-        rec = (
-            db.query(DepartureDetail)
-            .filter(
-                DepartureDetail.email == p["email"],
-                DepartureDetail.event_id == p["event_id"],
-                DepartureDetail.deleted_at == None,
-            )
-            .first()
-        )
-        if not rec:
-            rec = DepartureDetail(
-                event_id=p["event_id"],
-                registration_id=p["registration_id"],
-                email=p["email"],
-                name=p["name"],
-                token=secrets.token_urlsafe(24),
-            )
-            db.add(rec)
-            db.commit()
-            db.refresh(rec)
-        recipients.append({**p, "token": rec.token})
-
-    jobs = []
-    for r in recipients:
-        form_link = f"{mailer_util.CLIENT_ORIGIN}/#/travel-details/{r['token']}"
-        subject, html = _build_invitation_email(event_name, r["name"], form_link)
-        jobs.append({
-            "recipient_email": r["email"],
-            "subject": subject,
-            "email_body": html,
-            "email_type": "departure_details_invitation",
-            "sent_by_user_id": current_user["user_id"],
-        })
-
-    sent = len(jobs)
-    if jobs:
-        background_tasks.add_task(mailer_util.send_bulk_emails, jobs)
-
-    return {
-        "sent": sent,
-        "message": f"Travel-details form queued for {sent} paid, non-secretariat registrant(s).",
-    }
-
-
-def _build_invitation_email(event_name, name, form_link):
+def _build_invitation_email(event_name, form_link):
     subject = f"Please Share Your Travel & Hotel Details — {event_name}"
     html = (
-        f"<p>Dear {name},</p>"
+        f"<p>Dear Delegate,</p>"
         f"<p>As we finalise logistics for <strong>{event_name}</strong>, kindly let us know "
         f"your hotel and departure details using the short form below.</p>"
         f"<p><a href=\"{form_link}\" style=\"display:inline-block;padding:12px 28px;"
@@ -236,13 +142,13 @@ def _build_receipt_email(event_name, name, hotel, departure_date, departure_time
         f"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Departure date</td><td><strong>{departure_date or '—'}</strong></td></tr>"
         f"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Departure time</td><td><strong>{departure_time or '—'}</strong></td></tr>"
         f"</table>"
-        f"<p>If any of this changes, just submit the form again using the same link.</p>"
+        f"<p>If any of this changes, just submit the form again with the same email address.</p>"
         f"<p>Thank you,<br>ECSACONM Secretariat</p>"
     )
     return subject, html
 
 
-def _build_digest_email(event_name, entries, total):
+def _build_digest_email(event_name, entries, total, view_link):
     subject = f"Travel Details — {len(entries)} New Submissions ({event_name})"
     rows = "".join(
         f"<tr><td style='padding:4px 10px;border-bottom:1px solid #eee;'>{e.name or e.email}</td>"
@@ -259,59 +165,164 @@ def _build_digest_email(event_name, entries, total):
         f"<th style='padding:4px 10px;'>Hotel</th><th style='padding:4px 10px;'>Departure date</th>"
         f"<th style='padding:4px 10px;'>Departure time</th></tr>{rows}</table>"
         f"<p style=\"margin-top:16px;\">View the full, live list any time — no login needed:<br>"
-        f"<a href=\"{{VIEW_LINK}}\">{{VIEW_LINK}}</a></p>"
+        f"<a href=\"{view_link}\">{view_link}</a></p>"
     )
     return subject, html
 
 
-@router.get("/form/{token}")
-def get_departure_form(token: str, db: Session = Depends(get_db)):
-    """Public, no-auth: fetch the form details for a registrant's personal link."""
-    rec = (
-        db.query(DepartureDetail)
-        .options(joinedload(DepartureDetail.event))
-        .filter(DepartureDetail.token == token, DepartureDetail.deleted_at == None)
-        .first()
+@router.get("/recipients")
+def list_recipients(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """Admin view: eligible (paid, non-secretariat) registrants and whether
+    they've submitted yet."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    people = _eligible_registrants(db, event_id)
+    out = []
+    for p in people:
+        rec = (
+            db.query(DepartureDetail)
+            .filter(
+                DepartureDetail.email == p["email"],
+                DepartureDetail.event_id == p["event_id"],
+                DepartureDetail.deleted_at == None,
+            )
+            .first()
+        )
+        out.append({**p, "submitted": bool(rec and rec.submitted_at)})
+    return out
+
+
+class SendFormBody(BaseModel):
+    event_id: Optional[int] = None
+    selected_emails: Optional[list] = None
+    test_email: Optional[str] = None
+
+
+@router.post("/send")
+def send_departure_invitations(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    body: SendFormBody = None,
+):
+    """Email the one shared public form link to each selected (or all)
+    eligible registrant. Pass `test_email` to fire a single trial send
+    immediately (not queued/logged as a bulk job)."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+
+    body = body or SendFormBody()
+    import utils.mailer_util as mailer_util
+
+    event_id = body.event_id or DEFAULT_EVENT_ID
+    event = db.query(Event).filter(Event.id == event_id).first()
+    event_name = event.event if event else "ECSACONM Scientific Conference"
+    form_link = f"{mailer_util.CLIENT_ORIGIN}/#/travel-details?event_id={event_id}"
+
+    if body.test_email:
+        subject, html = _build_invitation_email(event_name, form_link)
+        mailer_util.send_email(body.test_email, subject, html, email_type="departure_details_invitation", sent_by_user_id=current_user["user_id"])
+        return {"sent": 1, "message": f"Sample invitation sent to {body.test_email}."}
+
+    selected_set = (
+        {e.strip().lower() for e in body.selected_emails} if body.selected_emails else None
     )
-    if not rec:
-        raise HTTPException(status_code=404, detail="Form link is invalid or has expired.")
+    people = _eligible_registrants(db, event_id)
+    subject, html = _build_invitation_email(event_name, form_link)
+
+    jobs = []
+    for p in people:
+        if selected_set is not None and p["email"] not in selected_set:
+            continue
+        jobs.append({
+            "recipient_email": p["email"],
+            "subject": subject,
+            "email_body": html,
+            "email_type": "departure_details_invitation",
+            "sent_by_user_id": current_user["user_id"],
+        })
+
+    sent = len(jobs)
+    if jobs:
+        background_tasks.add_task(mailer_util.send_bulk_emails, jobs)
+
     return {
-        "name": rec.name,
-        "email": rec.email,
-        "event_name": rec.event.event if rec.event else "ECSACONM Event",
-        "already_submitted": rec.submitted_at is not None,
-        "hotel": rec.hotel,
-        "departure_date": rec.departure_date,
-        "departure_time": rec.departure_time,
+        "sent": sent,
+        "form_link": form_link,
+        "message": f"Travel-details form link queued for {sent} paid, non-secretariat registrant(s).",
     }
 
 
+@router.get("/form-link")
+def get_form_link(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """Admin: the one shared public URL for the travel-details form."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    import utils.mailer_util as mailer_util
+    event_id = event_id or DEFAULT_EVENT_ID
+    return {"link": f"{mailer_util.CLIENT_ORIGIN}/#/travel-details?event_id={event_id}"}
+
+
 class SubmitFormBody(BaseModel):
+    name: str
+    email: str
     hotel: str
     departure_date: str
     departure_time: str
+    event_id: Optional[int] = None
 
 
-@router.post("/form/{token}")
+@router.post("/submit")
 def submit_departure_form(
-    token: str,
     body: SubmitFormBody,
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Public, no-auth: record the registrant's travel details, email them a
-    receipt, and — every DIGEST_BATCH_SIZE submissions — send lemmym@/info@
-    a batch digest instead of pinging them on every single one."""
+    """Public, no-auth: the one shared form's submit endpoint. Only accepts
+    submissions from paid, non-secretariat registrants — matched by email —
+    which is how "excluding secretariat" is enforced on a link anyone can
+    open. Emails the submitter a receipt, and — every DIGEST_BATCH_SIZE
+    submissions — sends lemmym@/info@ a batch digest instead of pinging
+    them on every single one."""
+    event_id = body.event_id or DEFAULT_EVENT_ID
+    email = (body.email or "").strip().lower()
+
+    reg = _eligible_registration(db, event_id, email)
+    if not reg:
+        raise HTTPException(
+            status_code=403,
+            detail="We couldn't match that email to a paid registration for this event. "
+                   "Please use the email address you registered with, or contact the secretariat.",
+        )
+
+    from datetime import datetime, timezone
     rec = (
         db.query(DepartureDetail)
-        .options(joinedload(DepartureDetail.event))
-        .filter(DepartureDetail.token == token, DepartureDetail.deleted_at == None)
+        .filter(
+            DepartureDetail.event_id == event_id,
+            DepartureDetail.email == email,
+            DepartureDetail.deleted_at == None,
+        )
         .first()
     )
     if not rec:
-        raise HTTPException(status_code=404, detail="Form link is invalid or has expired.")
+        rec = DepartureDetail(
+            event_id=event_id,
+            registration_id=reg.id,
+            email=email,
+            token=secrets.token_urlsafe(24),
+        )
+        db.add(rec)
 
-    from datetime import datetime, timezone
+    rec.name = (body.name or "").strip() or rec.name
     rec.hotel = (body.hotel or "").strip()
     rec.departure_date = (body.departure_date or "").strip()
     rec.departure_time = (body.departure_time or "").strip()
@@ -319,7 +330,8 @@ def submit_departure_form(
     db.commit()
 
     import utils.mailer_util as mailer_util
-    event_name = rec.event.event if rec.event else "ECSACONM Event"
+    event = db.query(Event).filter(Event.id == event_id).first()
+    event_name = event.event if event else "ECSACONM Event"
 
     subject, html = _build_receipt_email(event_name, rec.name or rec.email, rec.hotel, rec.departure_date, rec.departure_time)
     background_tasks.add_task(
@@ -330,7 +342,7 @@ def submit_departure_form(
     total_submitted = (
         db.query(DepartureDetail)
         .filter(
-            DepartureDetail.event_id == rec.event_id,
+            DepartureDetail.event_id == event_id,
             DepartureDetail.deleted_at == None,
             DepartureDetail.submitted_at != None,
         )
@@ -340,7 +352,7 @@ def submit_departure_form(
         batch = (
             db.query(DepartureDetail)
             .filter(
-                DepartureDetail.event_id == rec.event_id,
+                DepartureDetail.event_id == event_id,
                 DepartureDetail.deleted_at == None,
                 DepartureDetail.submitted_at != None,
             )
@@ -349,9 +361,8 @@ def submit_departure_form(
             .all()
         )
         token_v = _get_or_create_view_token(db)
-        view_link = f"{mailer_util.CLIENT_ORIGIN}/#/travel-details-report/{token_v}?event_id={rec.event_id}"
-        subject, html = _build_digest_email(event_name, list(reversed(batch)), total_submitted)
-        html = html.replace("{VIEW_LINK}", view_link)
+        view_link = f"{mailer_util.CLIENT_ORIGIN}/#/travel-details-report/{token_v}?event_id={event_id}"
+        subject, html = _build_digest_email(event_name, list(reversed(batch)), total_submitted, view_link)
         for to in ("lemmym@ecsaconm.org", "info@ecsaconm.org"):
             background_tasks.add_task(
                 mailer_util.send_email, to, subject, html,
