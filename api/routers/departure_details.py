@@ -201,6 +201,19 @@ def list_recipients(
     return out
 
 
+@router.get("/eligible-names")
+def eligible_names(
+    db: Session = Depends(get_db),
+    event_id: int = Query(None),
+):
+    """Public, no-auth: name + email of every paid, non-secretariat
+    registrant, for the form's searchable dropdown — picking a name fills
+    the email automatically instead of typing it (and typo'ing it) by
+    hand. Same audience as the invitation email, just self-served."""
+    people = _eligible_registrants(db, event_id or DEFAULT_EVENT_ID)
+    return [{"name": p["name"], "email": p["email"]} for p in people]
+
+
 @router.get("/list")
 def list_submissions(
     current_user: user_dependency,

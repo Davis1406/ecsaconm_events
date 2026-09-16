@@ -41,21 +41,63 @@
 
           <form v-else @submit.prevent="submit" class="space-y-4">
             <p class="text-sm text-gray-600 text-center leading-relaxed">
-              Please use the email address you registered with — we use it to confirm your registration.
+              Find your name below — it'll fill in your registered email automatically.
             </p>
 
-            <div>
+            <!-- Name search / picker -->
+            <div v-if="!manualEntry">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Name</label>
-              <input v-model.trim="fields.name" type="text" required
-                class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
-                style="--tw-ring-color: rgb(254,80,103);" placeholder="Your full name" />
+
+              <div v-if="fields.email" class="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-green-200 bg-green-50">
+                <div class="min-w-0">
+                  <div class="text-sm font-semibold text-gray-800 truncate">{{ fields.name }}</div>
+                  <div class="text-xs text-gray-500 truncate">{{ fields.email }}</div>
+                </div>
+                <button type="button" @click="clearSelection" class="text-xs font-semibold flex-shrink-0" style="color: rgb(254,80,103);">Change</button>
+              </div>
+
+              <div v-else class="relative">
+                <input v-model.trim="nameQuery" type="text" @focus="showDropdown = true"
+                  class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                  style="--tw-ring-color: rgb(254,80,103);" placeholder="Start typing your name…" />
+                <div v-if="showDropdown && nameQuery.length >= 2"
+                  class="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <button v-for="p in filteredPeople" :key="p.email" type="button" @click="pickPerson(p)"
+                    class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                    <div class="font-medium text-gray-800">{{ p.name }}</div>
+                    <div class="text-xs text-gray-400">{{ p.email }}</div>
+                  </button>
+                  <div v-if="filteredPeople.length === 0" class="px-3 py-3 text-xs text-gray-400 italic text-center">
+                    No match. If you registered under a different name, try your email, or enter your details manually below.
+                  </div>
+                </div>
+              </div>
+
+              <button type="button" @click="manualEntry = true" class="text-xs font-medium mt-1.5 hover:underline" style="color: rgb(0,150,180);">
+                Can't find your name? Enter manually
+              </button>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Email</label>
-              <input v-model.trim="fields.email" type="email" required
-                class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
-                style="--tw-ring-color: rgb(254,80,103);" placeholder="you@example.com" />
-            </div>
+
+            <!-- Manual fallback -->
+            <template v-else>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Name</label>
+                <input v-model.trim="fields.name" type="text" required
+                  class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                  style="--tw-ring-color: rgb(254,80,103);" placeholder="Your full name" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+                <input v-model.trim="fields.email" type="email" required
+                  class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                  style="--tw-ring-color: rgb(254,80,103);" placeholder="you@example.com" />
+                <p class="text-xs text-gray-400 mt-1">Use the email address you registered with.</p>
+              </div>
+              <button type="button" @click="manualEntry = false; fields.name = ''; fields.email = ''" class="text-xs font-medium hover:underline" style="color: rgb(0,150,180);">
+                Search by name instead
+              </button>
+            </template>
+
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Hotel</label>
               <input v-model.trim="fields.hotel" type="text" required
@@ -75,7 +117,7 @@
                 style="--tw-ring-color: rgb(254,80,103);" />
             </div>
 
-            <button type="submit" :disabled="isSubmitting"
+            <button type="submit" :disabled="isSubmitting || !fields.email"
               class="w-full py-3.5 rounded-xl text-white font-bold text-sm transition hover:opacity-90 disabled:opacity-50"
               style="background-color: rgb(254,80,103);">
               {{ isSubmitting ? 'Submitting…' : 'Submit Travel Details' }}
@@ -101,11 +143,54 @@ export default {
       isSubmitting: false,
       errorMsg: '',
       submitted: false,
+      manualEntry: false,
+      nameQuery: '',
+      showDropdown: false,
+      people: [],
       fields: { name: '', email: '', hotel: '', departure_date: '', departure_time: '' },
       apiUrl: import.meta.env.VITE_API_URL,
     }
   },
+  computed: {
+    filteredPeople() {
+      const q = this.nameQuery.toLowerCase()
+      if (q.length < 2) return []
+      return this.people
+        .filter(p => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+        .slice(0, 8)
+    },
+  },
+  mounted() {
+    this.loadPeople()
+    document.addEventListener('click', this.onDocClick)
+  },
+  beforeUnmount() {
+    document.removeEventListener('click', this.onDocClick)
+  },
   methods: {
+    onDocClick(e) {
+      if (!this.$el.contains(e.target)) this.showDropdown = false
+    },
+    async loadPeople() {
+      try {
+        const eventId = this.$route.query.event_id || 1
+        const res = await axios.get(`${this.apiUrl}/departure-details/eligible-names`, { params: { event_id: eventId } })
+        this.people = res.data || []
+      } catch (error) {
+        // Non-fatal — the search box just won't find anyone; manual entry still works.
+      }
+    },
+    pickPerson(p) {
+      this.fields.name = p.name
+      this.fields.email = p.email
+      this.showDropdown = false
+      this.nameQuery = ''
+    },
+    clearSelection() {
+      this.fields.name = ''
+      this.fields.email = ''
+      this.nameQuery = ''
+    },
     async submit() {
       this.isSubmitting = true
       this.errorMsg = ''
