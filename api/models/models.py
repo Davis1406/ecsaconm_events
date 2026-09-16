@@ -1182,6 +1182,44 @@ class AttendanceFormResponse(BaseWithSoftDelete):
         return f"<AttendanceFormResponse id={self.id} email={self.email} response={self.response}>"
 
 
+class DepartureDetail(BaseWithSoftDelete):
+    """Personal travel-details record for a paid, non-secretariat registrant.
+    Each row is a per-person form link (token) emailed to the registrant so
+    the secretariat can plan hotel pickups / departure logistics. Modeled on
+    AttendanceFormResponse."""
+    __tablename__ = "departure_detail"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("event.id"), nullable=False)
+    registration_id = Column(Integer, ForeignKey("registration.id"), nullable=True)
+    email = Column(String(255), nullable=False)
+    name = Column(String(200), nullable=True)
+    token = Column(String(100), nullable=False, unique=True, index=True)
+    hotel = Column(String(255), nullable=True)
+    departure_date = Column(String(30), nullable=True)
+    departure_time = Column(String(30), nullable=True)
+    submitted_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at = Column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    event = relationship("Event")
+    registration = relationship("Registration")
+
+    __table_args__ = (
+        Index("ix_departure_detail", "event_id", "email", "deleted_at"),
+    )
+
+    def __repr__(self):
+        return f"<DepartureDetail id={self.id} email={self.email} submitted={self.submitted_at is not None}>"
+
+
 class SystemSetting(Base):
     """Simple key/value store for configurable system values (e.g. the
     payment deadline used by reminder emails)."""

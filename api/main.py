@@ -39,6 +39,7 @@ from routers import (
     email_logs,
     attendance_form,
     programme,
+    departure_details,
 )
 
 app = FastAPI(
@@ -112,4 +113,5 @@ app.include_router(email_templates.router, prefix="/email_templates", tags=["Ema
 app.include_router(system_settings.router, prefix="/system", tags=["System Settings"])
 app.include_router(email_logs.router, prefix="/email-logs", tags=["Email Logs"])
 app.include_router(attendance_form.router, prefix="/attendance-form", tags=["Attendance Form"])
+app.include_router(departure_details.router, prefix="/departure-details", tags=["Departure Details"])
 app.include_router(programme.router, prefix="/programme", tags=["Programme"])

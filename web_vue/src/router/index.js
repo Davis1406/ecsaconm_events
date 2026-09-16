@@ -101,6 +101,10 @@ const routeComponents = {
   // Attendance Confirmation Form (public/web)
   AttendanceFormView: () => import("@/views/web/AttendanceForm.vue"),
 
+  // Travel & Hotel Details Form + its no-login report (public/web)
+  DepartureDetailsFormView: () => import("@/views/web/DepartureDetailsForm.vue"),
+  DepartureDetailsReportView: () => import("@/views/web/DepartureDetailsReport.vue"),
+
   // Contact page
   ContactView: () => import("@/views/web/Contact.vue"),
 };
@@ -182,6 +186,16 @@ const routes = [
         path: "/attendance-form/:token",
         name: "AttendanceForm",
         component: routeComponents.AttendanceFormView,
+      },
+      {
+        path: "/travel-details/:token",
+        name: "DepartureDetailsForm",
+        component: routeComponents.DepartureDetailsFormView,
+      },
+      {
+        path: "/travel-details-report/:token",
+        name: "DepartureDetailsReport",
+        component: routeComponents.DepartureDetailsReportView,
       },
       {
         path: "/register/:id",
