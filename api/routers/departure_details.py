@@ -1,6 +1,11 @@
+import io
 import secrets
 from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
@@ -19,7 +24,7 @@ router = APIRouter()
 
 user_dependency = Annotated[dict, Depends(get_current_user)]
 
-DIGEST_BATCH_SIZE = 20
+DIGEST_BATCH_SIZE = 10
 VIEW_TOKEN_SETTING_KEY = "departure_details_view_token"
 DEFAULT_EVENT_ID = 1
 
@@ -194,6 +199,91 @@ def list_recipients(
         )
         out.append({**p, "submitted": bool(rec and rec.submitted_at)})
     return out
+
+
+@router.get("/list")
+def list_submissions(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """Admin view: every submitted travel-details record, for the
+    Registrations page's own Travel Details panel (list + export) — same
+    data as the public-view link, but behind a login instead of a token."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    q = db.query(DepartureDetail).filter(DepartureDetail.deleted_at == None)
+    if event_id:
+        q = q.filter(DepartureDetail.event_id == event_id)
+    records = q.order_by(DepartureDetail.submitted_at.desc().nullslast(), DepartureDetail.created_at.desc()).all()
+    return {
+        "total_submitted": sum(1 for r in records if r.submitted_at),
+        "data": [_serialize(r) for r in records],
+    }
+
+
+@router.get("/export")
+def export_submissions(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(None),
+):
+    """Admin: export every submitted travel-details record to Excel, same
+    layout convention as the Registrations export."""
+    auth_dependency.secure_access("EXPORT_REGISTRATIONS", current_user["user_id"])
+    q = db.query(DepartureDetail).filter(
+        DepartureDetail.deleted_at == None, DepartureDetail.submitted_at != None,
+    )
+    if event_id:
+        q = q.filter(DepartureDetail.event_id == event_id)
+    records = q.order_by(DepartureDetail.submitted_at.desc()).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Travel Details"
+
+    header_fill = PatternFill("solid", start_color="0095B6")
+    alt_fill = PatternFill("solid", start_color="E8F4F8")
+    header_font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+    body_font = Font(name="Arial", size=10)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    headers = ["#", "Name", "Email", "Hotel", "Departure Date", "Departure Time", "Submitted At"]
+    ws.row_dimensions[1].height = 22
+    for ci, h in enumerate(headers, 1):
+        cell = ws.cell(1, ci, h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+    ws.freeze_panes = "A2"
+
+    for ri, r in enumerate(records, 2):
+        use_fill = alt_fill if ri % 2 == 0 else PatternFill("solid", start_color="FFFFFF")
+        row = [
+            r.id, r.name, r.email, r.hotel, r.departure_date, r.departure_time,
+            r.submitted_at.strftime("%d %b %Y %H:%M") if r.submitted_at else "",
+        ]
+        for ci, val in enumerate(row, 1):
+            cell = ws.cell(ri, ci, val)
+            cell.font = body_font
+            cell.fill = use_fill
+            cell.alignment = left
+
+    col_widths = [6, 22, 30, 26, 16, 16, 18]
+    for ci, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=travel_details_export.xlsx"},
+    )
 
 
 class SendFormBody(BaseModel):

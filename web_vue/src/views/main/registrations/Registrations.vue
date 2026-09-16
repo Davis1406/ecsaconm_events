@@ -94,6 +94,11 @@
           style="border-color: rgb(180,83,9); color: rgb(180,83,9);">
           Gala Dinner Invitation
         </button>
+        <button @click="openDepartureModal"
+          class="px-4 py-2 rounded-xl text-sm font-semibold border-2 transition"
+          style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+          Travel Details
+        </button>
       </div>
 
       <!-- Spinner -->
@@ -746,6 +751,116 @@
       </div>
     </div>
 
+    <!-- ── Travel Details Modal ─────────────────────────────────────────────── -->
+    <div v-if="departureModal.show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      @click.self="closeDepartureModal">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl flex flex-col max-h-[92vh] overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
+          style="background-color: rgba(0,150,180,0.05);">
+          <div>
+            <p class="font-bold text-gray-800">Travel &amp; Hotel Details</p>
+            <p class="text-xs text-gray-400 mt-0.5">
+              One shared public form (Name, Email, Hotel, Departure Date, Departure Time) — anyone can open it,
+              but only paid, non-secretariat registrants of this event can submit. lemmym@ecsaconm.org and
+              info@ecsaconm.org get a digest email every {{ digestBatchSize }} new submissions.
+            </p>
+          </div>
+          <button @click="closeDepartureModal" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 overflow-y-auto flex-1 space-y-4">
+          <div v-if="departureModal.loading" class="py-10"><SpinnerComponent /></div>
+          <template v-else>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="rounded-xl bg-gray-50 border border-gray-100 p-4 text-center">
+                <div class="text-xl font-bold" style="color: rgb(0,150,180);">{{ departureModal.eligibleCount }}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">paid, non-secretariat registrants</div>
+              </div>
+              <div class="rounded-xl bg-gray-50 border border-gray-100 p-4 text-center">
+                <div class="text-xl font-bold text-gray-700">{{ departureModal.submittedCount }}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">submitted so far</div>
+              </div>
+            </div>
+
+            <div v-if="departureModal.result" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ departureModal.result }}</div>
+            <div v-if="departureModal.testResult" class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ departureModal.testResult }}</div>
+            <div v-if="departureModal.error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{{ departureModal.error }}</div>
+
+            <!-- Public link -->
+            <div class="p-3 rounded-xl border border-gray-200 bg-gray-50 flex flex-wrap items-center gap-2">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Public form link</span>
+              <code class="flex-1 min-w-[200px] text-xs text-gray-700 truncate">{{ departureModal.formLink }}</code>
+              <button @click="copyDepartureLink" class="text-xs font-semibold px-2.5 py-1 rounded-full border"
+                style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+                Copy
+              </button>
+            </div>
+
+            <!-- lemmym/info no-login view link -->
+            <div class="p-3 rounded-xl border border-gray-200 bg-gray-50 flex flex-wrap items-center gap-2">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">No-login report (lemmym@/info@)</span>
+              <code class="flex-1 min-w-[200px] text-xs text-gray-700 truncate">{{ departureModal.viewLink }}</code>
+              <button @click="copyDepartureViewLink" class="text-xs font-semibold px-2.5 py-1 rounded-full border"
+                style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+                Copy
+              </button>
+            </div>
+
+            <!-- Trial send -->
+            <div class="p-3 rounded-xl border border-amber-200 bg-amber-50 flex flex-wrap items-center gap-2">
+              <label class="text-xs font-semibold text-amber-800 uppercase tracking-wide">Trial send to</label>
+              <input v-model="departureModal.testEmail" type="email" placeholder="you@example.com"
+                class="flex-1 min-w-[200px] border border-amber-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+              <button @click="sendDepartureTrial" :disabled="departureModal.testSending || !departureModal.testEmail"
+                class="px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                style="background-color: rgb(180,83,9);">
+                {{ departureModal.testSending ? 'Sending…' : 'Send Trial' }}
+              </button>
+            </div>
+
+            <!-- Submissions table -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Submissions</label>
+                <button @click="exportDepartureDetails" :disabled="departureModal.exporting || departureModal.submittedCount === 0"
+                  class="text-xs font-semibold px-3 py-1.5 rounded-full text-white disabled:opacity-50"
+                  style="background-color: rgb(0,150,180);">
+                  {{ departureModal.exporting ? 'Exporting…' : 'Export Excel' }}
+                </button>
+              </div>
+              <div class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                <div v-if="departureModal.rows.length === 0" class="px-4 py-6 text-center text-sm text-gray-400 italic">
+                  No submissions yet.
+                </div>
+                <div v-for="r in departureModal.rows" :key="r.id" class="px-3 py-2 text-sm flex items-center gap-3">
+                  <div class="flex-1 min-w-0">
+                    <div class="font-semibold truncate">{{ r.name || r.email }}</div>
+                    <div class="text-xs text-gray-500 truncate">{{ r.hotel || '—' }} · {{ r.departure_date || '—' }} {{ r.departure_time || '' }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100">
+          <button @click="closeDepartureModal" class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+            Close
+          </button>
+          <button @click="sendDepartureInvitations" :disabled="departureModal.sending || departureModal.eligibleCount === 0"
+            class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            style="background-color: rgb(0,150,180);">
+            {{ departureModal.sending ? 'Sending…' : `Send Link to ${departureModal.eligibleCount}` }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Bulk Upload Names Modal ─────────────────────────────────────────── -->
     <div v-if="uploadModal.show"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
@@ -870,6 +985,13 @@ export default {
         result: '', testResult: '', resendResult: '', error: '',
         previewSubject: '', previewTimer: null,
       },
+      departureModal: {
+        show: false, loading: false, sending: false, testSending: false, exporting: false,
+        eligibleCount: 0, submittedCount: 0, rows: [],
+        formLink: '', viewLink: '', testEmail: 'dkondo146@gmail.com',
+        result: '', testResult: '', error: '',
+      },
+      digestBatchSize: 10,
       deleteModal: { show: false, reg: null, deleting: false },
       toast: { show: false, message: '', type: 'success' },
       proofModal: {
@@ -1435,6 +1557,117 @@ export default {
         this.galaModal.error = e.response?.data?.detail || 'Failed to send invitations.'
       } finally {
         this.galaModal.sending = false
+      }
+    },
+
+    // ── Travel & hotel details form ──────────────────────────────────────
+    _departureApi() {
+      const token = this.authStore.accessToken
+      const api = axios.create({ baseURL: API_URL })
+      if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      return api
+    },
+    async openDepartureModal() {
+      this.departureModal.show = true
+      this.departureModal.loading = true
+      this.departureModal.result = ''
+      this.departureModal.testResult = ''
+      this.departureModal.error = ''
+      const api = this._departureApi()
+      const eventId = this.selectedEventId || null
+      try {
+        const [recipientsRes, listRes, linkRes, viewLinkRes] = await Promise.allSettled([
+          api.get('/departure-details/recipients', { params: { event_id: eventId } }),
+          api.get('/departure-details/list', { params: { event_id: eventId } }),
+          api.get('/departure-details/form-link', { params: { event_id: eventId } }),
+          api.get('/departure-details/view-link', { params: { event_id: eventId } }),
+        ])
+        if (recipientsRes.status === 'fulfilled') this.departureModal.eligibleCount = (recipientsRes.value.data || []).length
+        if (listRes.status === 'fulfilled') {
+          this.departureModal.submittedCount = listRes.value.data?.total_submitted || 0
+          this.departureModal.rows = (listRes.value.data?.data || []).filter(r => r.submitted)
+        }
+        if (linkRes.status === 'fulfilled') this.departureModal.formLink = linkRes.value.data?.link || ''
+        if (viewLinkRes.status === 'fulfilled') this.departureModal.viewLink = viewLinkRes.value.data?.link || ''
+      } catch (e) {
+        this.departureModal.error = 'Failed to load travel-details data.'
+      } finally {
+        this.departureModal.loading = false
+      }
+    },
+    closeDepartureModal() {
+      this.departureModal.show = false
+    },
+    async copyDepartureLink() {
+      try {
+        await navigator.clipboard.writeText(this.departureModal.formLink)
+        this.showToast('Form link copied.')
+      } catch (e) {
+        window.prompt('Copy this link:', this.departureModal.formLink)
+      }
+    },
+    async copyDepartureViewLink() {
+      try {
+        await navigator.clipboard.writeText(this.departureModal.viewLink)
+        this.showToast('Report link copied.')
+      } catch (e) {
+        window.prompt('Copy this link:', this.departureModal.viewLink)
+      }
+    },
+    async sendDepartureTrial() {
+      this.departureModal.testSending = true
+      this.departureModal.testResult = ''
+      this.departureModal.error = ''
+      try {
+        const api = this._departureApi()
+        const res = await api.post('/departure-details/send', {
+          event_id: this.selectedEventId || null,
+          test_email: this.departureModal.testEmail,
+        })
+        this.departureModal.testResult = res.data?.message || `Trial invitation sent to ${this.departureModal.testEmail}.`
+      } catch (e) {
+        this.departureModal.error = e.response?.data?.detail || 'Failed to send trial invitation.'
+      } finally {
+        this.departureModal.testSending = false
+      }
+    },
+    async sendDepartureInvitations() {
+      if (!confirm(`Send the travel-details form link to all ${this.departureModal.eligibleCount} paid, non-secretariat registrant(s)?`)) return
+      this.departureModal.sending = true
+      this.departureModal.result = ''
+      this.departureModal.error = ''
+      try {
+        const api = this._departureApi()
+        const res = await api.post('/departure-details/send', {
+          event_id: this.selectedEventId || null,
+        })
+        this.departureModal.result = res.data?.message || `Form link queued for ${res.data?.sent || 0} registrant(s).`
+      } catch (e) {
+        this.departureModal.error = e.response?.data?.detail || 'Failed to send invitations.'
+      } finally {
+        this.departureModal.sending = false
+      }
+    },
+    async exportDepartureDetails() {
+      this.departureModal.exporting = true
+      try {
+        const api = this._departureApi()
+        const res = await api.get('/departure-details/export', {
+          params: { event_id: this.selectedEventId || null },
+          responseType: 'blob',
+        })
+        const url = window.URL.createObjectURL(res.data)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'travel_details_export.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.URL.revokeObjectURL(url)
+      } catch (e) {
+        this.departureModal.error = e.response?.data?.detail || 'Failed to export.'
+      } finally {
+        this.departureModal.exporting = false
       }
     },
 
