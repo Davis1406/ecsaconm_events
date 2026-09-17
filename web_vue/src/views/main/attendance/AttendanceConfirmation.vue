@@ -175,14 +175,20 @@
           </span>
         </div>
 
-        <!-- Day legend / select-all per day -->
-        <div v-if="eventDays.length" class="px-5 pt-3 pb-2 flex flex-wrap gap-2 text-xs text-gray-500">
-          <label v-for="d in eventDays" :key="d.date"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-50 cursor-pointer select-none">
-            <input type="checkbox" :checked="dayAllSelected(d.date)" @change="toggleDayAll(d.date)" class="rounded border-gray-300" />
+        <!-- Day filter chips -->
+        <div v-if="eventDays.length" class="px-5 pt-3 pb-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <button v-for="d in eventDays" :key="d.date"
+            @click="toggleDayFilter(d.date)"
+            class="px-2.5 py-1.5 rounded-lg font-semibold transition"
+            :class="isDayFilterActive(d.date) ? 'text-white' : 'bg-gray-50 hover:bg-gray-100'"
+            :style="isDayFilterActive(d.date) ? { backgroundColor: 'rgb(254,80,103)' } : {}">
             {{ d.label }}
-            <span class="text-gray-400">({{ dayCount(d.date) }})</span>
-          </label>
+            <span class="ml-1.5 opacity-80">{{ dayCount(d.date) }}</span>
+          </button>
+          <button v-if="selectedDays.length" @click="clearDayFilter"
+            class="underline text-gray-400 hover:text-gray-600 font-medium">
+            Clear day filter
+          </button>
         </div>
 
         <!-- Table -->
@@ -232,7 +238,7 @@
 
         <!-- Empty -->
         <div v-if="filteredRegistrations.length === 0" class="py-16 text-center">
-          <p class="text-gray-400 text-sm italic">No scanned participants match your search.</p>
+          <p class="text-gray-400 text-sm italic">No scanned participants match your search or the active day filter.</p>
         </div>
       </div>
 
@@ -279,6 +285,7 @@ export default {
       // registration_id -> { 'YYYY-MM-DD': attendanceId }
       attendanceMap: {},
       search: '',
+      selectedDays: [],
       toggling: null,
       toast: { show: false, message: '', type: 'success' },
     }
@@ -316,7 +323,10 @@ export default {
       return this.registrations.filter(r => this.daysAttended(r) > 0)
     },
     filteredRegistrations() {
-      const base = this.scannedRegistrations
+      let base = this.scannedRegistrations
+      if (this.selectedDays.length) {
+        base = base.filter(r => this.selectedDays.some(d => this.isPresent(r, d)))
+      }
       if (!this.search.trim()) return base
       const term = this.search.toLowerCase()
       return base.filter(r => {
@@ -445,18 +455,17 @@ export default {
     dayCount(dateStr) {
       return this.registrations.filter(r => this.isPresent(r, dateStr)).length
     },
-    dayAllSelected(dateStr) {
-      const regs = this.filteredRegistrations
-      return regs.length > 0 && regs.every(r => this.isPresent(r, dateStr))
+    toggleDayFilter(dateStr) {
+      const i = this.selectedDays.indexOf(dateStr)
+      this.selectedDays = i >= 0
+        ? this.selectedDays.filter(d => d !== dateStr)
+        : [...this.selectedDays, dateStr]
     },
-    async toggleDayAll(dateStr) {
-      const regs = this.filteredRegistrations
-      const target = this.dayAllSelected(dateStr)
-        ? regs.filter(r => this.isPresent(r, dateStr))   // unmark all
-        : regs.filter(r => !this.isPresent(r, dateStr))  // mark all
-      for (const reg of target) {
-        await this.toggleDay(reg, dateStr)
-      }
+    isDayFilterActive(dateStr) {
+      return this.selectedDays.includes(dateStr)
+    },
+    clearDayFilter() {
+      this.selectedDays = []
     },
     async toggleDay(reg, dateStr) {
       const key = `${reg.id}:${dateStr}`
