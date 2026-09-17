@@ -98,6 +98,13 @@
                     </svg>
                     Share
                   </button>
+                  <button @click="exportRoomPDF(room)" :disabled="pdfBusy === room.day + room.room"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white/15 text-white hover:bg-white/25 disabled:opacity-50" title="Export this room's presenter list as a PDF with ECSA branding">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V3a1 1 0 00-1-1H8a1 1 0 00-1 1v3h10z" />
+                    </svg>
+                    {{ pdfBusy === room.day + room.room ? '…' : 'PDF' }}
+                  </button>
                   <button v-if="room.with_slide" @click="downloadRoomZip(room)"
                     :disabled="zipBusy"
                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-cp-secondary hover:opacity-90">
@@ -597,6 +604,10 @@
     <input type="file" ref="slideInput" class="hidden" :accept="acceptedExtensions" @change="onSlideSelected" />
     <input type="file" ref="addSlideInput" class="hidden" :accept="acceptedExtensions" @change="onAddSlideSelected" />
 
+    <!-- Off-screen PDF template for the per-room presenter-list export -->
+    <!-- (absolutely positioned far off-window so it's never visible but still renderable by html2canvas) -->
+    <div ref="pdfNode" style="position:absolute; left:-9999px; top:0; width:794px; z-index:-1;" aria-hidden="true"></div>
+
     <!-- Batch ZIP download progress overlay -->
     <div v-if="zipProgress.active" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
       <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -628,6 +639,10 @@ import SpinnerComponent from '@/components/Spinner.vue'
 import { useAuthStore } from '@/store/authStore'
 import { saveAs } from 'file-saver'
 import axios from 'axios'
+// Inlined as data URLs so html2canvas can always render them (no CORS /
+// asset-path worries), the same way badges embed the crest + brand mark.
+import ecsaCrest from '@/assets/images/ecsalogo.png?inline'
+import ecsaconmMark from '@/assets/images/logo.png?inline'
 
 const DAY_ORDER = ['Day 1', 'Day 2', 'Day 3', 'Day 1-3', 'Unassigned']
 
@@ -656,6 +671,7 @@ export default {
       manageOpen: false, manageTarget: null, manageForm: {}, manageBusy: false, manageErr: '',
       preview: { open: false, name: '', src: '', entry: null },
       zipBusy: false,
+      pdfBusy: null,
       zipProgress: { active: false, room: '', percent: 0, loadedMB: '0.0', totalMB: null },
       roomDeleting: null,
       entryDeleting: null,
@@ -983,6 +999,101 @@ export default {
         // clipboard API can be unavailable (older browsers, non-HTTPS) —
         // fall back to just showing it so it can be selected and copied.
         window.prompt('Copy this link:', url)
+      }
+    },
+
+    // ── per-room PDF export ─────────────────────────────────
+    escHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ))
+    },
+    // Rebuilds the off-screen template for the given day/room bucket so the
+    // snapshot matches exactly what's shown on that room card right now.
+    buildRoomPdfHtml(room) {
+      const esc = this.escHtml
+      const rows = room.entries.map((e, i) => {
+        const sub = e.is_substitution
+          ? `<span style="font-size:9px;background:#fef3c7;color:#b45309;border:1px solid #fbbf24;border-radius:3px;padding:0 4px;margin-left:5px;font-weight:700;">SUB</span>`
+            + (e.original_presenter ? `<span style="font-size:10px;color:#6b7280;margin-left:4px;">for ${esc(e.original_presenter)}</span>` : '')
+          : ''
+        const poster = e.category === 'poster'
+          ? ` <span style="font-size:9px;background:#fef3c7;color:#b45309;border:1px solid #fbbf24;border-radius:3px;padding:0 4px;font-weight:700;">POSTER</span>`
+          : ''
+        return `<tr style="border-top:1px solid #f1f5f9;">
+          <td style="padding:6px 10px;color:#9ca3af;width:28px;">${i + 1}</td>
+          <td style="padding:6px 10px;font-weight:600;color:#111827;">${esc(e.presenter_name || '—')}${sub}</td>
+          <td style="padding:6px 10px;width:76px;color:#4b5563;">${esc(e.session || '—')}</td>
+          <td style="padding:6px 10px;color:#374151;">${esc(e.title || e.activity || '')}${poster}</td>
+        </tr>`
+      }).join('')
+
+      return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937;background:#ffffff;padding:24px 30px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="width:64px;"><img src="${ecsaCrest}" alt="ECSA" style="width:60px;height:60px;border-radius:50%;border:2px solid rgb(254,80,103);object-fit:contain;padding:3px;background:#ffffff;box-sizing:border-box;"></td>
+            <td style="width:64px;"><div style="width:60px;height:60px;border-radius:50%;background:rgb(220,50,75);overflow:hidden;display:flex;align-items:center;justify-content:center;"><img src="${ecsaconmMark}" alt="ECSACONM" style="width:52px;height:52px;object-fit:contain;"></div></td>
+            <td style="padding-left:10px;vertical-align:middle;">
+              <div style="font-size:20px;font-weight:700;color:#111827;">ECSACONM Scientific Conference</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:2px;">Presenters by Room — Room List</div>
+            </td>
+          </tr>
+        </table>
+        <div style="height:3px;background:linear-gradient(90deg,rgb(254,80,103),rgb(180,30,55));margin:12px 0 16px;"></div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+          <div style="background:rgb(0,150,180);color:#ffffff;padding:8px 14px;font-size:14px;font-weight:700;">${esc(room.room)} <span style="font-weight:400;font-size:12px;">· ${esc(room.day)}</span></div>
+          <div style="padding:8px 14px;">
+            <div style="font-size:11px;color:#6b7280;padding-bottom:6px;">${room.entries.length} presentation${room.entries.length !== 1 ? 's' : ''} · ${room.with_slide} with slides</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="background:#f9fafb;color:#374151;">
+                  <th style="text-align:left;padding:6px 10px;width:28px;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">#</th>
+                  <th style="text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">Presenter</th>
+                  <th style="text-align:left;padding:6px 10px;width:76px;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">Session</th>
+                  <th style="text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">Title</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;text-align:center;font-size:10px;color:#9ca3af;">www.ecsaconm.org · info@ecsaconm.org</div>
+      </div>`
+    },
+    async exportRoomPDF(room) {
+      if (!room.entries.length) {
+        this.flash('Nothing to export for this room.', true)
+        return
+      }
+      this.pdfBusy = room.day + room.room
+      try {
+        this.flash('Preparing PDF…', false)
+        const mod = await import('html2pdf.js')
+        const html2pdf = mod.default || mod
+        const node = this.$refs.pdfNode
+        if (!node) throw new Error('print node missing')
+        node.innerHTML = this.buildRoomPdfHtml(room)
+
+        const cleanRoom = room.room.replace(/[^A-Za-z0-9 _-]+/g, '').trim().slice(0, 40) || 'room'
+        await html2pdf()
+          .set({
+            margin: [10, 10, 10, 10],
+            filename: `Presenters_${cleanRoom}_${room.day}.pdf`,
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+          })
+          .from(node)
+          .save()
+        this.flash('PDF exported.', false)
+      } catch (e) {
+        console.error('Export room PDF failed:', e)
+        this.flash('Failed to generate PDF.', true)
+      } finally {
+        this.pdfBusy = null
       }
     },
 
