@@ -127,11 +127,13 @@ def _eligible_registrants(db: Session, event_id: Optional[int] = None):
 
 
 def _serialize(rec: DepartureDetail):
+    phone = rec.registration.user.phone if rec.registration and rec.registration.user else None
     return {
         "id": rec.id,
         "event_id": rec.event_id,
         "email": rec.email,
         "name": rec.name,
+        "phone": phone,
         "hotel": rec.hotel,
         "departure_date": rec.departure_date,
         "departure_time": rec.departure_time,
@@ -290,7 +292,11 @@ def list_submissions(
     Registrations page's own Travel Details panel (list + export) — same
     data as the public-view link, but behind a login instead of a token."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
-    q = db.query(DepartureDetail).filter(DepartureDetail.deleted_at == None)
+    q = (
+        db.query(DepartureDetail)
+        .options(joinedload(DepartureDetail.registration).joinedload(Registration.user))
+        .filter(DepartureDetail.deleted_at == None)
+    )
     if event_id:
         q = q.filter(DepartureDetail.event_id == event_id)
     records = q.order_by(
@@ -368,8 +374,10 @@ def export_submissions(
     """Admin: export every submitted travel-details record to Excel, same
     layout convention as the Registrations export."""
     auth_dependency.secure_access("EXPORT_REGISTRATIONS", current_user["user_id"])
-    q = db.query(DepartureDetail).filter(
-        DepartureDetail.deleted_at == None, DepartureDetail.submitted_at != None,
+    q = (
+        db.query(DepartureDetail)
+        .options(joinedload(DepartureDetail.registration).joinedload(Registration.user))
+        .filter(DepartureDetail.deleted_at == None, DepartureDetail.submitted_at != None)
     )
     if event_id:
         q = q.filter(DepartureDetail.event_id == event_id)
@@ -386,7 +394,7 @@ def export_submissions(
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-    headers = ["#", "Name", "Email", "Hotel", "Departure Date", "Departure Time", "Point of Departure", "Submitted At"]
+    headers = ["#", "Name", "Email", "Phone", "Hotel", "Departure Date", "Departure Time", "Point of Departure", "Submitted At"]
     ws.row_dimensions[1].height = 22
     for ci, h in enumerate(headers, 1):
         cell = ws.cell(1, ci, h)
@@ -397,8 +405,9 @@ def export_submissions(
 
     for ri, r in enumerate(records, 2):
         use_fill = alt_fill if ri % 2 == 0 else PatternFill("solid", start_color="FFFFFF")
+        phone = r.registration.user.phone if r.registration and r.registration.user else ""
         row = [
-            r.id, r.name, r.email, r.hotel, r.departure_date, r.departure_time,
+            r.id, r.name, r.email, phone, r.hotel, r.departure_date, r.departure_time,
             r.departure_point, r.submitted_at.strftime("%d %b %Y %H:%M") if r.submitted_at else "",
         ]
         for ci, val in enumerate(row, 1):
@@ -407,7 +416,7 @@ def export_submissions(
             cell.fill = use_fill
             cell.alignment = left
 
-    col_widths = [6, 22, 30, 26, 16, 16, 28, 18]
+    col_widths = [6, 22, 30, 18, 26, 16, 16, 28, 18]
     for ci, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
@@ -689,7 +698,11 @@ def public_view(
     if token != real_token:
         raise HTTPException(status_code=404, detail="Not found.")
 
-    q = db.query(DepartureDetail).filter(DepartureDetail.deleted_at == None)
+    q = (
+        db.query(DepartureDetail)
+        .options(joinedload(DepartureDetail.registration).joinedload(Registration.user))
+        .filter(DepartureDetail.deleted_at == None)
+    )
     if event_id:
         q = q.filter(DepartureDetail.event_id == event_id)
     records = q.order_by(

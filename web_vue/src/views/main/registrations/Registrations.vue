@@ -868,13 +868,14 @@
               <div v-if="departureModal.rows.length === 0" class="rounded-lg border border-gray-200 px-4 py-6 text-center text-sm text-gray-400 italic">
                 No submissions yet.
               </div>
-              <div v-else class="rounded-lg border border-gray-200 max-h-80 overflow-y-auto overflow-x-auto">
+              <div v-else class="rounded-lg border border-gray-200 overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead class="sticky top-0 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
                     <tr>
                       <th class="px-3 py-2 text-left">#</th>
                       <th class="px-3 py-2 text-left">Name</th>
                       <th class="px-3 py-2 text-left">Email</th>
+                      <th class="px-3 py-2 text-left">Phone</th>
                       <th class="px-3 py-2 text-left">Hotel</th>
                       <th class="px-3 py-2 text-left">Departure Date</th>
                       <th class="px-3 py-2 text-left">Departure Time</th>
@@ -887,6 +888,7 @@
                       <td class="px-3 py-2 text-gray-400">{{ idx + 1 }}</td>
                       <td class="px-3 py-2 font-semibold whitespace-nowrap">{{ r.name || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.email }}</td>
+                      <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.phone || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600">{{ r.hotel || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_date || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_time || '—' }}</td>
@@ -918,10 +920,11 @@
               style="background-color: rgb(180,83,9);">
               {{ departureModal.updateSending ? 'Sending…' : `Email ${departureModal.submittedCount} Submitters to Add Point of Departure` }}
             </button>
-            <button @click="sendDepartureInvitations" :disabled="departureModal.sending || departureModal.eligibleCount === 0"
+            <button @click="sendDepartureInvitations" :disabled="departureModal.sending || departureModal.pendingCount === 0"
               class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-              style="background-color: rgb(0,150,180);">
-              {{ departureModal.sending ? 'Sending…' : `Send Link to ${departureModal.eligibleCount}` }}
+              style="background-color: rgb(0,150,180);"
+              title="Only sends to registrants who haven't submitted yet">
+              {{ departureModal.sending ? 'Sending…' : `Send Link to ${departureModal.pendingCount} Who Haven't Submitted` }}
             </button>
           </div>
         </div>
@@ -1054,7 +1057,7 @@ export default {
       },
       departureModal: {
         show: false, loading: false, sending: false, updateSending: false, testSending: false, exporting: false, deletingId: null,
-        eligibleCount: 0, submittedCount: 0, rows: [],
+        eligibleCount: 0, submittedCount: 0, pendingCount: 0, pendingEmails: [], rows: [],
         formLink: '', viewLink: '', testEmail: 'dkondo146@gmail.com', testKind: 'invitation',
         result: '', testResult: '', error: '',
         emailStats: { invitation: { sent: 0, failed: 0 }, receipt: { sent: 0, failed: 0 }, digest: { sent: 0, failed: 0 }, update_requests: { sent: 0, failed: 0 } },
@@ -1651,7 +1654,12 @@ export default {
           api.get('/departure-details/view-link', { params: { event_id: eventId } }),
           api.get('/departure-details/email-stats'),
         ])
-        if (recipientsRes.status === 'fulfilled') this.departureModal.eligibleCount = (recipientsRes.value.data || []).length
+        if (recipientsRes.status === 'fulfilled') {
+          const recipients = recipientsRes.value.data || []
+          this.departureModal.eligibleCount = recipients.length
+          this.departureModal.pendingEmails = recipients.filter(p => !p.submitted).map(p => p.email)
+          this.departureModal.pendingCount = this.departureModal.pendingEmails.length
+        }
         if (listRes.status === 'fulfilled') {
           this.departureModal.submittedCount = listRes.value.data?.total_submitted || 0
           this.departureModal.rows = (listRes.value.data?.data || []).filter(r => r.submitted)
@@ -1723,7 +1731,7 @@ export default {
       }
     },
     async sendDepartureInvitations() {
-      if (!confirm(`Send the travel-details form link to all ${this.departureModal.eligibleCount} paid, non-secretariat registrant(s)?`)) return
+      if (!confirm(`Send the travel-details form link to the ${this.departureModal.pendingCount} registrant(s) who haven't submitted yet?`)) return
       this.departureModal.sending = true
       this.departureModal.result = ''
       this.departureModal.error = ''
@@ -1731,6 +1739,7 @@ export default {
         const api = this._departureApi()
         const res = await api.post('/departure-details/send', {
           event_id: this.selectedEventId || null,
+          selected_emails: this.departureModal.pendingEmails,
         })
         this.departureModal.result = res.data?.message || `Form link queued for ${res.data?.sent || 0} registrant(s).`
       } catch (e) {

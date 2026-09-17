@@ -35,6 +35,7 @@
                 <tr class="text-left text-xs text-gray-500 bg-gray-50">
                   <th class="px-4 py-2.5 font-semibold">Name</th>
                   <th class="px-4 py-2.5 font-semibold">Email</th>
+                  <th class="px-4 py-2.5 font-semibold">Phone</th>
                   <th class="px-4 py-2.5 font-semibold">Hotel</th>
                   <th class="px-4 py-2.5 font-semibold">Departure date</th>
                   <th class="px-4 py-2.5 font-semibold">Departure time</th>
@@ -46,6 +47,7 @@
                 <tr v-for="r in report.data" :key="r.id">
                   <td class="px-4 py-2.5">{{ r.name || '—' }}</td>
                   <td class="px-4 py-2.5 text-gray-500">{{ r.email }}</td>
+                  <td class="px-4 py-2.5 text-gray-500">{{ r.phone || '—' }}</td>
                   <td class="px-4 py-2.5">{{ r.hotel || '—' }}</td>
                   <td class="px-4 py-2.5">{{ r.departure_date || '—' }}</td>
                   <td class="px-4 py-2.5">{{ r.departure_time || '—' }}</td>
@@ -56,7 +58,7 @@
                   </td>
                 </tr>
                 <tr v-if="!isLoading && (!report.data || report.data.length === 0)">
-                  <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400 italic">No submissions yet.</td>
+                  <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-400 italic">No submissions yet.</td>
                 </tr>
               </tbody>
             </table>
