@@ -604,9 +604,9 @@
     <input type="file" ref="slideInput" class="hidden" :accept="acceptedExtensions" @change="onSlideSelected" />
     <input type="file" ref="addSlideInput" class="hidden" :accept="acceptedExtensions" @change="onAddSlideSelected" />
 
-    <!-- Off-screen PDF template for the per-room presenter-list export -->
-    <!-- (absolutely positioned far off-window so it's never visible but still renderable by html2canvas) -->
-    <div ref="pdfNode" style="position:absolute; left:-9999px; top:0; width:794px; z-index:-1;" aria-hidden="true"></div>
+    <!-- Off-screen PDF template for the per-room presenter-list export
+    (parked far off-window so it's never visible) -->
+    <div ref="pdfNode" id="roomPdfNode" style="position:absolute; left:-9999px; top:0; width:794px;" aria-hidden="true"></div>
 
     <!-- Batch ZIP download progress overlay -->
     <div v-if="zipProgress.active" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
@@ -1070,24 +1070,54 @@ export default {
       this.pdfBusy = room.day + room.room
       try {
         this.flash('Preparing PDF…', false)
-        const mod = await import('html2pdf.js')
-        const html2pdf = mod.default || mod
+        // html2pdf.js 0.14's jsPDF v4 `context2d` renderer emits an empty
+        // page, so we build the PDF directly: html2canvas -> jsPDF.addImage.
+        const hcMod = await import('html2canvas')
+        const html2canvas = hcMod.default || hcMod
+        const jsMod = await import('jspdf')
+        const JsPDF = jsMod.jsPDF || (jsMod.default && jsMod.default.jsPDF) || jsMod.default
         const node = this.$refs.pdfNode
         if (!node) throw new Error('print node missing')
         node.innerHTML = this.buildRoomPdfHtml(room)
 
         const cleanRoom = room.room.replace(/[^A-Za-z0-9 _-]+/g, '').trim().slice(0, 40) || 'room'
-        await html2pdf()
-          .set({
-            margin: [10, 10, 10, 10],
-            filename: `Presenters_${cleanRoom}_${room.day}.pdf`,
-            image: { type: 'jpeg', quality: 0.95 },
-            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-          })
-          .from(node)
-          .save()
+        const canvas = await html2canvas(node, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+        })
+        const pdf = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+        const pageW = pdf.internal.pageSize.getWidth()
+        const pageH = pdf.internal.pageSize.getHeight()
+        const margin = 10
+        const imgW = pageW - margin * 2
+        const mmPerPx = imgW / canvas.width
+        const imgH = canvas.height * mmPerPx
+        const fitH = pageH - margin * 2
+        if (imgH <= fitH) {
+          pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', margin, margin, imgW, imgH, undefined, 'FAST')
+        } else {
+          const pxPerPage = Math.floor(fitH / mmPerPx)
+          let srcY = 0
+          let parts = 0
+          while (srcY < canvas.height) {
+            const srcH = Math.min(pxPerPage, canvas.height - srcY)
+            const slice = document.createElement('canvas')
+            slice.width = canvas.width
+            slice.height = srcH
+            const sctx = slice.getContext('2d')
+            sctx.fillStyle = '#ffffff'
+            sctx.fillRect(0, 0, slice.width, slice.height)
+            sctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH)
+            if (parts > 0) pdf.addPage()
+            pdf.addImage(slice.toDataURL('image/jpeg', 0.95), 'JPEG', margin, margin, imgW, srcH * mmPerPx, undefined, 'FAST')
+            srcY += srcH
+            parts++
+          }
+        }
+        pdf.save(`Presenters_${cleanRoom}_${room.day}.pdf`)
+        node.innerHTML = ''
         this.flash('PDF exported.', false)
       } catch (e) {
         console.error('Export room PDF failed:', e)
