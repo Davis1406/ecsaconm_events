@@ -915,10 +915,11 @@
             Close
           </button>
           <div class="flex flex-wrap items-center gap-2">
-            <button @click="sendDepartureUpdateRequests" :disabled="departureModal.updateSending || departureModal.submittedCount === 0"
+            <button @click="sendDepartureUpdateRequests" :disabled="departureModal.updateSending || departureModal.missingPointCount === 0"
               class="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-              style="background-color: rgb(180,83,9);">
-              {{ departureModal.updateSending ? 'Sending…' : `Email ${departureModal.submittedCount} Submitters to Add Point of Departure` }}
+              style="background-color: rgb(180,83,9);"
+              title="Only sends to submitters who haven't added their point of departure yet">
+              {{ departureModal.updateSending ? 'Sending…' : `Email ${departureModal.missingPointCount} Who Haven't Added Point of Departure` }}
             </button>
             <button @click="sendDepartureInvitations" :disabled="departureModal.sending || departureModal.pendingCount === 0"
               class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
@@ -1057,7 +1058,8 @@ export default {
       },
       departureModal: {
         show: false, loading: false, sending: false, updateSending: false, testSending: false, exporting: false, deletingId: null,
-        eligibleCount: 0, submittedCount: 0, pendingCount: 0, pendingEmails: [], rows: [],
+        eligibleCount: 0, submittedCount: 0, pendingCount: 0, pendingEmails: [],
+        missingPointCount: 0, missingPointEmails: [], rows: [],
         formLink: '', viewLink: '', testEmail: 'dkondo146@gmail.com', testKind: 'invitation',
         result: '', testResult: '', error: '',
         emailStats: { invitation: { sent: 0, failed: 0 }, receipt: { sent: 0, failed: 0 }, digest: { sent: 0, failed: 0 }, update_requests: { sent: 0, failed: 0 } },
@@ -1663,6 +1665,10 @@ export default {
         if (listRes.status === 'fulfilled') {
           this.departureModal.submittedCount = listRes.value.data?.total_submitted || 0
           this.departureModal.rows = (listRes.value.data?.data || []).filter(r => r.submitted)
+          this.departureModal.missingPointEmails = this.departureModal.rows
+            .filter(r => !r.departure_point)
+            .map(r => r.email)
+          this.departureModal.missingPointCount = this.departureModal.missingPointEmails.length
         }
         if (linkRes.status === 'fulfilled') this.departureModal.formLink = linkRes.value.data?.link || ''
         if (viewLinkRes.status === 'fulfilled') this.departureModal.viewLink = viewLinkRes.value.data?.link || ''
@@ -1714,7 +1720,7 @@ export default {
       }
     },
     async sendDepartureUpdateRequests() {
-      if (!confirm(`Email ${this.departureModal.submittedCount} registrant(s) who already submitted, asking them to add their point of departure? (Their other details will be pre-filled.)`)) return
+      if (!confirm(`Email the ${this.departureModal.missingPointCount} registrant(s) who submitted but haven't added their point of departure yet? (Their other details will be pre-filled. Anyone who already added it won't be emailed.)`)) return
       this.departureModal.updateSending = true
       this.departureModal.result = ''
       this.departureModal.error = ''
@@ -1722,6 +1728,7 @@ export default {
         const api = this._departureApi()
         const res = await api.post('/departure-details/send-update-request', {
           event_id: this.selectedEventId || null,
+          selected_emails: this.departureModal.missingPointEmails,
         })
         this.departureModal.result = res.data?.message || `Update request queued for ${res.data?.sent || 0} submitter(s).`
       } catch (e) {

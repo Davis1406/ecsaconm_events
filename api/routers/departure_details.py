@@ -500,11 +500,13 @@ def send_departure_update_requests(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     body: SendFormBody = None,
 ):
-    """Email the form link to registrants who HAVE already submitted, asking
-    them to add/edit just their Point of Departure (the form pre-fills their
-    other details by email). This is the follow-up the secretariat fires once
-    the new field is live — not a fresh invitation, so people who haven't
-    submitted yet are NOT emailed here. Pass `test_email` for a single trial."""
+    """Email the form link to registrants who HAVE already submitted but have
+    NOT yet added a Point of Departure, asking them to add/edit just that
+    field (the form pre-fills their other details by email). This is the
+    follow-up the secretariat fires once the new field is live — not a fresh
+    invitation, so people who haven't submitted yet are NOT emailed here, and
+    anyone who already resubmitted with a Point of Departure filled in counts
+    as done and is excluded too. Pass `test_email` for a single trial."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
 
     body = body or SendFormBody()
@@ -530,6 +532,7 @@ def send_departure_update_requests(
             DepartureDetail.deleted_at == None,
             DepartureDetail.submitted_at != None,
         )
+        .filter((DepartureDetail.departure_point == None) | (DepartureDetail.departure_point == ""))
         .all()
     )
     subject, html = _build_update_request_email(event_name, form_link)
