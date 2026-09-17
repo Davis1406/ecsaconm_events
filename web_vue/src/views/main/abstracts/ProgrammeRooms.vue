@@ -38,6 +38,14 @@
           {{ r }}
         </button>
         <div class="flex-1"></div>
+        <button v-if="isAdmin" @click="openAdd" :disabled="addBusy"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
+          style="border-color: rgb(34,197,94); color: rgb(16,150,60);">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Add Presenter
+        </button>
         <button v-if="isAdmin" @click="openAssignPresenters" :disabled="assignBusy"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
           style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
@@ -429,6 +437,86 @@
       </div>
     </div>
 
+    <!-- Add presenter (manual entry) modal -->
+    <div v-if="addOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="closeAdd">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <div class="font-bold">Add Presenter</div>
+            <p class="text-xs text-gray-500 mt-0.5">
+              Manually add a presenter who wasn't in the programme, and attach their slides.
+            </p>
+          </div>
+          <button @click="closeAdd" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+            <div class="font-semibold text-sm">Presenter</div>
+            <input v-model.trim="addForm.presenter_name" type="text" class="field-input" placeholder="Presenter name (required)" />
+            <input v-model.trim="addForm.title" type="text" class="field-input" placeholder="Presentation / session title (optional)" />
+          </div>
+
+          <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+            <div class="font-semibold text-sm">Schedule</div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[11px] font-semibold text-gray-500 block mb-1">Category</label>
+                <select v-model="addForm.category" class="field-input">
+                  <option value="oral">Abstract (Oral)</option>
+                  <option value="poster">Poster</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold text-gray-500 block mb-1">Day</label>
+                <select v-model="addForm.day" class="field-input">
+                  <option v-for="d in addDayOptions" :key="d" :value="d">{{ d }}</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-gray-500 block mb-1">Room</label>
+              <input v-model.trim="addForm.room" type="text" list="add-room-options"
+                class="field-input" placeholder="Type a room name or pick one…" />
+              <datalist id="add-room-options">
+                <option v-for="r in addRoomOptions" :key="r" :value="r">{{ r }}</option>
+              </datalist>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-gray-500 block mb-1">Session (optional)</label>
+              <input v-model.trim="addForm.session" type="text" class="field-input" placeholder="e.g. S03" />
+            </div>
+          </div>
+
+          <!-- Slides -->
+          <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+            <div class="font-semibold text-sm">Slides</div>
+            <div v-if="addFile" class="flex items-center justify-between gap-2 text-sm text-gray-600">
+              <span class="truncate text-teal-600 font-medium">✓ {{ addFile.name }}</span>
+              <button @click="removeAddFile" class="text-red-500 font-medium hover:underline flex-shrink-0">Remove</button>
+            </div>
+            <div v-else>
+              <button @click="triggerAddUpload" class="px-3 py-1.5 text-xs font-semibold rounded-full border"
+                style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+                Attach presentation (PDF / PPTX / image)
+              </button>
+              <p class="text-[11px] text-gray-400 mt-1.5">Optional — you can also attach slides later via the pencil icon on the entry.</p>
+            </div>
+          </div>
+          <div v-if="addErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ addErr }}</div>
+        </div>
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button @click="closeAdd" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Cancel</button>
+          <button @click="saveAdd" :disabled="addBusy || !addForm.presenter_name.trim()"
+            class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
+            style="background-color: rgb(16,150,60);">
+            {{ addBusy ? 'Saving…' : (addFile ? 'Add Presenter & Attach Slides' : 'Add Presenter') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Manage entry modal -->
     <div v-if="manageOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="closeManage">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -507,6 +595,7 @@
     </div>
 
     <input type="file" ref="slideInput" class="hidden" :accept="acceptedExtensions" @change="onSlideSelected" />
+    <input type="file" ref="addSlideInput" class="hidden" :accept="acceptedExtensions" @change="onAddSlideSelected" />
 
     <!-- Batch ZIP download progress overlay -->
     <div v-if="zipProgress.active" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
@@ -562,6 +651,8 @@ export default {
       ],
       apiUrl: import.meta.env.VITE_API_URL,
       flashMsg: '', flashErr: false,
+      addOpen: false, addBusy: false, addErr: '', addFile: null,
+      addForm: { presenter_name: '', title: '', category: 'oral', day: 'Day 1', room: '', session: '' },
       manageOpen: false, manageTarget: null, manageForm: {}, manageBusy: false, manageErr: '',
       preview: { open: false, name: '', src: '', entry: null },
       zipBusy: false,
@@ -711,6 +802,23 @@ export default {
         { key: 'oral', label: 'Oral', count: by.oral },
         { key: 'poster', label: 'Poster', count: by.poster },
       ]
+    },
+    // Manual-add modal: every conference day is offered (rooms page never
+    // auto-creates buckets for empty days), defaulting to the day currently
+    // filtered so the new entry lands where the admin is looking.
+    addDayOptions() {
+      return DAY_ORDER
+    },
+    // Existing room names for the selected day — shown as suggestions so the
+    // admin reuses the exact room string (matching matters: "GTCC 1" is not
+    // "gtcc 1"), but they can still type a brand-new room.
+    addRoomOptions() {
+      const rooms = new Set()
+      for (const d of this.roomsData) {
+        if (d.day !== this.addForm.day || !d.room) continue
+        rooms.add(d.room)
+      }
+      return [...rooms].sort((a, b) => a.localeCompare(b))
     },
   },
 
@@ -905,6 +1013,94 @@ export default {
       } finally {
         this.manageBusy = false
         if (this.$refs.slideInput) this.$refs.slideInput.value = ''
+      }
+    },
+
+    // ── add presenter (manual entry) ──────────────────────────
+    openAdd() {
+      this.addForm = {
+        presenter_name: '',
+        title: '',
+        category: this.entryCategory,
+        day: DAY_ORDER.includes(this.activeDay) ? this.activeDay : 'Day 1',
+        room: '',
+        session: '',
+      }
+      this.addFile = null
+      this.addErr = ''
+      this.addOpen = true
+    },
+    closeAdd() {
+      this.addOpen = false
+      this.addFile = null
+      this.addErr = ''
+    },
+    triggerAddUpload() {
+      this.$refs.addSlideInput.value = ''
+      this.$refs.addSlideInput.click()
+    },
+    async onAddSlideSelected(e) {
+      const file = e.target.files && e.target.files[0]
+      this.addErr = ''
+      if (!file) return
+      const ext = (file.name.split('.').pop() || '').toLowerCase()
+      if (!['pdf', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
+        this.addErr = 'Presentation must be a PDF, PPTX or image (jpg, png, gif, bmp, webp).'
+        if (this.$refs.addSlideInput) this.$refs.addSlideInput.value = ''
+        return
+      }
+      if (file.size > 100 * 1024 * 1024) {
+        this.addErr = 'File must be under 100 MB.'
+        if (this.$refs.addSlideInput) this.$refs.addSlideInput.value = ''
+        return
+      }
+      this.addFile = file
+    },
+    removeAddFile() {
+      this.addFile = null
+      if (this.$refs.addSlideInput) this.$refs.addSlideInput.value = ''
+    },
+    async saveAdd() {
+      const name = this.addForm.presenter_name.trim()
+      if (!name) {
+        this.addErr = 'Presenter name is required.'
+        return
+      }
+      this.addBusy = true
+      this.addErr = ''
+      try {
+        const res = await axios.post(`${this.apiUrl}/programme`, {
+          presenter_name: name,
+          title: this.addForm.title.trim() || null,
+          category: this.addForm.category,
+          day: this.addForm.day,
+          room: this.addForm.room.trim() || null,
+          session: this.addForm.session.trim() || null,
+        }, {
+          params: { event_id: 1, day: this.addForm.day, category: this.addForm.category },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        const entry = res.data
+
+        if (this.addFile) {
+          const form = new FormData()
+          form.append('file', this.addFile)
+          await axios.post(`${this.apiUrl}/programme/${entry.id}/upload-presentation`, form, {
+            headers: {
+              Authorization: `Bearer ${this.accessToken}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          })
+        }
+
+        this.flash(`Added ${name}${this.addFile ? ' with slides.' : '.'}`, false)
+        this.addOpen = false
+        this.addFile = null
+        await this.loadRooms()
+      } catch (e) {
+        this.addErr = e.response?.data?.detail || 'Failed to add presenter.'
+      } finally {
+        this.addBusy = false
       }
     },
 
