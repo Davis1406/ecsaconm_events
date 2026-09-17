@@ -1198,6 +1198,7 @@ class DepartureDetail(BaseWithSoftDelete):
     hotel = Column(String(255), nullable=True)
     departure_date = Column(String(30), nullable=True)
     departure_time = Column(String(30), nullable=True)
+    departure_point = Column(String(255), nullable=True)
     submitted_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

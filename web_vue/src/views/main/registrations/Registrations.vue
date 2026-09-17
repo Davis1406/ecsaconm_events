@@ -761,7 +761,7 @@
           <div>
             <p class="font-bold text-gray-800">Travel &amp; Hotel Details</p>
             <p class="text-xs text-gray-400 mt-0.5">
-              One shared public form (Name, Email, Hotel, Departure Date, Departure Time) — anyone can open it,
+              One shared public form (Name, Email, Hotel, Departure Date, Departure Time, Point of Departure) — anyone can open it,
               but only paid, non-secretariat registrants of this event can submit. lemmym@ecsaconm.org and
               info@ecsaconm.org get a digest email every {{ digestBatchSize }} new submissions.
             </p>
@@ -790,7 +790,7 @@
             <!-- Email activity -->
             <div class="rounded-xl border border-gray-200 p-4">
               <div class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Emails Sent</div>
-              <div class="grid grid-cols-3 gap-3 text-center">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                 <div>
                   <div class="text-lg font-bold text-gray-700">{{ departureModal.emailStats.invitation.sent }}</div>
                   <div class="text-[11px] text-gray-500">invitations</div>
@@ -805,6 +805,11 @@
                   <div class="text-lg font-bold text-gray-700">{{ departureModal.emailStats.digest.sent }}</div>
                   <div class="text-[11px] text-gray-500">digests (lemmym@/info@)</div>
                   <div v-if="departureModal.emailStats.digest.failed" class="text-[11px] text-red-500">{{ departureModal.emailStats.digest.failed }} failed</div>
+                </div>
+                <div>
+                  <div class="text-lg font-bold text-gray-700">{{ departureModal.emailStats.update_requests.sent }}</div>
+                  <div class="text-[11px] text-gray-500">point-of-departure update requests</div>
+                  <div v-if="departureModal.emailStats.update_requests.failed" class="text-[11px] text-red-500">{{ departureModal.emailStats.update_requests.failed }} failed</div>
                 </div>
               </div>
             </div>
@@ -835,7 +840,12 @@
 
             <!-- Trial send -->
             <div class="p-3 rounded-xl border border-amber-200 bg-amber-50 flex flex-wrap items-center gap-2">
-              <label class="text-xs font-semibold text-amber-800 uppercase tracking-wide">Trial send to</label>
+              <label class="text-xs font-semibold text-amber-800 uppercase tracking-wide">Trial send</label>
+              <select v-model="departureModal.testKind" class="border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none bg-white">
+                <option value="invitation">invitation</option>
+                <option value="update">point-of-departure update</option>
+              </select>
+              <label class="text-xs font-semibold text-amber-800 uppercase tracking-wide">to</label>
               <input v-model="departureModal.testEmail" type="email" placeholder="you@example.com"
                 class="flex-1 min-w-[200px] border border-amber-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
               <button @click="sendDepartureTrial" :disabled="departureModal.testSending || !departureModal.testEmail"
@@ -868,6 +878,7 @@
                       <th class="px-3 py-2 text-left">Hotel</th>
                       <th class="px-3 py-2 text-left">Departure Date</th>
                       <th class="px-3 py-2 text-left">Departure Time</th>
+                      <th class="px-3 py-2 text-left">Point of Departure</th>
                       <th class="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -879,6 +890,7 @@
                       <td class="px-3 py-2 text-gray-600">{{ r.hotel || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_date || '—' }}</td>
                       <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ r.departure_time || '—' }}</td>
+                      <td class="px-3 py-2 text-gray-600">{{ r.departure_point || '—' }}</td>
                       <td class="px-3 py-2 text-right">
                         <button @click="deleteDepartureSubmission(r)" :disabled="departureModal.deletingId === r.id"
                           title="Delete this submission"
@@ -896,15 +908,22 @@
           </template>
         </div>
 
-        <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-gray-100">
           <button @click="closeDepartureModal" class="px-5 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
             Close
           </button>
-          <button @click="sendDepartureInvitations" :disabled="departureModal.sending || departureModal.eligibleCount === 0"
-            class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-            style="background-color: rgb(0,150,180);">
-            {{ departureModal.sending ? 'Sending…' : `Send Link to ${departureModal.eligibleCount}` }}
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button @click="sendDepartureUpdateRequests" :disabled="departureModal.updateSending || departureModal.submittedCount === 0"
+              class="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(180,83,9);">
+              {{ departureModal.updateSending ? 'Sending…' : `Email ${departureModal.submittedCount} Submitters to Add Point of Departure` }}
+            </button>
+            <button @click="sendDepartureInvitations" :disabled="departureModal.sending || departureModal.eligibleCount === 0"
+              class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              style="background-color: rgb(0,150,180);">
+              {{ departureModal.sending ? 'Sending…' : `Send Link to ${departureModal.eligibleCount}` }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1034,11 +1053,11 @@ export default {
         previewSubject: '', previewTimer: null,
       },
       departureModal: {
-        show: false, loading: false, sending: false, testSending: false, exporting: false, deletingId: null,
+        show: false, loading: false, sending: false, updateSending: false, testSending: false, exporting: false, deletingId: null,
         eligibleCount: 0, submittedCount: 0, rows: [],
-        formLink: '', viewLink: '', testEmail: 'dkondo146@gmail.com',
+        formLink: '', viewLink: '', testEmail: 'dkondo146@gmail.com', testKind: 'invitation',
         result: '', testResult: '', error: '',
-        emailStats: { invitation: { sent: 0, failed: 0 }, receipt: { sent: 0, failed: 0 }, digest: { sent: 0, failed: 0 } },
+        emailStats: { invitation: { sent: 0, failed: 0 }, receipt: { sent: 0, failed: 0 }, digest: { sent: 0, failed: 0 }, update_requests: { sent: 0, failed: 0 } },
       },
       digestBatchSize: 10,
       deleteModal: { show: false, reg: null, deleting: false },
@@ -1671,15 +1690,36 @@ export default {
       this.departureModal.error = ''
       try {
         const api = this._departureApi()
-        const res = await api.post('/departure-details/send', {
+        const kind = this.departureModal.testKind
+        const endpoint = kind === 'update'
+          ? '/departure-details/send-update-request'
+          : '/departure-details/send'
+        const res = await api.post(endpoint, {
           event_id: this.selectedEventId || null,
           test_email: this.departureModal.testEmail,
         })
-        this.departureModal.testResult = res.data?.message || `Trial invitation sent to ${this.departureModal.testEmail}.`
+        this.departureModal.testResult = res.data?.message || `Trial sent to ${this.departureModal.testEmail}.`
       } catch (e) {
-        this.departureModal.error = e.response?.data?.detail || 'Failed to send trial invitation.'
+        this.departureModal.error = e.response?.data?.detail || 'Failed to send trial email.'
       } finally {
         this.departureModal.testSending = false
+      }
+    },
+    async sendDepartureUpdateRequests() {
+      if (!confirm(`Email ${this.departureModal.submittedCount} registrant(s) who already submitted, asking them to add their point of departure? (Their other details will be pre-filled.)`)) return
+      this.departureModal.updateSending = true
+      this.departureModal.result = ''
+      this.departureModal.error = ''
+      try {
+        const api = this._departureApi()
+        const res = await api.post('/departure-details/send-update-request', {
+          event_id: this.selectedEventId || null,
+        })
+        this.departureModal.result = res.data?.message || `Update request queued for ${res.data?.sent || 0} submitter(s).`
+      } catch (e) {
+        this.departureModal.error = e.response?.data?.detail || 'Failed to send update requests.'
+      } finally {
+        this.departureModal.updateSending = false
       }
     },
     async sendDepartureInvitations() {

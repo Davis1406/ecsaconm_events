@@ -38,6 +38,7 @@
                   <th class="px-4 py-2.5 font-semibold">Hotel</th>
                   <th class="px-4 py-2.5 font-semibold">Departure date</th>
                   <th class="px-4 py-2.5 font-semibold">Departure time</th>
+                  <th class="px-4 py-2.5 font-semibold">Point of departure</th>
                   <th class="px-4 py-2.5 font-semibold">Status</th>
                 </tr>
               </thead>
@@ -48,13 +49,14 @@
                   <td class="px-4 py-2.5">{{ r.hotel || '—' }}</td>
                   <td class="px-4 py-2.5">{{ r.departure_date || '—' }}</td>
                   <td class="px-4 py-2.5">{{ r.departure_time || '—' }}</td>
+                  <td class="px-4 py-2.5">{{ r.departure_point || '—' }}</td>
                   <td class="px-4 py-2.5">
                     <span v-if="r.submitted" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">submitted</span>
                     <span v-else class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">pending</span>
                   </td>
                 </tr>
                 <tr v-if="!isLoading && (!report.data || report.data.length === 0)">
-                  <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400 italic">No submissions yet.</td>
+                  <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400 italic">No submissions yet.</td>
                 </tr>
               </tbody>
             </table>

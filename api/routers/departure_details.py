@@ -73,6 +73,24 @@ def _eligible_registration(db: Session, event_id: int, email: str):
     )
 
 
+def _existing_detail(db: Session, event_id: int, email: str):
+    """The submitter's own saved travel-details record (if any) for this
+    event+email, so the public form can pre-fill their details and they only
+    need to edit the fields that changed. Only returned for eligible emails
+    (i.e. the person who may actually submit)."""
+    if not _eligible_registration(db, event_id, email):
+        return None
+    return (
+        db.query(DepartureDetail)
+        .filter(
+            DepartureDetail.event_id == event_id,
+            DepartureDetail.email == email.strip().lower(),
+            DepartureDetail.deleted_at == None,
+        )
+        .first()
+    )
+
+
 def _eligible_registrants(db: Session, event_id: Optional[int] = None):
     """Every paid, non-secretariat registrant — the audience this form's
     invitation email is sent to."""
@@ -117,6 +135,7 @@ def _serialize(rec: DepartureDetail):
         "hotel": rec.hotel,
         "departure_date": rec.departure_date,
         "departure_time": rec.departure_time,
+        "departure_point": rec.departure_point,
         "submitted": rec.submitted_at is not None,
         "submitted_at": rec.submitted_at.isoformat() if rec.submitted_at else None,
         "created_at": rec.created_at.isoformat() if rec.created_at else None,
@@ -139,7 +158,7 @@ def _build_invitation_email(event_name, form_link):
     return subject, html
 
 
-def _build_receipt_email(event_name, name, hotel, departure_date, departure_time):
+def _build_receipt_email(event_name, name, hotel, departure_date, departure_time, departure_point):
     subject = f"Received — Your Travel Details for {event_name}"
     html = (
         f"<p>Dear {name},</p>"
@@ -148,6 +167,7 @@ def _build_receipt_email(event_name, name, hotel, departure_date, departure_time
         f"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Hotel</td><td><strong>{hotel or '—'}</strong></td></tr>"
         f"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Departure date</td><td><strong>{departure_date or '—'}</strong></td></tr>"
         f"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Departure time</td><td><strong>{departure_time or '—'}</strong></td></tr>"
+        f"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Point of departure</td><td><strong>{departure_point or '—'}</strong></td></tr>"
         f"</table>"
         f"<p>If any of this changes, just submit the form again with the same email address.</p>"
         f"<p>Thank you,<br>ECSACONM Secretariat</p>"
@@ -161,7 +181,8 @@ def _build_digest_email(event_name, entries, total, view_link):
         f"<tr><td style='padding:4px 10px;border-bottom:1px solid #eee;'>{e.name or e.email}</td>"
         f"<td style='padding:4px 10px;border-bottom:1px solid #eee;'>{e.hotel or '—'}</td>"
         f"<td style='padding:4px 10px;border-bottom:1px solid #eee;'>{e.departure_date or '—'}</td>"
-        f"<td style='padding:4px 10px;border-bottom:1px solid #eee;'>{e.departure_time or '—'}</td></tr>"
+        f"<td style='padding:4px 10px;border-bottom:1px solid #eee;'>{e.departure_time or '—'}</td>"
+        f"<td style='padding:4px 10px;border-bottom:1px solid #eee;'>{e.departure_point or '—'}</td></tr>"
         for e in entries
     )
     html = (
@@ -170,9 +191,28 @@ def _build_digest_email(event_name, entries, total, view_link):
         f"<table style=\"border-collapse:collapse;font-size:13px;width:100%;\">"
         f"<tr style=\"text-align:left;color:#6b7280;\"><th style='padding:4px 10px;'>Name</th>"
         f"<th style='padding:4px 10px;'>Hotel</th><th style='padding:4px 10px;'>Departure date</th>"
-        f"<th style='padding:4px 10px;'>Departure time</th></tr>{rows}</table>"
+        f"<th style='padding:4px 10px;'>Departure time</th><th style='padding:4px 10px;'>Point of departure</th></tr>{rows}</table>"
         f"<p style=\"margin-top:16px;\">View the full, live list any time — no login needed:<br>"
         f"<a href=\"{view_link}\">{view_link}</a></p>"
+    )
+    return subject, html
+
+
+def _build_update_request_email(event_name, form_link):
+    subject = f"One More Detail: Your Point of Departure — {event_name}"
+    html = (
+        f"<p>Dear Delegate,</p>"
+        f"<p>Thank you for sharing your travel details for <strong>{event_name}</strong>. "
+        f"To help us arrange your departure transfers, please open the form below and update "
+        f"just the <strong>Point of Departure</strong> field (Ferry / Airport, e.g. "
+        f"Abeid Amani Karume International Airport or the Zanzibar ferry terminal).</p>"
+        f"<p>Your other details are already filled in for you — simply add the point and resubmit.</p>"
+        f"<p><a href=\"{form_link}\" style=\"display:inline-block;padding:12px 28px;"
+        f"background-color:rgb(254,80,103);color:#ffffff;text-decoration:none;"
+        f"border-radius:8px;font-weight:600;\">Update Point of Departure</a></p>"
+        f"<p>If the button doesn't work, copy and paste this link into your browser:<br>"
+        f"<span style=\"color:#6b7280;\">{form_link}</span></p>"
+        f"<p>Thank you,<br>ECSACONM Secretariat</p>"
     )
     return subject, html
 
@@ -216,6 +256,29 @@ def eligible_names(
     return [{"name": p["name"], "email": p["email"]} for p in people]
 
 
+@router.get("/existing-details")
+def existing_details(
+    db: Session = Depends(get_db),
+    email: str = Query(...),
+    event_id: int = Query(None),
+):
+    """Public, no-auth: a submitter's own saved details (matched by email),
+    used to pre-fill the form so returning registrants only have to edit the
+    fields that changed (e.g. their point of departure). Empty object when
+    nothing has been submitted yet or the email isn't eligible."""
+    rec = _existing_detail(db, event_id or DEFAULT_EVENT_ID, email)
+    if not rec:
+        return {}
+    return {
+        "name": rec.name,
+        "email": rec.email,
+        "hotel": rec.hotel,
+        "departure_date": rec.departure_date,
+        "departure_time": rec.departure_time,
+        "departure_point": rec.departure_point,
+    }
+
+
 @router.get("/list")
 def list_submissions(
     current_user: user_dependency,
@@ -243,6 +306,7 @@ EMAIL_TYPE_LABELS = {
     "departure_details_invitation": "invitation",
     "departure_details_receipt": "receipt",
     "departure_details_digest": "digest",
+    "departure_details_update": "update_requests",
 }
 
 
@@ -322,7 +386,7 @@ def export_submissions(
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-    headers = ["#", "Name", "Email", "Hotel", "Departure Date", "Departure Time", "Submitted At"]
+    headers = ["#", "Name", "Email", "Hotel", "Departure Date", "Departure Time", "Point of Departure", "Submitted At"]
     ws.row_dimensions[1].height = 22
     for ci, h in enumerate(headers, 1):
         cell = ws.cell(1, ci, h)
@@ -335,7 +399,7 @@ def export_submissions(
         use_fill = alt_fill if ri % 2 == 0 else PatternFill("solid", start_color="FFFFFF")
         row = [
             r.id, r.name, r.email, r.hotel, r.departure_date, r.departure_time,
-            r.submitted_at.strftime("%d %b %Y %H:%M") if r.submitted_at else "",
+            r.departure_point, r.submitted_at.strftime("%d %b %Y %H:%M") if r.submitted_at else "",
         ]
         for ci, val in enumerate(row, 1):
             cell = ws.cell(ri, ci, val)
@@ -343,7 +407,7 @@ def export_submissions(
             cell.fill = use_fill
             cell.alignment = left
 
-    col_widths = [6, 22, 30, 26, 16, 16, 18]
+    col_widths = [6, 22, 30, 26, 16, 16, 28, 18]
     for ci, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
@@ -419,6 +483,76 @@ def send_departure_invitations(
     }
 
 
+@router.post("/send-update-request")
+def send_departure_update_requests(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    body: SendFormBody = None,
+):
+    """Email the form link to registrants who HAVE already submitted, asking
+    them to add/edit just their Point of Departure (the form pre-fills their
+    other details by email). This is the follow-up the secretariat fires once
+    the new field is live — not a fresh invitation, so people who haven't
+    submitted yet are NOT emailed here. Pass `test_email` for a single trial."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+
+    body = body or SendFormBody()
+    import utils.mailer_util as mailer_util
+
+    event_id = body.event_id or DEFAULT_EVENT_ID
+    event = db.query(Event).filter(Event.id == event_id).first()
+    event_name = event.event if event else "ECSACONM Scientific Conference"
+    form_link = f"{mailer_util.CLIENT_ORIGIN}/#/travel-details?event_id={event_id}"
+
+    if body.test_email:
+        subject, html = _build_update_request_email(event_name, form_link)
+        mailer_util.send_email(body.test_email, subject, html, email_type="departure_details_update", sent_by_user_id=current_user["user_id"])
+        return {"sent": 1, "message": f"Sample update-request sent to {body.test_email}."}
+
+    selected_set = (
+        {e.strip().lower() for e in body.selected_emails} if body.selected_emails else None
+    )
+    submitters = (
+        db.query(DepartureDetail)
+        .filter(
+            DepartureDetail.event_id == event_id,
+            DepartureDetail.deleted_at == None,
+            DepartureDetail.submitted_at != None,
+        )
+        .all()
+    )
+    subject, html = _build_update_request_email(event_name, form_link)
+
+    jobs = []
+    seen = set()
+    for r in submitters:
+        email = (r.email or "").strip().lower()
+        if selected_set is not None and email not in selected_set:
+            continue
+        if email in seen:
+            continue
+        seen.add(email)
+        jobs.append({
+            "recipient_email": email,
+            "subject": subject,
+            "email_body": html,
+            "email_type": "departure_details_update",
+            "sent_by_user_id": current_user["user_id"],
+        })
+
+    sent = len(jobs)
+    if jobs:
+        background_tasks.add_task(mailer_util.send_bulk_emails, jobs)
+
+    return {
+        "sent": sent,
+        "form_link": form_link,
+        "message": f"Point-of-departure update request queued for {sent} registrant(s) who already submitted.",
+    }
+
+
 @router.get("/form-link")
 def get_form_link(
     current_user: user_dependency,
@@ -439,6 +573,7 @@ class SubmitFormBody(BaseModel):
     hotel: str
     departure_date: str
     departure_time: str
+    departure_point: Optional[str] = None
     event_id: Optional[int] = None
 
 
@@ -488,6 +623,7 @@ def submit_departure_form(
     rec.hotel = (body.hotel or "").strip()
     rec.departure_date = (body.departure_date or "").strip()
     rec.departure_time = (body.departure_time or "").strip()
+    rec.departure_point = (body.departure_point or "").strip()
     rec.submitted_at = datetime.now(timezone.utc)
     db.commit()
 
@@ -495,7 +631,7 @@ def submit_departure_form(
     event = db.query(Event).filter(Event.id == event_id).first()
     event_name = event.event if event else "ECSACONM Event"
 
-    subject, html = _build_receipt_email(event_name, rec.name or rec.email, rec.hotel, rec.departure_date, rec.departure_time)
+    subject, html = _build_receipt_email(event_name, rec.name or rec.email, rec.hotel, rec.departure_date, rec.departure_time, rec.departure_point)
     background_tasks.add_task(
         mailer_util.send_email, rec.email, subject, html,
         "departure_details_receipt", None,
@@ -536,6 +672,7 @@ def submit_departure_form(
         "hotel": rec.hotel,
         "departure_date": rec.departure_date,
         "departure_time": rec.departure_time,
+        "departure_point": rec.departure_point,
     }
 
 
@@ -599,6 +736,6 @@ def send_sample_receipt(
     import utils.mailer_util as mailer_util
     event = db.query(Event).filter(Event.id == event_id).first() if event_id else db.query(Event).first()
     event_name = event.event if event else "ECSACONM Scientific Conference"
-    subject, html = _build_receipt_email(event_name, "Jane Sample Delegate", "Sample Grand Hotel", "2026-09-20", "10:30")
+    subject, html = _build_receipt_email(event_name, "Jane Sample Delegate", "Sample Grand Hotel", "2026-09-20", "10:30", "Zanzibar Ferry Terminal")
     mailer_util.send_email(to_email, subject, html, email_type="departure_details_receipt", sent_by_user_id=current_user["user_id"])
     return {"sent": 1, "message": f"Sample receipt sent to {to_email}."}

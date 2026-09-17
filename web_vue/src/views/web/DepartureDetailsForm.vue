@@ -36,7 +36,7 @@
               </svg>
             </div>
             <p class="text-sm font-semibold text-gray-800">Thank you! Your travel details have been recorded.</p>
-            <p class="text-xs text-gray-500">A confirmation email is on its way to you. You can submit this form again any time if anything changes.</p>
+            <p class="text-xs text-gray-500">A confirmation email is on its way to you. If anything changes, submit the form again with the same email — your details will be filled in for you.</p>
           </div>
 
           <form v-else @submit.prevent="submit" class="space-y-4">
@@ -88,7 +88,7 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Email</label>
-                <input v-model.trim="fields.email" type="email" required
+                <input v-model.trim="fields.email" type="email" required @blur="prefillExisting(fields.email)"
                   class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
                   style="--tw-ring-color: rgb(254,80,103);" placeholder="you@example.com" />
                 <p class="text-xs text-gray-400 mt-1">Use the email address you registered with.</p>
@@ -111,10 +111,17 @@
                 style="--tw-ring-color: rgb(254,80,103);" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Departure time</label>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Departure time (24hrs)</label>
               <input v-model="fields.departure_time" type="time" required
                 class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
                 style="--tw-ring-color: rgb(254,80,103);" />
+              <p class="text-xs text-gray-400 mt-1">24-hour format, e.g. 14:30</p>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Point of departure (Ferry / Airport)</label>
+              <input v-model.trim="fields.departure_point" type="text" required
+                class="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                style="--tw-ring-color: rgb(254,80,103);" placeholder="e.g. Zanzibar Ferry Terminal or Abeid Amani Karume International Airport (ZNZ)" />
             </div>
 
             <button type="submit" :disabled="isSubmitting || !fields.email"
@@ -147,7 +154,8 @@ export default {
       nameQuery: '',
       showDropdown: false,
       people: [],
-      fields: { name: '', email: '', hotel: '', departure_date: '', departure_time: '' },
+      fields: { name: '', email: '', hotel: '', departure_date: '', departure_time: '', departure_point: '' },
+      prefilledEmail: '',
       apiUrl: import.meta.env.VITE_API_URL,
     }
   },
@@ -185,11 +193,35 @@ export default {
       this.fields.email = p.email
       this.showDropdown = false
       this.nameQuery = ''
+      this.prefillExisting(p.email)
     },
     clearSelection() {
       this.fields.name = ''
       this.fields.email = ''
       this.nameQuery = ''
+      this.prefilledEmail = ''
+    },
+    async prefillExisting(email) {
+      // Returning submitters get their saved details pre-filled so they only
+      // need to edit the fields that changed (e.g. port of departure).
+      const value = (email || '').trim().toLowerCase()
+      if (!value || value === this.prefilledEmail) return
+      const eventId = this.$route.query.event_id || 1
+      try {
+        const res = await axios.get(`${this.apiUrl}/departure-details/existing-details`, {
+          params: { email: value, event_id: eventId },
+        })
+        const d = res.data || {}
+        if (!d.email) return
+        this.prefilledEmail = value
+        this.fields.name = d.name || this.fields.name
+        this.fields.hotel = d.hotel || ''
+        this.fields.departure_date = d.departure_date || ''
+        this.fields.departure_time = d.departure_time || ''
+        this.fields.departure_point = d.departure_point || ''
+      } catch (e) {
+        // Non-fatal — the form still submits fine without prefill.
+      }
     },
     async submit() {
       this.isSubmitting = true
