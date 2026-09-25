@@ -46,6 +46,16 @@
       </a>
     </router-link>
 
+    <router-link v-if="has('ADMIN_DASHBOARD')" :to="{ name: 'Certificates' }" v-slot="{ isActive }" custom>
+      <a @click.prevent="go('Certificates')"
+        class="nav-item" :class="isActive ? 'nav-item--active' : 'nav-item--idle'">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <circle cx="12" cy="9" r="6"/><path d="M8.5 13.9L7 22l5-3 5 3-1.5-8.1"/>
+        </svg>
+        Certificates
+      </a>
+    </router-link>
+
     <router-link v-if="has('VIEW_USER')" :to="{ name: 'Users' }" v-slot="{ isActive }" custom>
       <a @click.prevent="go('Users')"
         class="nav-item" :class="isUserActive ? 'nav-item--active' : 'nav-item--idle'">

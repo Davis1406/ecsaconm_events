@@ -88,6 +88,10 @@ const routeComponents = {
   // Attendance Confirmation (admin)
   AttendanceConfirmationView: () => import("@/views/main/attendance/AttendanceConfirmation.vue"),
 
+  // Certificates (admin) + the standalone print page they open in
+  CertificatesView: () => import("@/views/main/certificates/Certificates.vue"),
+  CertificatePrintView: () => import("@/views/main/certificates/CertificatePrint.vue"),
+
   // My Account
   MyDashboardView: () => import("@/views/my_account/MyDashboard.vue"),
   MyEventsAccountView: () => import("@/views/my_account/MyEvents.vue"),
@@ -459,6 +463,13 @@ const routes = [
         name: "AttendanceConfirmation",
         component: routeComponents.AttendanceConfirmationView,
       },
+
+      {
+        path: "/certificates",
+        name: "Certificates",
+        component: routeComponents.CertificatesView,
+        meta: { requiresAuth: true },
+      },
     ],
   },
   {
@@ -497,6 +508,13 @@ const routes = [
         meta: { requiresAuth: true },
       },
     ],
+  },
+  // Outside the layouts: a bare page of 1920x1080 certificates for printing.
+  {
+    path: "/certificates/print",
+    name: "CertificatePrint",
+    component: routeComponents.CertificatePrintView,
+    meta: { requiresAuth: true },
   },
   { path: "/:catchAll(.*)", name: "NotFound", component: NotFoundView },
 ];
