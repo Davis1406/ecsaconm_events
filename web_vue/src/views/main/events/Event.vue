@@ -192,6 +192,13 @@
           <QrCodeIcon class="w-4 h-4" />
           Onsite Registration QR
         </button>
+        <router-link v-if="permissions.includes('ADMIN_DASHBOARD')"
+          :to="{ name: 'Certificates', query: { event: id } }"
+          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
+          style="background-color: rgb(254,80,103);">
+          <AcademicCapIcon class="w-4 h-4" />
+          Certificates
+        </router-link>
         <PdfPreviewModal
           v-model:show="showOnsiteQrPreview"
           title="Onsite Registration QR"
@@ -1254,7 +1261,7 @@ import {
   XCircleIcon, CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon,
   ChartBarIcon, ArrowDownTrayIcon, LinkIcon, FolderOpenIcon,
   TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon,
-  QrCodeIcon, PrinterIcon, ArrowPathIcon,
+  QrCodeIcon, PrinterIcon, ArrowPathIcon, AcademicCapIcon,
 } from '@heroicons/vue/24/solid';
 
 import HeaderView from '@/includes/Header.vue';
@@ -1290,7 +1297,7 @@ export default {
   components: {
     MapPinIcon, CalendarDaysIcon, UserGroupIcon, CheckCircleIcon, XCircleIcon,
     CurrencyDollarIcon, IdentificationIcon, DocumentTextIcon, ChartBarIcon, ArrowDownTrayIcon,
-    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, QrCodeIcon, PrinterIcon,
+    LinkIcon, FolderOpenIcon, TrashIcon, PencilIcon, ArrowUpTrayIcon, UsersIcon, QrCodeIcon, PrinterIcon, AcademicCapIcon,
     HeaderView, SpinnerComponent,
     PaginationComponent, SearchComponent, ParticipantModal, DownloadComponent,
     PaymentModal, BadgeModal, BadgeCard, BulkUploadParticipantsModal, ReceiptModal, PdfPreviewModal,

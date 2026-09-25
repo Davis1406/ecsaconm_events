@@ -254,7 +254,12 @@ export default {
       try {
         const res = await fetchData('events', 0, 100, '')
         this.events = res.data || []
-        if (this.events.length === 1) {
+        // ?event=<id> (from the event page's Certificates button) preselects the event
+        const fromQuery = this.events.find(e => String(e.id) === String(this.$route.query.event))
+        if (fromQuery) {
+          this.selectedEventId = fromQuery.id
+          this.loadPeople()
+        } else if (this.events.length === 1) {
           this.selectedEventId = this.events[0].id
           this.loadPeople()
         }
