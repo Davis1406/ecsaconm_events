@@ -111,6 +111,12 @@
           <LinkIcon class="w-4 h-4" />
           Links <span class="ml-1 text-xs font-normal text-gray-400">({{ links.length }})</span>
         </button>
+        <button v-if="permissions.includes('ADMIN_DASHBOARD')"
+          @click="$router.push({ name: 'Certificates', query: { event: id } })"
+          class="flex items-center gap-2 px-5 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition">
+          <AcademicCapIcon class="w-4 h-4" />
+          Certificates
+        </button>
         <button @click="activeTab = 'import'"
           class="flex items-center gap-2 px-5 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 transition"
           :class="activeTab === 'import' ? 'border-pink-500 text-pink-600' : 'border-transparent text-gray-500 hover:text-gray-700'">
@@ -192,13 +198,6 @@
           <QrCodeIcon class="w-4 h-4" />
           Onsite Registration QR
         </button>
-        <router-link v-if="permissions.includes('ADMIN_DASHBOARD')"
-          :to="{ name: 'Certificates', query: { event: id } }"
-          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
-          style="background-color: rgb(254,80,103);">
-          <AcademicCapIcon class="w-4 h-4" />
-          Certificates
-        </router-link>
         <PdfPreviewModal
           v-model:show="showOnsiteQrPreview"
           title="Onsite Registration QR"

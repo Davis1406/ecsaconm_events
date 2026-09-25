@@ -59,6 +59,14 @@
             <input type="checkbox" v-model="attendedOnly" class="rounded border-gray-300" />
             Only participants scanned as attended
           </label>
+          <template v-if="type === 'attendee'">
+            <button v-for="c in attendeeCategories" :key="c.name" type="button" @click="toggleAttendeeCategory(c.name)"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition"
+              :class="attendeeCategoryFilter.includes(c.name) ? 'text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'"
+              :style="attendeeCategoryFilter.includes(c.name) ? { backgroundColor: 'rgb(254,80,103)' } : {}">
+              {{ c.name }} ({{ c.count }})
+            </button>
+          </template>
           <template v-if="type === 'presenter'">
             <button v-for="c in presenterCategories" :key="c" type="button" @click="toggleCategory(c)"
               class="px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition"
@@ -160,6 +168,7 @@ export default {
       search: '',
       attendedOnly: false,
       categoryFilter: [],
+      attendeeCategoryFilter: [],
       // person key -> true; kept per type so switching tabs doesn't lose ticks
       selections: { attendee: {}, presenter: {}, usher: {} },
       extraNames: '',
@@ -171,7 +180,7 @@ export default {
     },
     sourceHint() {
       return {
-        attendee: 'Registered participants of the event (ushers excluded). Tick "only scanned as attended" to limit it to people whose QR badge was scanned.',
+        attendee: 'Participants who have paid (secretariat counts as paid), in every category except ushers. Use the category buttons to narrow the list; tick "only scanned as attended" to limit it to people whose QR badge was scanned.',
         presenter: 'Presenters named in the conference programme (plenary, oral and poster), one row per person.',
         usher: 'Participants registered with the Usher role.',
       }[this.type]
@@ -181,12 +190,15 @@ export default {
       const regs = this.registrations.filter(r => {
         const isUsher = (r.participation_role || '').toLowerCase() === 'usher'
         if (this.type === 'usher') return isUsher
-        return !isUsher && (!this.attendedOnly || this.attendedRegIds.has(r.id))
+        if (isUsher || !r.paid) return false
+        const cats = this.attendeeCategoryFilter
+        if (cats.length && !cats.includes(this.roleLabel(r))) return false
+        return !this.attendedOnly || this.attendedRegIds.has(r.id)
       })
       return regs.map(r => ({
         key: `reg-${r.id}`,
         name: tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' ')),
-        category: (r.participation_role || '').replace(/_/g, ' '),
+        category: this.roleLabel(r),
         detail: r.country || '',
       })).sort((a, b) => a.name.localeCompare(b.name))
     },
@@ -215,6 +227,15 @@ export default {
           detail: p.titles.join(' | '),
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
+    },
+    attendeeCategories() {
+      const counts = {}
+      this.registrations.forEach(r => {
+        if ((r.participation_role || '').toLowerCase() === 'usher' || !r.paid) return
+        const name = this.roleLabel(r)
+        counts[name] = (counts[name] || 0) + 1
+      })
+      return Object.keys(counts).sort().map(name => ({ name, count: counts[name] }))
     },
     presenterCategories() {
       return [...new Set(this.programme.map(e => e.category).filter(Boolean))].sort()
@@ -271,6 +292,7 @@ export default {
       this.registrations = []
       this.attendedRegIds = new Set()
       this.programme = []
+      this.attendeeCategoryFilter = []
       this.selections = { attendee: {}, presenter: {}, usher: {} }
       if (!this.selectedEventId) return
       this.isLoading = true
@@ -305,6 +327,14 @@ export default {
     setType(key) {
       this.type = key
       this.search = ''
+    },
+    roleLabel(r) {
+      return (r.participation_role || 'delegate').replace(/_/g, ' ')
+    },
+    toggleAttendeeCategory(c) {
+      const i = this.attendeeCategoryFilter.indexOf(c)
+      if (i >= 0) this.attendeeCategoryFilter.splice(i, 1)
+      else this.attendeeCategoryFilter.push(c)
     },
     toggleCategory(c) {
       const i = this.categoryFilter.indexOf(c)
