@@ -44,12 +44,11 @@
     <p style="position:absolute; top:914px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:700; text-align:center; color:#1a1a1a">Dr. Glory Msibi</p>
     <p style="position:absolute; top:950px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:21px; font-weight:600; letter-spacing:3px; text-align:center; color:#666666">PRESIDENT</p>
     <!-- Verification QR — scanning it shows the confirmation message below.
-         Sized for the 1920x1080 canvas; the printed/emailed page carries the
-         same px dimensions, so it stays readable at A4/landscape. -->
-    <div style="position:absolute; top:420px; left:120px; width:170px; height:170px; background:#ffffff; padding:10px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:6px">
+         Placed bottom-right, mirroring the CPD badge on the left. -->
+    <div style="position:absolute; top:840px; left:1650px; width:160px; height:160px; background:#ffffff; padding:5px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:6px">
       <QRCodeVue :value="qrValue" :size="150" foreground="#0f172a" background="#ffffff" />
     </div>
-    <p style="position:absolute; top:596px; left:120px; width:170px; font-family:Montserrat, Arial, sans-serif; font-size:14px; font-weight:600; letter-spacing:0.5px; text-align:center; color:#666666">SCAN TO VERIFY</p>
+    <p style="position:absolute; top:1010px; left:1650px; width:160px; font-family:Montserrat, Arial, sans-serif; font-size:14px; font-weight:600; letter-spacing:0.5px; text-align:center; color:#666666">SCAN TO VERIFY</p>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" style="position:absolute; top:840px; left:110px; width:160px; height:160px">
       <defs>
         <linearGradient :id="`badgeGrad${uid}`" x1="0%" y1="0%" x2="100%" y2="100%">
