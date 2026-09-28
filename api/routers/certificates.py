@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import Link
+from models.models import EmailLog, Link
 from utils import mailer_util
 
 router = APIRouter()
@@ -40,6 +40,29 @@ def _public_links_html(db: Session, event_id: int) -> str:
 
 
 DEFAULT_SUBJECT = "Your certificate — ECSACONM Events"
+
+
+@router.get("/sent")
+async def sent_certificates(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+):
+    """The set of recipient emails that have already received a successfully
+    sent certificate (email_type=certificate, status=sent). The Certificates
+    page uses this to show a "Sent" label next to people who already got
+    theirs, and to offer Resend (which reopens the same preview/edit modal)."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    rows = (
+        db.query(EmailLog.recipient_email)
+        .filter(
+            EmailLog.email_type == "certificate",
+            EmailLog.status == "sent",
+        )
+        .all()
+    )
+    emails = sorted({r[0].strip().lower() for r in rows if r[0] and r[0].strip()})
+    return {"sent": emails, "total": len(emails)}
 
 
 @router.post("/send")

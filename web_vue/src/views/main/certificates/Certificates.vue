@@ -205,6 +205,14 @@
                   <span v-else class="text-gray-300">—</span>
                 </td>
                 <td class="pl-2 pr-4 py-2 text-right whitespace-nowrap">
+                  <span v-if="p.sent"
+                    class="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide mr-1.5"
+                    title="Certificate already sent to this address">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Sent
+                  </span>
                   <button v-if="p.email" type="button" @click="openEmailModal([p])"
                     :disabled="!!emailModal"
                     class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-semibold transition
@@ -213,11 +221,13 @@
                       ? (rowMsg.ok
                           ? 'border-green-200 bg-green-50 text-green-700'
                           : 'border-red-200 bg-red-50 text-red-600')
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-brand/50 hover:text-brand hover:bg-brand/5'">
+                      : (p.sent
+                          ? 'border-amber-300 bg-amber-50 text-amber-700 hover:border-amber-400'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-brand/50 hover:text-brand hover:bg-brand/5')">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
-                    {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Preview & Send' }}
+                    {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : (p.sent ? 'Resend' : 'Preview & Send') }}
                   </button>
                   <span v-else class="text-[12px] text-gray-300 italic">Not emailable</span>
                 </td>
@@ -424,6 +434,9 @@ export default {
       registrations: [],
       attendedRegIds: new Set(),
       programme: [],
+      // Emails that already received a certificate (from GET /certificates/sent)
+      // — drives the "Sent" label and the Resend action on each row.
+      sentEmails: new Set(),
       // Public Links (event page's Links tab) — appended to every
       // certificate email as a "Useful links" block.
       eventLinks: [],
@@ -495,6 +508,7 @@ export default {
         detail: r.country || '',
         email: r.email || '',
         paid: !!r.paid,
+        sent: this.sentEmails.has((r.email || '').trim().toLowerCase()),
       })).sort((a, b) => a.name.localeCompare(b.name))
     },
     presenters() {
@@ -567,6 +581,7 @@ export default {
             detail: p.titles.join(' | '),
             email: p.email,
             paid: !!p.paid,
+            sent: this.sentEmails.has((p.email || '').trim().toLowerCase()),
           }
         })
         .filter(p => !this.categoryFilter.length || this.categoryFilter.some(c => p.categories.has(c)))
@@ -753,28 +768,37 @@ export default {
       const api = this.api()
       const eventId = this.selectedEventId
       try {
-        const [regs, attendance, programme, event] = await Promise.allSettled([
-          this.fetchRegistrations(api, eventId),
-          api.get(`/events/${eventId}/attendance`),
-          api.get(`/programme`, { params: { event_id: eventId, limit: 5000 } }),
-          api.get(`/events/${eventId}`),
-        ])
+const [regs, attendance, programme, event, sent] = await Promise.allSettled([
+        this.fetchRegistrations(api, eventId),
+        api.get(`/events/${eventId}/attendance`),
+        api.get(`/programme`, { params: { event_id: eventId, limit: 5000 } }),
+        api.get(`/events/${eventId}`),
+        api.get(`/certificates/sent`),
+      ])
 
-        if (regs.status === 'fulfilled') this.registrations = regs.value
-        else console.error('Error loading registrations:', regs.reason)
+      if (regs.status === 'fulfilled') this.registrations = regs.value
+      else console.error('Error loading registrations:', regs.reason)
 
-        if (attendance.status === 'fulfilled') {
-          const att = attendance.value.data?.data || []
-          this.attendedRegIds = new Set(att.map(a => a.registration_id))
-          // Default to "attended only" once the QR scans have been used.
-          this.attendedOnly = this.attendedRegIds.size > 0
-        }
+      if (attendance.status === 'fulfilled') {
+        const att = attendance.value.data?.data || []
+        this.attendedRegIds = new Set(att.map(a => a.registration_id))
+        // Default to "attended only" once the QR scans have been used.
+        this.attendedOnly = this.attendedRegIds.size > 0
+      }
 
-        if (programme.status === 'fulfilled') {
-          this.programme = programme.value.data?.data || []
-        } else {
-          console.error('Error loading programme:', programme.reason)
-        }
+      if (programme.status === 'fulfilled') {
+        this.programme = programme.value.data?.data || []
+      } else {
+        console.error('Error loading programme:', programme.reason)
+      }
+
+      // Emails that already received a certificate — powers the "Sent"
+      // label and Resend on each row.
+      if (sent.status === 'fulfilled') {
+        this.sentEmails = new Set((sent.value.data?.sent || []).map(e => String(e).trim().toLowerCase()))
+      } else {
+        console.error('Error loading sent certificates:', sent.reason)
+      }
 
         // Public Links (event page's Links tab) — shown under the certificate
         // in the email preview; the actual send re-fetches these fresh
@@ -940,9 +964,11 @@ export default {
         if (m.recipients.length === 1) {
           const p = m.recipients[0]
           await this.doSendOne(p, m.subject, m.message)
+          this.sentEmails.add((p.email || '').trim().toLowerCase())
           this.emailSuccess = `Sent to ${p.email}.`
         } else {
           const { queued, skipped } = await this.doEmailBulk(m, m.subject, m.message)
+          m.recipients.forEach(p => this.sentEmails.add((p.email || '').trim().toLowerCase()))
           this.emailSuccess = `Queued ${queued} certificate email${queued === 1 ? '' : 's'}.` +
             (skipped ? ` ${skipped} skipped (no image/email matched).` : '')
         }
