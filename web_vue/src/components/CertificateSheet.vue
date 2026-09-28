@@ -46,7 +46,7 @@
     <!-- Verification QR — scanning it shows the confirmation message below.
          Placed bottom-right, mirroring the CPD badge on the left. -->
     <div style="position:absolute; top:840px; left:1560px; width:130px; height:130px; background:#ffffff; padding:4px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:6px">
-      <QRCodeVue :value="qrValue" :size="122" foreground="#0f172a" background="#ffffff" />
+      <QRCodeVue :value="qrValue" :size="122" tag="svg" foreground="#0f172a" background="#ffffff" />
     </div>
     <p style="position:absolute; top:978px; left:1560px; width:130px; font-family:Montserrat, Arial, sans-serif; font-size:13px; font-weight:600; letter-spacing:0.5px; text-align:center; color:#666666">SCAN TO VERIFY</p>
     <svg v-if="type.cpd > 0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" style="position:absolute; top:840px; left:110px; width:160px; height:160px">

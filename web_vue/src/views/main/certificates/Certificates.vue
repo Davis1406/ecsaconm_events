@@ -205,14 +205,15 @@
                   <span v-else class="text-gray-300">—</span>
                 </td>
                 <td class="pl-2 pr-4 py-2 text-right whitespace-nowrap">
-                  <span v-if="p.sent"
-                    class="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide mr-1.5"
-                    title="Certificate already sent to this address">
+                  <button v-if="p.sent" type="button" @click="openEmailModal([p])" :disabled="!!emailModal"
+                    class="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide mr-1.5
+                           hover:border-green-300 hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Certificate already sent to this address — click to preview it">
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
                     </svg>
                     Sent
-                  </span>
+                  </button>
                   <button v-if="p.email" type="button" @click="openEmailModal([p])"
                     :disabled="!!emailModal"
                     class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-semibold transition
@@ -889,21 +890,10 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
 
     // ── Email the certificate ────────────────────────────────
     // Rasterizes the hidden CertificateSheet (same markup the print page
-    // uses) to a JPEG blob via html2canvas, at full 1920x1080 resolution.
+    // uses) to a JPEG blob, at full 1920x1080 resolution.
     async renderCertificateImage(name) {
-      this.renderJob = { name, type: this.types[this.type] }
-      await this.$nextTick()
-      await this.ensureCertFonts()
-      const sheet = this.$refs.renderSheet
-      if (sheet && sheet.fitName) { sheet.fitName(); sheet.fitBody() }
-      await this.$nextTick()
-      const hcMod = await import('html2canvas')
-      const html2canvas = hcMod.default || hcMod
-      const canvas = await html2canvas(sheet.$el, {
-        scale: 1, useCORS: true, backgroundColor: '#ffffff', logging: false,
-        width: 1920, height: 1080,
-      })
-      return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      const { jpegBlob } = await this.renderCertificateAssets(name)
+      return jpegBlob
     },
 
     // {{name}} → the given name, everywhere it appears in a subject/message
@@ -982,12 +972,18 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
 
     // ── Email the certificate ────────────────────────────────
     // Rasterizes the hidden CertificateSheet (same markup the print page
-    // uses) via html2canvas, once, then derives both:
+    // uses) via the browser's own layout engine, once, then derives both:
     //  - jpegBlob: shown inline in the email body (what the recipient sees
     //    without opening anything — email clients can't render a PDF inline)
     //  - pdfBlob: a full-bleed single-page PDF at the certificate's exact
     //    1920x1080 design size — the actual file attached/kept, same
     //    approach as the per-room PDF export on the Rooms page.
+    //
+    // Native SVG foreignObject rasterization is used (NOT html2canvas):
+    // html2canvas re-draws fonts and can misalign the 172px "Certificate"
+    // heading over "OF PARTICIPATION". foreignObject asks the browser to
+    // lay out the live sheet exactly as the preview/print page renders it,
+    // so the emailed image is pixel-identical to what the admin previewed.
     async renderCertificateAssets(name) {
       this.renderJob = { name, type: this.types[this.type] }
       await this.$nextTick()
@@ -995,12 +991,8 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       const sheet = this.$refs.renderSheet
       if (sheet && sheet.fitName) { sheet.fitName(); sheet.fitBody() }
       await this.$nextTick()
-      const hcMod = await import('html2canvas')
-      const html2canvas = hcMod.default || hcMod
-      const canvas = await html2canvas(sheet.$el, {
-        scale: 1, useCORS: true, backgroundColor: '#ffffff', logging: false,
-        width: 1920, height: 1080,
-      })
+
+      const canvas = await this.rasterizeElementNative(sheet.$el, 1920, 1080)
       const jpegBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
 
       const jsMod = await import('jspdf')
@@ -1010,6 +1002,107 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       const pdfBlob = pdf.output('blob')
 
       return { jpegBlob, pdfBlob }
+    },
+
+    // Render a DOM element to a canvas using SVG foreignObject — the browser
+    // lays out the element's own HTML/CSS (webfonts, images, SVG, canvas
+    // children all included) and rasterizes that, so output matches the
+    // on-screen preview exactly rather than a re-parse. Fonts and images are
+    // inlined as data URLs because an SVG loaded as an image must not fetch
+    // any external resource (the browser blocks them) — the certificate's
+    // webfonts would silently fall back and "Certificate" would collide with
+    // "OF PARTICIPATION", exactly the bug html2canvas produced.
+    async rasterizeElementNative(el, width, height) {
+      const clone = el.cloneNode(true)
+
+      // Inline <img> sources so they survive inside the SVG-as-image context.
+      const imgs = [...clone.querySelectorAll('img')]
+      await Promise.all(imgs.map(async (img) => {
+        const src = img.getAttribute('src')
+        if (!src || src.startsWith('data:')) return
+        try {
+          const res = await fetch(src)
+          const blob = await res.blob()
+          const dataUrl = await new Promise(r => {
+            const fr = new FileReader()
+            fr.onload = () => r(fr.result)
+            fr.readAsDataURL(blob)
+          })
+          img.setAttribute('src', dataUrl)
+        } catch (e) { /* leave as-is if it can't be fetched */ }
+      }))
+
+      // Inline the certificate @font-face rules as data URLs, emitted as a
+      // <style> inside the foreignObject so the layout engine has the real
+      // webfonts (Alex Brush / Montserrat / Playfair Display) available.
+      const fontCss = await this.inlineCertificateFonts()
+
+      const styleBlock = fontCss ? `<style>${fontCss}</style>` : ''
+      const svg = [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`,
+        `<foreignObject width="100%" height="100%">`,
+        `<div xmlns="http://www.w3.org/1999/xhtml">${styleBlock}${clone.outerHTML}</div>`,
+        `</foreignObject>`,
+        `</svg>`,
+      ].join('')
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      try {
+        const img = new Image()
+        img.decoding = 'async'
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = url
+        })
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+        return canvas
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+    },
+
+    // Pull every @font-face rule for the certificate families out of the
+    // live stylesheets and rewrite its src to a data URL, so the font is
+    // embedded directly in the SVG (an SVG loaded as an image can't fetch
+    // the font file itself).
+    async inlineCertificateFonts() {
+      const wanted = ['Alex Brush', 'Montserrat', 'Playfair Display']
+      const rules = []
+      const seen = new Set()
+      const sheets = [...document.styleSheets]
+      for (const sheet of sheets) {
+        let cssRules
+        try { cssRules = sheet.cssRules } catch (e) { continue }
+        for (const rule of cssRules) {
+          if (!rule || rule.type !== CSSRule.FONT_FACE_RULE) continue
+          const family = ((rule.style && rule.style.fontFamily) || '').replace(/["']/g, '').trim()
+          if (!wanted.some(f => family.startsWith(f))) continue
+          const cssText = rule.cssText
+          if (seen.has(cssText)) continue
+          seen.add(cssText)
+          const m = cssText.match(/url\((['"]?)([^'")]+)\1\)/)
+          let text = cssText
+          if (m && !m[2].startsWith('data:')) {
+            try {
+              const res = await fetch(m[2])
+              const blob = await res.blob()
+              const dataUrl = await new Promise(r => {
+                const fr = new FileReader()
+                fr.onload = () => r(fr.result)
+                fr.readAsDataURL(blob)
+              })
+              text = cssText.replace(m[0], `url(${dataUrl})`)
+            } catch (e) { /* keep original rule if fetch fails */ }
+          }
+          rules.push(text)
+        }
+      }
+      return rules.join('\n')
     },
 
     async doSendOne(p, subjectTpl, messageTpl) {
