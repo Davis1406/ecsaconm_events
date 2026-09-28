@@ -707,7 +707,7 @@
                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" :class="bulkConfidenceClass(row.confidence)">
                         {{ bulkConfidenceLabel(row.confidence) }}
                       </span>
-                      <span v-if="row.status === 'uploading'" class="text-[11px] font-semibold text-blue-600">Uploading…</span>
+                      <span v-if="row.status === 'uploading'" class="text-[11px] font-semibold text-blue-600">Uploading… {{ row.progress }}%</span>
                       <span v-if="row.status === 'done'" class="text-[11px] font-semibold text-green-600">✓ Uploaded</span>
                       <span v-if="row.status === 'error'" class="text-[11px] font-semibold text-red-600">{{ row.error }}</span>
                     </div>
@@ -715,6 +715,9 @@
                       :disabled="bulkBusy || row.status === 'done'"
                       placeholder="Type presenter name, code, or title to search the programme…"
                       class="field-input !py-1.5 !text-xs mt-1 w-full disabled:bg-gray-50 disabled:text-gray-400" />
+                    <div v-if="row.status === 'uploading'" class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
+                      <div class="h-full rounded-full transition-all duration-150" :style="{ width: row.progress + '%', backgroundColor: 'rgb(120,80,200)' }"></div>
+                    </div>
                     <p v-if="row.include && !row.entryId" class="text-[11px] text-amber-600 mt-1">No entry chosen yet — pick one above or untick to skip this file.</p>
                   </div>
                   <button v-if="row.status !== 'done'" @click="removeBulkRow(row)" :disabled="bulkBusy" title="Remove"
@@ -735,18 +738,28 @@
           </template>
         </div>
 
-        <div class="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0 bg-white">
-          <div class="text-xs text-gray-500">
-            <template v-if="bulkBusy">Uploading {{ bulkProgress.done }} / {{ bulkProgress.total }}…</template>
-            <template v-else-if="bulkIncludedCount">{{ bulkIncludedCount }} file{{ bulkIncludedCount !== 1 ? 's' : '' }} ready to upload</template>
+        <div class="px-5 py-3 border-t border-gray-100 flex-shrink-0 bg-white">
+          <div v-if="bulkBusy" class="mb-2.5">
+            <div class="flex items-center justify-between text-xs text-gray-600 mb-1">
+              <span>Uploading file {{ bulkProgress.done + 1 > bulkProgress.total ? bulkProgress.total : bulkProgress.done + 1 }} of {{ bulkProgress.total }} — {{ formatFileSize(bulkProgress.sentBytes) }} of {{ formatFileSize(bulkProgress.totalBytes) }}</span>
+              <span class="font-bold">{{ bulkProgress.percent }}%</span>
+            </div>
+            <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-150" :style="{ width: bulkProgress.percent + '%', backgroundColor: 'rgb(120,80,200)' }"></div>
+            </div>
           </div>
-          <div class="flex gap-2">
-            <button @click="closeBulkUpload" :disabled="bulkBusy" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg disabled:opacity-40">Close</button>
-            <button @click="runBulkUpload" :disabled="bulkBusy || bulkIncludedCount === 0"
-              class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
-              style="background-color: rgb(120,80,200);">
-              {{ bulkBusy ? `Uploading… (${bulkProgress.done}/${bulkProgress.total})` : `Upload ${bulkIncludedCount} File${bulkIncludedCount !== 1 ? 's' : ''}` }}
-            </button>
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-xs text-gray-500">
+              <template v-if="!bulkBusy && bulkIncludedCount">{{ bulkIncludedCount }} file{{ bulkIncludedCount !== 1 ? 's' : '' }} ready to upload</template>
+            </div>
+            <div class="flex gap-2">
+              <button @click="closeBulkUpload" :disabled="bulkBusy" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg disabled:opacity-40">Close</button>
+              <button @click="runBulkUpload" :disabled="bulkBusy || bulkIncludedCount === 0"
+                class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
+                style="background-color: rgb(120,80,200);">
+                {{ bulkBusy ? `Uploading… ${bulkProgress.percent}%` : `Upload ${bulkIncludedCount} File${bulkIncludedCount !== 1 ? 's' : ''}` }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1811,6 +1824,7 @@ export default {
           include: confidence === 'high' || confidence === 'medium',
           status: 'pending', // pending | uploading | done | error
           error: '',
+          progress: 0, // 0-100, this file's own upload percentage
         }
       })
       this.bulkRows = [...this.bulkRows, ...rows]
@@ -1853,7 +1867,12 @@ export default {
       if (!rows.length) return
       this.bulkBusy = true
       this.bulkErr = ''
-      this.bulkProgress = { done: 0, total: rows.length }
+      // Byte-based, not just a file count — with a few hundred-MB videos in
+      // the mix, "3 of 75 files" barely moves while the big one is mid-flight,
+      // so the overall bar tracks total bytes sent across the whole batch.
+      const totalBytes = rows.reduce((s, r) => s + (r.file.size || 0), 0)
+      let bytesDoneBeforeCurrent = 0
+      this.bulkProgress = { done: 0, total: rows.length, totalBytes, sentBytes: 0, percent: 0 }
       // Sequential, not parallel — some of these files run into the
       // hundreds of MB (embedded video), so uploading one at a time avoids
       // saturating the admin's own upload bandwidth across many at once and
@@ -1861,6 +1880,7 @@ export default {
       for (const row of rows) {
         row.status = 'uploading'
         row.error = ''
+        row.progress = 0
         try {
           const form = new FormData()
           form.append('file', row.file)
@@ -1869,8 +1889,17 @@ export default {
               Authorization: `Bearer ${this.accessToken}`,
               'Content-Type': 'multipart/form-data',
             },
+            onUploadProgress: (evt) => {
+              const rowTotal = evt.total || row.file.size || 1
+              row.progress = Math.min(100, Math.round((evt.loaded / rowTotal) * 100))
+              this.bulkProgress.sentBytes = bytesDoneBeforeCurrent + evt.loaded
+              this.bulkProgress.percent = totalBytes
+                ? Math.min(100, Math.round((this.bulkProgress.sentBytes / totalBytes) * 100))
+                : 0
+            },
           })
           row.status = 'done'
+          row.progress = 100
           const target = this.bulkTargets.find(t => t.id === row.entryId)
           if (target) {
             target.has_presentation = true
@@ -1882,6 +1911,9 @@ export default {
           row.error = e.response?.data?.detail || 'Upload failed.'
         } finally {
           this.bulkProgress.done++
+          bytesDoneBeforeCurrent += row.file.size || 0
+          this.bulkProgress.sentBytes = bytesDoneBeforeCurrent
+          this.bulkProgress.percent = totalBytes ? Math.min(100, Math.round((bytesDoneBeforeCurrent / totalBytes) * 100)) : 0
         }
       }
       this.bulkBusy = false
