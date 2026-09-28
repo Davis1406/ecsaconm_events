@@ -322,6 +322,57 @@
         </div>
       </div>
     </div>
+
+    <!-- Single-file download progress -->
+    <div v-if="downloadProgress.active" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <svg class="animate-spin w-6 h-6 flex-shrink-0" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          <div class="min-w-0">
+            <p class="text-sm font-bold text-gray-800 truncate">Downloading presentation</p>
+            <p class="text-xs text-gray-500">
+              {{ downloadProgress.totalMB ? `${downloadProgress.loadedMB} MB of ${downloadProgress.totalMB} MB` : `${downloadProgress.loadedMB} MB downloaded…` }}
+            </p>
+          </div>
+        </div>
+        <div v-if="downloadProgress.totalMB" class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-300"
+            :style="{ width: downloadProgress.percent + '%', backgroundColor: 'rgb(254,80,103)' }"></div>
+        </div>
+        <p v-if="downloadProgress.totalMB" class="text-right text-xs text-gray-400 mt-1">{{ downloadProgress.percent }}%</p>
+      </div>
+    </div>
+
+    <!-- Room ZIP download progress -->
+    <div v-if="zipProgress.active" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <svg class="animate-spin w-6 h-6 flex-shrink-0" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          <div class="min-w-0">
+            <p class="text-sm font-bold text-gray-800 truncate">Downloading slides — {{ zipProgress.room }}</p>
+            <p class="text-xs text-gray-500">
+              {{ zipProgress.totalMB ? `${zipProgress.loadedMB} MB of ${zipProgress.totalMB} MB` : `${zipProgress.loadedMB} MB downloaded…` }}
+            </p>
+          </div>
+        </div>
+        <div v-if="zipProgress.totalMB" class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-300"
+            :style="{ width: zipProgress.percent + '%', backgroundColor: 'rgb(254,80,103)' }"></div>
+        </div>
+        <p v-if="zipProgress.totalMB" class="text-right text-xs text-gray-400 mt-1">{{ zipProgress.percent }}%</p>
+      </div>
+    </div>
+
+    <!-- transient unsupported-preview notice -->
+    <div v-if="downloadFlash" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] rounded-xl bg-gray-900 text-white text-xs font-medium px-4 py-2.5 shadow-lg">
+      {{ downloadFlash }}
+    </div>
   </div>
 </template>
 
@@ -366,6 +417,12 @@ export default {
       zipBusy: false,
       preview: { open: false, name: '', src: '' },
       showTopButton: false,
+      // Download progress overlays — the single-file download and the room
+      // ZIP each get their own, driven by axios onDownloadProgress (which
+      // reports real percentages only when the server sends Content-Length).
+      downloadProgress: { active: false, label: '', percent: 0, loadedMB: '0.0', totalMB: null },
+      zipProgress: { active: false, room: '', percent: 0, loadedMB: '0.0', totalMB: null },
+      downloadFlash: '',
     }
   },
 
@@ -666,39 +723,73 @@ export default {
 
     isPreviewable(ext) {
       const e = (ext || '').replace(/^\./, '').toLowerCase()
-      return ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(e)
+      return ['pdf', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(e)
+    },
+
+    // Inline types render straight in the iframe; Office formats (ppt/pptx)
+    // go through the Microsoft Office Online embed viewer, which fetches the
+    // public preview URL itself — same approach as the admin Rooms page.
+    previewSrc(entry) {
+      const ext = (entry.presentation_ext || '').replace(/^\./, '').toLowerCase()
+      const fileUrl = `${this.apiUrl}/programme/${entry.id}/preview-presentation`
+      return ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)
+        ? fileUrl
+        : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
     },
 
     openPreview(entry) {
-      const fileUrl = `${this.apiUrl}/programme/${entry.id}/preview-presentation`
-      this.preview = { open: true, name: entry.title || entry.presenter_name, src: fileUrl }
+      if (!this.isPreviewable(entry.presentation_ext)) {
+        this.downloadFlash = 'Preview not supported for this file type — use Download instead.'
+        setTimeout(() => { this.downloadFlash = '' }, 4000)
+        return
+      }
+      this.preview = { open: true, name: entry.title || entry.presenter_name, src: this.previewSrc(entry) }
     },
 
     async downloadSingle(entry) {
+      this.downloadProgress = { active: true, label: entry.title || entry.presenter_name || 'presentation', percent: 0, loadedMB: '0.0', totalMB: null }
       try {
         const res = await axios.get(`${this.apiUrl}/programme/${entry.id}/download-presentation`, {
           responseType: 'blob',
+          onDownloadProgress: (evt) => {
+            this.downloadProgress.loadedMB = (evt.loaded / 1048576).toFixed(1)
+            if (evt.total) {
+              this.downloadProgress.totalMB = (evt.total / 1048576).toFixed(1)
+              this.downloadProgress.percent = Math.round((evt.loaded / evt.total) * 100)
+            }
+          },
         })
         const ext = (entry.presentation_ext || '').replace(/^\./, '')
         const clean = (entry.code || entry.presenter_name || 'presentation').replace(/[^A-Za-z0-9 _-]+/g, '').trim().slice(0, 60)
         saveAs(res.data, `${clean || 'presentation'}.${ext}`)
       } catch (e) {
         this.loadError = 'Download failed.'
+      } finally {
+        this.downloadProgress.active = false
       }
     },
 
     async downloadRoomZip(room) {
       this.zipBusy = true
+      this.zipProgress = { active: true, room: room.room || 'All Rooms', percent: 0, loadedMB: '0.0', totalMB: null }
       try {
         const res = await axios.get(`${this.apiUrl}/programme/download-room-zip`, {
           params: { event_id: this.eventId, room: room.room, day: room.day },
           responseType: 'blob',
+          onDownloadProgress: (evt) => {
+            this.zipProgress.loadedMB = (evt.loaded / 1048576).toFixed(1)
+            if (evt.total) {
+              this.zipProgress.totalMB = (evt.total / 1048576).toFixed(1)
+              this.zipProgress.percent = Math.round((evt.loaded / evt.total) * 100)
+            }
+          },
         })
         saveAs(res.data, `${(room.room || 'room').replace(/[^A-Za-z0-9_]+/g, '_')}_slides.zip`)
       } catch (e) {
         this.loadError = 'No slides to download for this room yet.'
       } finally {
         this.zipBusy = false
+        this.zipProgress.active = false
       }
     },
   },
