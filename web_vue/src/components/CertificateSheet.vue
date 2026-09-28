@@ -45,10 +45,10 @@
     <p style="position:absolute; top:950px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:21px; font-weight:600; letter-spacing:3px; text-align:center; color:#666666">PRESIDENT</p>
     <!-- Verification QR — scanning it shows the confirmation message below.
          Placed bottom-right, mirroring the CPD badge on the left. -->
-    <div style="position:absolute; top:840px; left:1650px; width:160px; height:160px; background:#ffffff; padding:5px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:6px">
-      <QRCodeVue :value="qrValue" :size="150" foreground="#0f172a" background="#ffffff" />
+    <div style="position:absolute; top:840px; left:1560px; width:130px; height:130px; background:#ffffff; padding:4px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:6px">
+      <QRCodeVue :value="qrValue" :size="122" foreground="#0f172a" background="#ffffff" />
     </div>
-    <p style="position:absolute; top:1010px; left:1650px; width:160px; font-family:Montserrat, Arial, sans-serif; font-size:14px; font-weight:600; letter-spacing:0.5px; text-align:center; color:#666666">SCAN TO VERIFY</p>
+    <p style="position:absolute; top:978px; left:1560px; width:130px; font-family:Montserrat, Arial, sans-serif; font-size:13px; font-weight:600; letter-spacing:0.5px; text-align:center; color:#666666">SCAN TO VERIFY</p>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" style="position:absolute; top:840px; left:110px; width:160px; height:160px">
       <defs>
         <linearGradient :id="`badgeGrad${uid}`" x1="0%" y1="0%" x2="100%" y2="100%">

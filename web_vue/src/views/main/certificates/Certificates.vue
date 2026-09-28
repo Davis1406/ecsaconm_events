@@ -83,6 +83,32 @@
               <span class="tabular-nums opacity-70">{{ withEmailCount }}</span>
             </button>
 
+            <button type="button" @click="paidFilter = paidFilter === 'paid' ? '' : 'paid'" :aria-pressed="paidFilter === 'paid'"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium border transition"
+              :class="paidFilter === 'paid'
+                ? 'text-white border-transparent'
+                : 'text-gray-500 border-gray-200 bg-white hover:border-gray-300 hover:text-gray-700'"
+              :style="paidFilter === 'paid' ? { backgroundColor: 'rgb(16,185,129)' } : {}">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+              Paid
+              <span class="tabular-nums opacity-70">{{ paidCount }}</span>
+            </button>
+
+            <button type="button" @click="paidFilter = paidFilter === 'unpaid' ? '' : 'unpaid'" :aria-pressed="paidFilter === 'unpaid'"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium border transition"
+              :class="paidFilter === 'unpaid'
+                ? 'text-white border-transparent'
+                : 'text-gray-500 border-gray-200 bg-white hover:border-gray-300 hover:text-gray-700'"
+              :style="paidFilter === 'unpaid' ? { backgroundColor: 'rgb(245,158,11)' } : {}">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+              </svg>
+              Unpaid
+              <span class="tabular-nums opacity-70">{{ unpaidCount }}</span>
+            </button>
+
             <template v-if="type === 'attendee'">
               <button v-for="c in attendeeCategories" :key="c.name" type="button" @click="toggleAttendeeCategory(c.name)"
                 :aria-pressed="attendeeCategoryFilter.includes(c.name)"
@@ -401,6 +427,8 @@ export default {
       // Narrows the table to people who actually have an email on file — the
       // ones Email can act on. Applies to every tab.
       emailOnly: false,
+      // Payment-status filter: '' (everyone), 'paid', or 'unpaid'.
+      paidFilter: '',
       // person key -> true; kept per type so switching tabs doesn't lose ticks
       selections: { attendee: {}, presenter: {}, usher: {} },
       extraNames: '',
@@ -570,6 +598,8 @@ export default {
       const term = this.search.trim().toLowerCase()
       return this.people.filter(p => {
         if (this.emailOnly && !p.email) return false
+        if (this.paidFilter === 'paid' && !p.paid) return false
+        if (this.paidFilter === 'unpaid' && p.paid) return false
         if (!term) return true
         return p.name.toLowerCase().includes(term)
           || (p.email || '').toLowerCase().includes(term)
@@ -579,6 +609,12 @@ export default {
     // email" chip so the count is visible before you turn it on.
     withEmailCount() {
       return this.people.filter(p => !!p.email).length
+    },
+    paidCount() {
+      return this.people.filter(p => p.paid).length
+    },
+    unpaidCount() {
+      return this.people.filter(p => !p.paid).length
     },
     allShownSelected() {
       return this.filteredPeople.length > 0 && this.filteredPeople.every(p => this.selected[p.key])
@@ -701,7 +737,8 @@ export default {
       this.programme = []
       this.attendeeCategoryFilter = []
       this.categoryFilter = []
-      this.emailOnly = false
+      this.emailOnly = this.type === 'presenter'
+      this.paidFilter = ''
       this.eventLinks = []
       this.selections = { attendee: {}, presenter: {}, usher: {} }
       if (!this.selectedEventId) return
@@ -750,6 +787,9 @@ export default {
       // leaving would silently filter the tab you're arriving on.
       this.categoryFilter = []
       this.attendeeCategoryFilter = []
+      // Presenters default to "Has email" — the tab is about mailing
+      // certificates, and people without an address are noise here.
+      this.emailOnly = key === 'presenter'
     },
     roleLabel(r) {
       return certificateCategory(r.participation_role)
