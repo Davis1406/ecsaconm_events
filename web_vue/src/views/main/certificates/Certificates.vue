@@ -1038,10 +1038,16 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       const fontCss = await this.inlineCertificateFonts()
 
       const styleBlock = fontCss ? `<style>${fontCss}</style>` : ''
+      // Serialize through XMLSerializer, not outerHTML: outerHTML emits HTML
+      // entities (e.g. the &nbsp; run in the college header) that are invalid
+      // in an XML/SVG document and would make the SVG blob fail to parse.
+      const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+      wrapper.appendChild(clone)
+      const inner = new XMLSerializer().serializeToString(wrapper)
       const svg = [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`,
         `<foreignObject width="100%" height="100%">`,
-        `<div xmlns="http://www.w3.org/1999/xhtml">${styleBlock}${clone.outerHTML}</div>`,
+        `<div xmlns="http://www.w3.org/1999/xhtml">${styleBlock}${inner}</div>`,
         `</foreignObject>`,
         `</svg>`,
       ].join('')
