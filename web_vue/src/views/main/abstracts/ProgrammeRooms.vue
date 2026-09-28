@@ -8,36 +8,79 @@
     </div>
 
     <!-- Rooms view -->
-      <!-- category toggle: abstracts (oral) vs posters -->
-      <div class="flex items-center gap-2">
-        <button v-for="c in categoryOptions" :key="c.key"
-          @click="entryCategory = c.key"
-          class="chip" :class="entryCategory === c.key ? 'chip--active' : 'chip--idle'">
-          {{ c.label }}
-        </button>
+      <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+        <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+          <!-- category toggle: abstracts vs posters vs plenary -->
+          <div class="flex flex-wrap items-center gap-1.5 self-start">
+            <button v-for="c in categoryOptions" :key="c.key"
+              @click="entryCategory = c.key"
+              class="chip" :class="entryCategory === c.key ? 'chip--active' : 'chip--idle'">
+              {{ c.label }}
+              <span class="ml-1 tabular-nums opacity-55">{{ categoryCounts[c.key] }}</span>
+            </button>
+          </div>
+
+          <!-- search -->
+          <div class="relative flex-1 min-w-0">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
+            </svg>
+            <input ref="searchInput" v-model="search" type="search" placeholder="Search presenter, title, code…"
+              class="w-full pl-9 pr-9 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm outline-none focus:border-gray-400 focus:bg-white focus:ring-2 focus:ring-gray-900/5 transition" />
+            <button v-if="search" type="button" @click="search = ''"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" title="Clear search">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2.5 mt-3 pt-3 border-t border-gray-100">
+          <!-- day filter chips -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button v-for="d in dayFilterChips" :key="d"
+              @click="activeDay = d"
+              class="chip" :class="activeDay === d ? 'chip--active' : 'chip--idle'">
+              {{ d }}
+            </button>
+            <button v-if="pastDaysCount > 0" @click="showPastDays = !showPastDays"
+              class="text-xs font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-2 decoration-dotted">
+              {{ showPastDays ? 'Hide past days' : `Show ${pastDaysCount} past day${pastDaysCount !== 1 ? 's' : ''}` }}
+            </button>
+          </div>
+
+          <!-- room filter -->
+          <div class="flex items-center gap-2">
+            <label for="room-select-admin" class="text-xs font-semibold text-gray-500">Room</label>
+            <select id="room-select-admin" v-model="activeRoom"
+              class="text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-gray-400">
+              <option v-for="r in roomFilterChips" :key="r" :value="r">{{ r }}</option>
+            </select>
+          </div>
+
+          <button v-if="hasNonDefaultFilters" type="button" @click="resetFilters"
+            class="text-xs font-semibold text-gray-500 hover:text-gray-900 underline underline-offset-2 decoration-dotted ml-auto">
+            Reset filters
+          </button>
+        </div>
+
+        <p class="mt-3 text-xs text-gray-500">
+          <template v-if="search.trim()">
+            <span class="font-semibold text-gray-800">{{ totalShown }}</span> match{{ totalShown !== 1 ? 'es' : '' }}
+            for “{{ search.trim() }}” across all days, rooms and categories
+          </template>
+          <template v-else>
+            <span class="font-semibold text-gray-800">{{ totalShown }}</span>
+            {{ totalShown === 1 ? 'presentation' : 'presentations' }} in {{ roomDays.length }} day{{ roomDays.length !== 1 ? 's' : '' }}
+            <template v-if="activeRoom !== 'All Rooms'"> · {{ activeRoom }}</template>
+          </template>
+        </p>
       </div>
 
-      <!-- day filter chips -->
+      <!-- admin action bar -->
       <div class="flex flex-wrap items-center gap-2">
-        <button v-for="d in dayFilterChips" :key="d"
-          @click="activeDay = d"
-          class="chip" :class="activeDay === d ? 'chip--active' : 'chip--idle'">
-          {{ d }}
-        </button>
-        <button v-if="pastDaysCount > 0" @click="showPastDays = !showPastDays"
-          class="text-xs font-semibold hover:underline" style="color: rgb(0,150,180);">
-          {{ showPastDays ? 'Hide past days' : `Show ${pastDaysCount} past day${pastDaysCount !== 1 ? 's' : ''}` }}
-        </button>
-      </div>
-
-      <!-- room summary chips -->
-      <div class="flex flex-wrap items-center gap-2">
-        <button v-for="r in roomFilterChips" :key="r"
-          @click="activeRoom = r"
-          class="chip" :class="activeRoom === r ? 'chip--active' : 'chip--idle'">
-          {{ r }}
-        </button>
-        <div class="flex-1"></div>
         <button @click="copyPublicProgrammeLink"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
           style="border-color: rgb(0,150,180); color: rgb(0,150,180);"
@@ -105,14 +148,17 @@
 
       <div v-if="loading" class="py-10"><SpinnerComponent /></div>
 
-      <div v-else class="space-y-5">
+      <div v-else class="space-y-8 mt-2">
         <!-- Per day -->
         <div v-for="day in roomDays" :key="day.day" class="space-y-4">
-          <div class="flex items-center gap-2">
-            <div class="px-3 py-1 rounded-full text-xs font-bold text-white" :style="{ backgroundColor: dayColor(day.day) }">
-              {{ day.day }}
+          <div class="sticky top-0 z-10 -mx-1 px-1 py-2 bg-gray-50/85 backdrop-blur-sm">
+            <div class="flex items-baseline gap-2.5">
+              <div class="px-3 py-1 rounded-full text-xs font-bold text-white" :style="{ backgroundColor: dayColor(day.day) }">
+                {{ day.day }}
+              </div>
+              <div class="text-xs text-gray-500 tabular-nums">{{ day.rooms.length }} room{{ day.rooms.length !== 1 ? 's' : '' }} · {{ day.total }} presentations</div>
+              <span v-if="day.isPast" class="text-[10px] font-semibold uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">Past</span>
             </div>
-            <div class="text-xs text-gray-500">{{ day.rooms.length }} room{{ day.rooms.length !== 1 ? 's' : '' }} · {{ day.total }} presentations</div>
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -121,14 +167,14 @@
               class="rounded-xl border border-surface-container-high bg-surface-container-lowest overflow-hidden">
               <div class="px-4 py-3 flex items-center justify-between border-b border-gray-100"
                 style="background-color: rgb(0,150,180);">
-                <div class="font-bold text-white flex items-center gap-2">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <div class="font-bold text-white flex items-center gap-2 min-w-0">
+                  <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
                   </svg>
-                  {{ room.room }}
+                  <span class="truncate">{{ room.room }}</span>
                 </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-[11px] text-white/90 font-medium">{{ room.total }}</span>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <span class="text-[11px] text-white/90 font-medium tabular-nums">{{ room.total }} · {{ room.with_slide }} slide{{ room.with_slide !== 1 ? 's' : '' }}</span>
                   <button @click="copyRoomLink(room)"
                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white/15 text-white hover:bg-white/25" title="Copy a shareable link for this room's leader">
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -164,25 +210,37 @@
                 <div v-if="room.entries.length === 0" class="px-4 py-6 text-center text-sm text-gray-400 italic">
                   No presentations scheduled.
                 </div>
-                <div v-for="e in room.entries" :key="e.id" class="px-4 py-3 flex items-start gap-3">
+                <div v-for="e in room.entries" :key="e.id" class="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/70 transition-colors">
+                  <!-- slide / file availability dot -->
+                  <span class="mt-[7px] w-1.5 h-1.5 rounded-full flex-shrink-0"
+                    :class="e.has_presentation ? 'bg-emerald-500' : 'bg-gray-200'"
+                    :title="e.has_presentation ? 'File uploaded' : 'No file uploaded yet'" />
                   <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span class="font-semibold text-sm">{{ e.presenter_name || '—' }}</span>
+                    <div class="text-[15px] font-medium leading-snug text-on-surface">
+                      <template v-for="(seg, i) in splitHighlight(e.title || e.activity || '')" :key="i">
+                        <mark v-if="seg.hit" class="bg-yellow-200 text-gray-900 rounded-sm px-0.5">{{ seg.t }}</mark>
+                        <template v-else>{{ seg.t }}</template>
+                      </template>
+                    </div>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span class="text-sm text-gray-600">
+                        <template v-for="(seg, i) in splitHighlight(e.presenter_name || '—')" :key="i">
+                          <mark v-if="seg.hit" class="bg-yellow-200 text-gray-900 rounded-sm px-0.5">{{ seg.t }}</mark>
+                          <template v-else>{{ seg.t }}</template>
+                        </template>
+                      </span>
+                      <span v-if="e.code" class="text-[10px] font-mono font-semibold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{{ e.code }}</span>
+                      <span v-if="e.session" class="text-[10px] font-semibold text-gray-500">Session {{ e.session }}</span>
                       <template v-if="e.is_substitution">
                         <span class="badge badge-sub">SUB</span>
-                        <span v-if="e.original_presenter" class="text-xs text-gray-500">for {{ e.original_presenter }}</span>
+                        <span v-if="e.original_presenter" class="text-xs text-gray-400">for {{ e.original_presenter }}</span>
                       </template>
+                      <span v-if="e.category === 'poster'" class="uppercase tracking-wide text-amber-600 text-[10px] font-bold">Poster</span>
+                      <span v-if="e.category === 'plenary' && e.role" class="text-xs italic text-gray-500">{{ e.role }}</span>
                       <span v-if="e.status === 'not_registered'" class="badge badge-warn" title="Name not matched to a registered person">⚠</span>
                     </div>
-                    <div class="text-xs text-gray-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span v-if="e.code" class="font-mono">{{ e.code }}</span>
-                      <span v-if="e.session">Session {{ e.session }}</span>
-                      <span v-if="e.category === 'poster'" class="uppercase tracking-wide text-amber-600">Poster</span>
-                      <span v-if="e.category === 'plenary' && e.role" class="italic">{{ e.role }}</span>
-                    </div>
-                    <div class="text-sm text-on-surface mt-1">{{ e.title || e.activity || '' }}</div>
                   </div>
-                  <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
                     <button v-if="e.has_presentation"
                       @click="openPreview(e)"
                       class="action-btn hover:border-cp-secondary" :title="e.presentation_source === 'abstract' ? 'Preview slides (from submitted abstract)' : 'Preview slides'">
@@ -203,8 +261,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                       </svg>
                     </a>
-                    <span v-if="!e.has_presentation && !e.video_url" class="text-[10px] text-gray-400 italic">no slides yet</span>
-                    <span v-else-if="e.presentation_source === 'abstract'" class="text-[9px] text-teal-600 font-semibold uppercase tracking-wide">from abstract</span>
+                    <span v-if="e.presentation_source === 'abstract'" class="text-[9px] text-teal-600 font-semibold uppercase tracking-wide">from abstract</span>
                     <button @click="openManage(e)" title="Replace presenter / add slides"
                       class="action-btn hover:border-cp-secondary">
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -947,6 +1004,7 @@ export default {
     return {
       roomsData: [],
       loading: false,
+      search: '',
       activeRoom: 'All Rooms',
       activeDay: 'All Days',
       showPastDays: false,
@@ -999,7 +1057,13 @@ export default {
     categoryRoomsData() {
       return this.roomsData
         .map(d => {
-          const entries = d.entries.filter(e => e.category === this.entryCategory)
+          const entries = d.entries
+            .filter(e => e.category === this.entryCategory)
+            .slice()
+            .sort((a, b) => {
+              if (!!a.has_presentation !== !!b.has_presentation) return b.has_presentation ? 1 : -1
+              return (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })
+            })
           return {
             ...d,
             entries,
@@ -1061,14 +1125,49 @@ export default {
       const days = this.allDaysGlobal.filter(d => this.showPastDays || !d.isPast)
       return ['All Days', ...days.map(d => d.day)]
     },
-    // What actually renders: allRoomDays narrowed by the day filter and by
-    // the past-days toggle (past days hidden by default).
+    // What actually renders: allRoomDays narrowed by the day filter, by the
+    // past-days toggle (past days hidden by default), and by the search
+    // term. Entries are ordered slides-first (ready talks float to the top),
+    // then by code.
     roomDays() {
-      return this.allRoomDays.filter(d => {
-        if (!this.showPastDays && d.isPast) return false
-        if (this.activeDay !== 'All Days' && d.day !== this.activeDay) return false
-        return true
-      })
+      const q = this.search.trim().toLowerCase()
+      const searching = q.length > 0
+      return this.allRoomDays
+        .filter(d => {
+          if (!this.showPastDays && d.isPast) return false
+          if (this.activeDay !== 'All Days' && d.day !== this.activeDay) return false
+          return true
+        })
+        .map(d => {
+          if (!searching) return d
+          const rooms = d.rooms
+            .map(r => {
+              const entries = r.entries
+                .filter(e => this.matches(e, q))
+                .slice()
+                .sort((a, b) => {
+                  if (!!a.has_presentation !== !!b.has_presentation) return b.has_presentation ? 1 : -1
+                  return (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })
+                })
+              return { ...r, entries, total: entries.length }
+            })
+            .filter(r => r.entries.length > 0)
+          return { ...d, rooms, total: rooms.reduce((s, r) => s + r.total, 0) }
+        })
+        .filter(d => d.rooms.length > 0)
+    },
+    categoryCounts() {
+      const out = { oral: 0, poster: 0, plenary: 0 }
+      for (const d of this.roomsData) {
+        for (const e of d.entries) if (out[e.category] !== undefined) out[e.category] += 1
+      }
+      return out
+    },
+    totalShown() {
+      return this.roomDays.reduce((s, d) => s + d.total, 0)
+    },
+    hasNonDefaultFilters() {
+      return this.activeDay !== 'All Days' || this.activeRoom !== 'All Rooms' || this.search.trim().length > 0
     },
     slideCountSummary() {
       const total = this.categoryRoomsData.reduce((s, d) => s + d.entries.length, 0)
@@ -1171,9 +1270,53 @@ export default {
 
   mounted() {
     this.loadRooms()
+    window.addEventListener('keydown', this.onKeydown)
+  },
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.onKeydown)
   },
 
   methods: {
+    onKeydown(e) {
+      if (e.key === '/' && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target?.tagName || '')) {
+        e.preventDefault()
+        this.$refs.searchInput?.focus()
+      } else if (e.key === 'Escape' && this.search) {
+        this.search = ''
+      }
+    },
+    matches(entry, q) {
+      return [
+        entry.title, entry.activity, entry.presenter_name, entry.original_presenter,
+        entry.code, entry.session, entry.room, entry.theme, entry.role,
+      ].some(v => v && String(v).toLowerCase().includes(q))
+    },
+
+    // Splits text into matched/unmatched runs so search hits can be <mark>ed
+    // with plain templates — no v-html, so titles stay un-injectable.
+    splitHighlight(text) {
+      const s = String(text || '')
+      const q = this.search.trim()
+      if (!q) return [{ t: s, hit: false }]
+      const out = []
+      const needle = q.toLowerCase()
+      let i = 0
+      while (i < s.length) {
+        const at = s.toLowerCase().indexOf(needle, i)
+        if (at === -1) { out.push({ t: s.slice(i), hit: false }); break }
+        if (at > i) out.push({ t: s.slice(i, at), hit: false })
+        out.push({ t: s.slice(at, at + q.length), hit: true })
+        i = at + q.length
+      }
+      return out
+    },
+
+    resetFilters() {
+      this.search = ''
+      this.activeDay = 'All Days'
+      this.activeRoom = 'All Rooms'
+    },
+
     async loadRooms() {
       this.loading = true
       try {
@@ -2077,5 +2220,8 @@ export default {
 }
 .field-input {
   @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-cp-secondary;
+}
+mark {
+  @apply font-semibold;
 }
 </style>
