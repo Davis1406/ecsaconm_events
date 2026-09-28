@@ -9,7 +9,7 @@
         <div v-if="eventName" class="text-white/85 text-[11px] font-semibold uppercase tracking-wider">
           {{ eventName }}
         </div>
-        <h1 class="text-white text-2xl sm:text-3xl font-bold mt-1">Conference Programme</h1>
+        <h1 class="text-white text-2xl sm:text-3xl font-bold mt-1">Conference presentations</h1>
         <p class="text-white/90 text-sm mt-1.5 max-w-2xl">
           Find a session by day and room, or search a presenter or title. Every entry links straight
           to that presenter's own slides or poster file.
