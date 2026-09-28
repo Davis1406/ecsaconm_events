@@ -31,12 +31,14 @@
 
         <div class="flex flex-col lg:flex-row lg:items-center gap-3">
           <!-- category segmented control -->
-          <div class="inline-flex p-1 rounded-xl bg-gray-100 gap-1 self-start">
+          <div class="flex flex-wrap items-center gap-1.5 self-start">
             <button v-for="c in categoryOptions" :key="c.key" type="button" @click="entryCategory = c.key"
-              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap"
-              :class="entryCategory === c.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'">
+              class="px-3 py-1.5 rounded-full text-xs font-semibold transition border whitespace-nowrap"
+              :class="entryCategory === c.key
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'">
               {{ c.label }}
-              <span class="ml-1 tabular-nums text-gray-400">{{ categoryCounts[c.key] }}</span>
+              <span class="ml-1 tabular-nums opacity-55">{{ categoryCounts[c.key] }}</span>
             </button>
           </div>
 
