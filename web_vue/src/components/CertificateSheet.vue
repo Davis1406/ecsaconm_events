@@ -34,9 +34,10 @@
     <p style="position:absolute; top:526px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:32px; font-weight:600; letter-spacing:3px; text-align:center; color:#555555">THE FOLLOWING AWARD IS GIVEN TO</p>
     <!-- Fixed height so the underline stays put when a long name is shrunk to fit (see fitName). -->
     <p ref="name" style="position:absolute; top:600px; left:610px; width:700px; height:84px; line-height:84px; padding:0 0 16px; white-space:nowrap; overflow:hidden; font-family:'Playfair Display', Georgia, serif; font-size:63px; font-weight:600; font-style:italic; text-align:center; color:#1a1a1a; border-bottom:3px solid #fe5066; box-sizing:content-box">{{ name }}</p>
-    <!-- 1400px wide (source: 1200px) — the usher wording overflowed onto a 4th line and hit the signature. -->
-    <p style="position:absolute; top:724px; left:260px; width:1400px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:400; line-height:1.5; text-align:center; color:#2b2b2b">
-      <template v-for="(line, i) in type.body" :key="i"><br v-if="i">{{ line }}</template>
+    <!-- 1400px wide (source: 1200px) — the usher wording overflowed onto a 4th line and hit the signature.
+         fitBody() shrinks the type if the body still runs long (e.g. a long event name). -->
+    <p ref="body" style="position:absolute; top:724px; left:260px; width:1400px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:400; line-height:1.5; text-align:center; color:#2b2b2b">
+      <template v-for="(line, i) in bodyLines" :key="i"><br v-if="i">{{ line }}</template>
     </p>
     <div style="position:absolute; top:900px; left:790px; width:340px; height:2px; background:#2b2b2b"></div>
     <p style="position:absolute; top:914px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:700; text-align:center; color:#1a1a1a">Dr. Glory Msibi</p>
@@ -64,11 +65,20 @@ export default {
   props: {
     name: { type: String, required: true },
     type: { type: Object, required: true },
+    // The selected event's name — the usher/secretariat certificate says which
+    // event the person supported, so it has to be passed in at render time.
+    eventName: { type: String, default: '' },
     // Keeps SVG gradient ids unique when many certificates share one page.
     uid: { type: [String, Number], required: true },
   },
   data() {
     return { logo, watermark }
+  },
+  computed: {
+    bodyLines() {
+      const b = this.type.body
+      return typeof b === 'function' ? b(this.eventName) : b
+    },
   },
   methods: {
     // Long names: shrink the font until the name fits on the 700px line.
@@ -79,6 +89,19 @@ export default {
       let size = 63
       el.style.fontSize = size + 'px'
       while (el.scrollWidth > el.clientWidth && size > 30) {
+        el.style.fontSize = (--size) + 'px'
+      }
+    },
+    // The body sits at y=724 and the signature rule at y=900, so it has 176px
+    // to live in — three lines at 29px/1.5 is 130.5px. A longer event name can
+    // wrap onto a 4th line and collide with the signature, so shrink to fit.
+    fitBody() {
+      const el = this.$refs.body
+      if (!el) return
+      const max = 176
+      let size = 29
+      el.style.fontSize = size + 'px'
+      while (el.scrollHeight > max && size > 20) {
         el.style.fontSize = (--size) + 'px'
       }
     },

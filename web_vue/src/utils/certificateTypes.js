@@ -1,30 +1,36 @@
 // ECSACONM conference certificates of participation — one entry per
 // certificate variant from the designer's HTML source (Attendees 5 CPD,
-// Presenters 10 CPD, Ushers 0 CPD). `body` lines are rendered with explicit
-// line breaks, exactly as in the source design.
+// Presenters 10 CPD, Ushers 0 CPD). `body` is a function of the event name and
+// returns lines that are rendered with explicit line breaks, exactly as in the
+// source design. The usher wording names the event it is supporting, so it
+// needs the name the admin picked; the other two keep their fixed text.
 const EVENT_LINES = [
   'and 8th Quadrennial General Assembly, from 14th to 18th September 2026',
   'at Golden Tulip Airport Hotel, Zanzibar',
 ]
 
+// Used when no event is selected/known, so the sheet never renders "undefined".
+export const DEFAULT_EVENT_NAME =
+  '17th ECSACONM Biennial Scientific Conference & 8th General Assembly'
+
 export const CERTIFICATE_TYPES = {
   attendee: {
     label: 'Delegates',
     cpd: 5,
-    body: ['Having attended the 17th ECSACONM Biennial Scientific Conference', ...EVENT_LINES],
+    body: () => ['Having attended the 17th ECSACONM Biennial Scientific Conference', ...EVENT_LINES],
   },
   presenter: {
     label: 'Presenters',
     cpd: 10,
-    body: ['Having presented in the 17th ECSACONM Biennial Scientific Conference', ...EVENT_LINES],
+    body: () => ['Having presented in the 17th ECSACONM Biennial Scientific Conference', ...EVENT_LINES],
   },
   usher: {
     label: 'Ushers & Secretariat',
     cpd: 0,
-    body: [
-      'Having served as an usher/support staff at the 17th ECSACONM Biennial Scientific',
-      'Conference and 8th Quadrennial General Assembly, from 14th to 18th September 2026',
-      'at Golden Tulip Airport Hotel, Zanzibar',
+    body: (eventName) => [
+      'Having served as an usher/support staff, for supporting the',
+      eventName || DEFAULT_EVENT_NAME,
+      'from 14th to 18th September 2026 at Golden Tulip Airport Hotel, Zanzibar',
     ],
   },
 }

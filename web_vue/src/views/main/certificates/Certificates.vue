@@ -125,7 +125,7 @@
                 </th>
                 <th class="px-2 py-2.5 text-left w-10" title="Row number">#</th>
                 <th class="px-2 py-2.5 text-left">Name on certificate</th>
-                <th class="px-2 py-2.5 text-left">Email</th>
+                <th v-if="type !== 'presenter'" class="px-2 py-2.5 text-left">Email</th>
                 <th v-if="type !== 'presenter'" class="px-2 py-2.5 text-left whitespace-nowrap">Category</th>
                 <th class="px-2 py-2.5 text-left">{{ type === 'presenter' ? 'Presentation' : 'Country' }}</th>
                 <th class="pl-2 pr-4 py-2.5 text-right whitespace-nowrap">Action</th>
@@ -140,8 +140,17 @@
                     class="rounded border-gray-300 text-brand focus:ring-brand/30" />
                 </td>
                 <td class="px-2 py-2 text-[11.5px] text-gray-300 tabular-nums">{{ idx + 1 }}</td>
-                <td class="px-2 py-2 font-medium text-gray-900 whitespace-nowrap">{{ p.name }}</td>
-                <td class="px-2 py-2">
+                <td class="px-2 py-2 font-medium text-gray-900">
+                  <div class="whitespace-nowrap">{{ p.name }}</div>
+                  <!-- Presenters have no Email column (the table gets wide), so the
+                       address sits under the name instead. -->
+                  <a v-if="type === 'presenter' && p.email" :href="`mailto:${p.email}`"
+                    class="mt-0.5 block text-[12px] font-normal text-gray-500 hover:text-brand transition-colors break-all">
+                    {{ p.email }}
+                  </a>
+                  <span v-else-if="type === 'presenter'" class="mt-0.5 block text-[12px] font-normal text-gray-300">—</span>
+                </td>
+                <td v-if="type !== 'presenter'" class="px-2 py-2">
                   <a v-if="p.email" :href="`mailto:${p.email}`"
                     class="text-[12.5px] text-gray-500 hover:text-brand transition-colors break-all">
                     {{ p.email }}
@@ -310,7 +319,8 @@
     <!-- Off-screen certificate used to render each recipient's image before
     upload (Send/Email) — parked far off-window so it's never visible. -->
     <div style="position: fixed; left: -99999px; top: 0; pointer-events: none;" aria-hidden="true">
-      <CertificateSheet ref="renderSheet" :name="renderJob.name" :type="renderJob.type" uid="email-render" />
+      <CertificateSheet ref="renderSheet" :name="renderJob.name" :type="renderJob.type"
+        :event-name="selectedEventName" uid="email-render" />
     </div>
   </div>
 </template>
@@ -745,10 +755,14 @@ export default {
       this.filteredPeople.forEach(p => { next[p.key] = on || undefined })
       this.selections[this.type] = next
     },
-    openPrint(job) {
-      localStorage.setItem(CERTIFICATE_JOB_KEY, JSON.stringify(job))
-      window.open(this.$router.resolve({ name: 'CertificatePrint' }).href, '_blank')
-    },
+      openPrint(job) {
+        // The usher/secretariat certificate names the event it supports, so the
+        // print tab needs the selected event's name to render it.
+        localStorage.setItem(CERTIFICATE_JOB_KEY, JSON.stringify({
+          eventName: this.selectedEventName, ...job,
+        }))
+        window.open(this.$router.resolve({ name: 'CertificatePrint' }).href, '_blank')
+      },
     generate() {
       if (!this.finalNames.length) return
       this.openPrint({ type: this.type, names: this.finalNames, autoPrint: true })
@@ -783,7 +797,7 @@ export default {
       await this.$nextTick()
       await this.ensureCertFonts()
       const sheet = this.$refs.renderSheet
-      if (sheet && sheet.fitName) sheet.fitName()
+      if (sheet && sheet.fitName) { sheet.fitName(); sheet.fitBody() }
       await this.$nextTick()
       const hcMod = await import('html2canvas')
       const html2canvas = hcMod.default || hcMod
@@ -884,7 +898,7 @@ export default {
       await this.$nextTick()
       await this.ensureCertFonts()
       const sheet = this.$refs.renderSheet
-      if (sheet && sheet.fitName) sheet.fitName()
+      if (sheet && sheet.fitName) { sheet.fitName(); sheet.fitBody() }
       await this.$nextTick()
       const hcMod = await import('html2canvas')
       const html2canvas = hcMod.default || hcMod

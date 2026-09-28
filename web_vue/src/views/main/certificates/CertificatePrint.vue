@@ -11,7 +11,7 @@
 
     <template v-if="type">
       <div v-for="(name, i) in names" :key="i" class="cert-page">
-        <CertificateSheet ref="sheets" :name="name" :type="type" :uid="i" />
+        <CertificateSheet ref="sheets" :name="name" :type="type" :event-name="eventName" :uid="i" />
       </div>
     </template>
   </div>
@@ -25,7 +25,7 @@ export default {
   name: 'CertificatePrintView',
   components: { CertificateSheet },
   data() {
-    return { type: null, names: [], scale: 1, ready: false, autoPrint: false }
+    return { type: null, names: [], eventName: '', scale: 1, ready: false, autoPrint: false }
   },
   created() {
     // Written by Certificates.vue just before opening this tab. Left in place
@@ -35,6 +35,7 @@ export default {
       if (job && CERTIFICATE_TYPES[job.type] && Array.isArray(job.names)) {
         this.type = CERTIFICATE_TYPES[job.type]
         this.names = job.names
+        this.eventName = job.eventName || ''
         this.autoPrint = !!job.autoPrint
       }
     } catch (e) { /* no job */ }
@@ -53,7 +54,7 @@ export default {
       document.fonts.load("600 63px 'Playfair Display'"),
     ]).catch(() => {})
     await document.fonts.ready
-    ;(this.$refs.sheets || []).forEach(s => s.fitName())
+    ;(this.$refs.sheets || []).forEach(s => { s.fitName(); s.fitBody() })
     this.ready = true
     if (this.autoPrint && this.names.length) {
       // Only auto-open the dialog on the first load, not on refresh.
