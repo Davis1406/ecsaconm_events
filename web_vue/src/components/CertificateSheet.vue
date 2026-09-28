@@ -1,7 +1,8 @@
 <template>
-  <!-- 1920x1080 certificate, positioned exactly as the designer's HTML source.
-       Fonts (@font-face) are declared in this component's global style block. -->
   <section class="cert" style="position:relative; width:1920px; height:1080px; overflow:hidden; background:#ffffff">
+    <!-- 1920x1080 certificate, positioned exactly as the designer's HTML source.
+         Fonts (@font-face) are declared in this component's global style block.
+         (Comment lives inside <section> so $el is the element, not a fragment.) -->
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" style="position:absolute; top:0; left:0; width:260px; height:260px">
       <defs>
         <linearGradient :id="`cornerTL${uid}`" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -46,7 +47,7 @@
     <!-- Verification QR — scanning it shows the confirmation message below.
          Placed bottom-right, mirroring the CPD badge on the left. -->
     <div style="position:absolute; top:840px; left:1560px; width:130px; height:130px; background:#ffffff; padding:4px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:6px">
-      <QRCodeVue :value="qrValue" :size="122" tag="svg" foreground="#0f172a" background="#ffffff" />
+      <QRCodeVue :value="qrValue" :size="122" render-as="svg" foreground="#0f172a" background="#ffffff" />
     </div>
     <p style="position:absolute; top:978px; left:1560px; width:130px; font-family:Montserrat, Arial, sans-serif; font-size:13px; font-weight:600; letter-spacing:0.5px; text-align:center; color:#666666">SCAN TO VERIFY</p>
     <svg v-if="type.cpd > 0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" style="position:absolute; top:840px; left:110px; width:160px; height:160px">

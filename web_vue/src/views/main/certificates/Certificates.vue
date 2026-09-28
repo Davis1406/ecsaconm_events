@@ -1015,6 +1015,21 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
     async rasterizeElementNative(el, width, height) {
       const clone = el.cloneNode(true)
 
+      // Bake the live computed styles into the clone. Inside the SVG only
+      // inline styles apply — Tailwind's preflight (margin:0, line-height:1.5,
+      // box-sizing…) and the sheet's scoped `margin:0` are gone, so default
+      // h1/h3/p margins pushed every text block down onto the rules/signature.
+      this.inlineComputedStyles(el, clone)
+
+      // <canvas> pixels aren't copied by cloneNode — swap each for an <img>.
+      const srcCanvases = el.querySelectorAll('canvas')
+      clone.querySelectorAll('canvas').forEach((c, i) => {
+        const img = document.createElement('img')
+        try { img.setAttribute('src', srcCanvases[i].toDataURL('image/png')) } catch (e) { return }
+        img.setAttribute('style', c.getAttribute('style') || '')
+        c.replaceWith(img)
+      })
+
       // Inline <img> sources so they survive inside the SVG-as-image context.
       const imgs = [...clone.querySelectorAll('img')]
       await Promise.all(imgs.map(async (img) => {
@@ -1081,6 +1096,34 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
           width, height,
         })
       }
+    },
+
+    // Copies the layout/typography properties the browser actually resolved
+    // for each HTML element (and each root <svg>) of `src` onto the matching
+    // node of `dst` (a cloneNode of src, so the trees line up 1:1). SVG
+    // internals are skipped — their presentation attributes travel with them.
+    inlineComputedStyles(src, dst) {
+      const props = [
+        'display', 'box-sizing', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+        'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+        'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+        'border-top-style', 'border-right-style', 'border-bottom-style', 'border-left-style',
+        'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
+        'font-family', 'font-size', 'font-weight', 'font-style', 'line-height',
+        'letter-spacing', 'word-spacing', 'text-align', 'text-transform', 'white-space',
+        'color', 'vertical-align', 'max-width', 'overflow',
+      ]
+      const walk = (s, d) => {
+        const isSvgChild = s.namespaceURI === 'http://www.w3.org/2000/svg' && s.parentElement &&
+          s.parentElement.namespaceURI === 'http://www.w3.org/2000/svg'
+        if (isSvgChild) return
+        const cs = getComputedStyle(s)
+        props.forEach(p => d.style.setProperty(p, cs.getPropertyValue(p)))
+        for (let i = 0; i < s.children.length; i++) {
+          if (d.children[i]) walk(s.children[i], d.children[i])
+        }
+      }
+      walk(src, dst)
     },
 
     // Pull every @font-face rule for the certificate families out of the
