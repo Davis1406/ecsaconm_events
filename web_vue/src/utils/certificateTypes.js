@@ -28,7 +28,7 @@ export const CERTIFICATE_TYPES = {
     label: 'Ushers & Secretariat',
     cpd: 0,
     body: (eventName) => [
-      'Having served as an usher/support staff, for supporting the',
+      'Having fully supported the',
       eventName || DEFAULT_EVENT_NAME,
       'from 14th to 18th September 2026 at Golden Tulip Airport Hotel, Zanzibar',
     ],
