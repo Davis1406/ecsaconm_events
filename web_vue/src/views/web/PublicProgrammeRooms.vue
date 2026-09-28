@@ -98,6 +98,7 @@
                         <span v-if="e.code" class="font-mono">{{ e.code }}</span>
                         <span v-if="e.session">Session {{ e.session }}</span>
                         <span v-if="e.category === 'poster'" class="uppercase tracking-wide text-amber-600">Poster</span>
+                        <span v-if="e.category === 'plenary' && e.role" class="italic">{{ e.role }}</span>
                       </div>
                       <div class="text-sm text-gray-700 mt-1">{{ e.title || e.activity || '' }}</div>
                     </div>
@@ -178,6 +179,7 @@ export default {
       categoryOptions: [
         { key: 'oral', label: 'Abstracts' },
         { key: 'poster', label: 'Posters' },
+        { key: 'plenary', label: 'Plenary' },
       ],
       zipBusy: false,
       preview: { open: false, name: '', src: '' },

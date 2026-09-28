@@ -72,9 +72,10 @@
           </svg>
           Assign to Room
         </button>
-        <button v-if="isAdmin" @click="openMatch" :disabled="matchLoading"
+        <button v-if="isAdmin && entryCategory !== 'plenary'" @click="openMatch" :disabled="matchLoading"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
-          style="border-color: rgb(0,150,180); color: rgb(0,150,180);">
+          style="border-color: rgb(0,150,180); color: rgb(0,150,180);"
+          title="Matches an oral/poster schedule slot to its submitted abstract — doesn't apply to invited plenary speakers">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -167,6 +168,7 @@
                       <span v-if="e.code" class="font-mono">{{ e.code }}</span>
                       <span v-if="e.session">Session {{ e.session }}</span>
                       <span v-if="e.category === 'poster'" class="uppercase tracking-wide text-amber-600">Poster</span>
+                      <span v-if="e.category === 'plenary' && e.role" class="italic">{{ e.role }}</span>
                     </div>
                     <div class="text-sm text-on-surface mt-1">{{ e.title || e.activity || '' }}</div>
                   </div>
@@ -742,6 +744,42 @@
               {{ bulkUnresolvedCount }} selected file{{ bulkUnresolvedCount !== 1 ? 's' : '' }} still need{{ bulkUnresolvedCount === 1 ? 's' : '' }} a matching entry before they can upload.
             </div>
             <div v-if="bulkErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ bulkErr }}</div>
+
+            <!-- Programme-wide status — separate from whatever's in the file
+            picker above, so the admin can see overall progress at a glance. -->
+            <div class="border-t border-gray-100 pt-3 space-y-2">
+              <button type="button" @click="bulkShowNotUploaded = !bulkShowNotUploaded"
+                class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 transition">
+                <span class="text-xs font-bold text-amber-700">Not uploaded yet ({{ bulkNotUploadedTargets.length }})</span>
+                <svg class="w-4 h-4 text-amber-600 transition-transform" :class="bulkShowNotUploaded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+              <div v-if="bulkShowNotUploaded" class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                <div v-if="bulkNotUploadedTargets.length === 0" class="px-4 py-4 text-center text-xs text-gray-400 italic">Everything has a file or video link. 🎉</div>
+                <div v-for="t in bulkNotUploadedTargets" :key="t.id" class="px-3 py-2 text-xs text-gray-600">
+                  {{ t.label }}
+                </div>
+              </div>
+
+              <button type="button" @click="bulkShowUploaded = !bulkShowUploaded"
+                class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-green-50 hover:bg-green-100 transition">
+                <span class="text-xs font-bold text-green-700">Already uploaded ({{ bulkUploadedTargets.length }})</span>
+                <svg class="w-4 h-4 text-green-600 transition-transform" :class="bulkShowUploaded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+              <div v-if="bulkShowUploaded" class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                <div v-if="bulkUploadedTargets.length === 0" class="px-4 py-4 text-center text-xs text-gray-400 italic">Nothing uploaded yet.</div>
+                <div v-for="t in bulkUploadedTargets" :key="t.id" class="px-3 py-2 text-xs text-gray-600 flex items-center justify-between gap-2">
+                  <span class="truncate">{{ t.label }}</span>
+                  <span class="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase"
+                    :class="t.has_presentation ? 'bg-teal-100 text-teal-700' : 'bg-purple-100 text-purple-700'">
+                    {{ t.has_presentation ? 'File' : 'Video' }}
+                  </span>
+                </div>
+              </div>
+            </div>
           </template>
         </div>
 
@@ -887,6 +925,7 @@ export default {
       categoryOptions: [
         { key: 'oral', label: 'Abstracts' },
         { key: 'poster', label: 'Posters' },
+        { key: 'plenary', label: 'Plenary' },
       ],
       apiUrl: import.meta.env.VITE_API_URL,
       flashMsg: '', flashErr: false,
@@ -913,6 +952,7 @@ export default {
       bulkOpen: false, bulkTargetsLoading: false, bulkTargets: [], bulkTargetsErr: '',
       bulkRows: [], bulkBusy: false, bulkProgress: { done: 0, total: 0 }, bulkErr: '',
       bulkAcceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp,.mp4,.mov,.m4v,.webm',
+      bulkShowUploaded: false, bulkShowNotUploaded: true,
     }
   },
 
@@ -1075,6 +1115,17 @@ export default {
     },
     bulkUnresolvedCount() {
       return this.bulkRows.filter(r => r.include && !r.entryId).length
+    },
+    // Status of the whole programme, independent of whatever's in the file
+    // picker right now — lets the admin see overall progress (and who's
+    // still missing something) without leaving the modal. Reactive to
+    // uploads that just completed, since runBulkUpload patches bulkTargets
+    // in place as each one finishes.
+    bulkUploadedTargets() {
+      return this.bulkTargets.filter(t => t.has_presentation || t.video_url).map(t => ({ ...t, label: bulkEntryLabel(t) }))
+    },
+    bulkNotUploadedTargets() {
+      return this.bulkTargets.filter(t => !t.has_presentation && !t.video_url).map(t => ({ ...t, label: bulkEntryLabel(t) }))
     },
   },
 

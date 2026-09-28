@@ -653,6 +653,7 @@ def match_targets(
                 "activity": e.activity,
                 "has_presentation": bool(_effective_presentation_file(e)),
                 "presentation_uploaded_at": e.presentation_uploaded_at.isoformat() if e.presentation_uploaded_at else None,
+                "video_url": e.video_url,
             }
             for e in entries
         ],
