@@ -303,6 +303,7 @@ def _serialize_base(entry: ProgrammeEntry):
         "has_presentation": bool(eff),
         "presentation_ext": os.path.splitext(eff)[-1].lower() if eff else None,
         "presentation_source": "entry" if entry.presentation_file else ("abstract" if eff else None),
+        "video_url": entry.video_url,
     }
 
 
@@ -932,6 +933,7 @@ class ProgrammeEntrySch(BaseModel):
     original_presenter: Optional[str] = None
     is_substitution: Optional[bool] = None
     notes: Optional[str] = None
+    video_url: Optional[str] = None
 
 
 @router.post("")
@@ -1002,6 +1004,11 @@ def update_entry(
         value = getattr(payload, field)
         if value is not None:
             setattr(entry, field, value)
+    if payload.video_url is not None:
+        video_url = payload.video_url.strip()
+        if video_url and not video_url.lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="Video link must start with http:// or https://")
+        entry.video_url = video_url or None
     if payload.is_substitution is not None:
         entry.is_substitution = payload.is_substitution
     if payload.is_substitution is False and payload.presenter_name is None:

@@ -113,7 +113,12 @@
                           Download
                         </button>
                       </template>
-                      <span v-else class="text-xs text-gray-400 italic">no slides yet</span>
+                      <a v-if="e.video_url" :href="e.video_url" target="_blank" rel="noopener"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border"
+                        style="border-color: rgb(120,80,200); color: rgb(100,60,180);">
+                        Watch video
+                      </a>
+                      <span v-if="!e.has_presentation && !e.video_url" class="text-xs text-gray-400 italic">no slides yet</span>
                     </div>
                   </div>
                 </div>

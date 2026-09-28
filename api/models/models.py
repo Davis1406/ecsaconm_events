@@ -860,6 +860,10 @@ class ProgrammeEntry(BaseWithSoftDelete):
     # Slide file uploaded against this programme entry (path under uploads/).
     presentation_file = Column(String(500), nullable=True)
     presentation_uploaded_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    # External video link (YouTube/Vimeo/Drive, etc.) shown as "Watch video"
+    # instead of/alongside an uploaded file — for recordings or video-embedded
+    # decks too large to sensibly host off our own server.
+    video_url = Column(String(1000), nullable=True)
     sort_order = Column(Integer, nullable=False, server_default="0", default=0)
     # Set once this slot has been matched to its submitted Abstract (by
     # presenter-name matching — the schedule book's presenter_name/title are

@@ -185,7 +185,13 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                       </svg>
                     </button>
-                    <span v-if="!e.has_presentation" class="text-[10px] text-gray-400 italic">no slides yet</span>
+                    <a v-if="e.video_url" :href="e.video_url" target="_blank" rel="noopener"
+                      class="action-btn hover:border-cp-secondary" title="Watch video" style="color: rgb(120,80,200); border-color: rgb(120,80,200);">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                      </svg>
+                    </a>
+                    <span v-if="!e.has_presentation && !e.video_url" class="text-[10px] text-gray-400 italic">no slides yet</span>
                     <span v-else-if="e.presentation_source === 'abstract'" class="text-[9px] text-teal-600 font-semibold uppercase tracking-wide">from abstract</span>
                     <button @click="openManage(e)" title="Replace presenter / add slides"
                       class="action-btn hover:border-cp-secondary">
@@ -585,6 +591,12 @@
                 Remove slides
               </a>
             </div>
+          </div>
+          <!-- Video link -->
+          <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+            <div class="font-semibold text-sm">Video link</div>
+            <p class="text-xs text-gray-500">For a recording or a video-embedded deck too large to upload — paste a YouTube (can be unlisted), Vimeo, or Google Drive share link instead. Shows as a "Watch video" button on the room page.</p>
+            <input v-model.trim="manageForm.video_url" type="url" class="field-input" placeholder="https://youtu.be/… or https://drive.google.com/…" />
           </div>
           <div v-if="manageErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ manageErr }}</div>
         </div>
@@ -1489,6 +1501,7 @@ export default {
         presenter_name: entry.presenter_name || '',
         is_substitution: !!entry.is_substitution,
         original_presenter: entry.original_presenter || '',
+        video_url: entry.video_url || '',
       }
       this.manageErr = ''
       this.manageOpen = true
@@ -1509,6 +1522,7 @@ export default {
           presenter_name: this.manageForm.presenter_name,
           is_substitution: !!this.manageForm.is_substitution,
           original_presenter: this.manageForm.is_substitution ? (this.manageForm.original_presenter || null) : null,
+          video_url: this.manageForm.video_url || '',
         }, {
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
