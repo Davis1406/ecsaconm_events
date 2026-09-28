@@ -179,7 +179,7 @@
             <div class="font-bold text-gray-800">Preview &amp; Edit Certificate Email</div>
             <p class="text-xs text-gray-500 mt-0.5">
               {{ emailModal.recipients.length === 1 ? `To ${emailModal.recipients[0].email}` : `${emailModal.recipients.length} recipients` }}
-              — use <code class="bg-gray-100 px-1 rounded">{{ mergeTagExample }}</code> in Subject/Message to personalize each one.
+              — use <code class="bg-gray-100 px-1 rounded">{{ mergeTagExample }}</code> and <code class="bg-gray-100 px-1 rounded">{{ mergeTagEventExample }}</code> in Subject/Message to personalize each one.
             </p>
           </div>
           <button type="button" @click="closeEmailModal" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3">
@@ -270,8 +270,19 @@ const API_URL = import.meta.env.VITE_API_URL
 // page) then uploaded — batch emailing hands them to the server a handful
 // at a time rather than one giant request.
 const EMAIL_BATCH_SIZE = 15
-const DEFAULT_EMAIL_SUBJECT = 'Your certificate — {{name}}'
-const DEFAULT_EMAIL_MESSAGE = 'Dear {{name}},\n\nThank you for taking part in the conference. Please find your certificate of participation below.\n\nWarm regards,\nECSACONM Secretariat'
+const DEFAULT_EMAIL_SUBJECT = 'Your Certificate of Participation — {{name}}'
+const DEFAULT_EMAIL_MESSAGE = [
+  'Dear {{name}},',
+  '',
+  'Please find attached a copy of your certificate for your successful participation in the {{event}}.',
+  '',
+  'We have also included links below to the event photos, as well as the shared presentations from both the plenary and breakout-room (abstract) sessions.',
+  '',
+  'If you do not see your abstract listed under the sessions, or your presentation is unavailable, kindly share it with us at admission@cosecsa.org or info@ecsaconm.org so we can add it and make it available to other delegates for wider dissemination.',
+  '',
+  'Warm regards,',
+  'ECSACONM Secretariat',
+].join('\n')
 
 export default {
   name: 'CertificatesView',
@@ -312,6 +323,7 @@ export default {
       // literal because Vue's mustache parser can't handle a nested {{ }}
       // inside an interpolation.
       mergeTagExample: '{{name}}',
+      mergeTagEventExample: '{{event}}',
     }
   },
   computed: {
@@ -426,6 +438,12 @@ export default {
       const selectedNoEmail = this.people.filter(p => this.selected[p.key] && !p.email).length
       const extraCount = this.extraNames.split('\n').map(n => tidyName(n)).filter(Boolean).length
       return selectedNoEmail + extraCount
+    },
+    // {{event}} merge tag — the selected event's display name, same text
+    // shown in the "Select Event" dropdown above.
+    selectedEventName() {
+      const ev = this.events.find(e => String(e.id) === String(this.selectedEventId))
+      return ev ? ev.event : ''
     },
     // Subject/message with {{name}} resolved for whichever recipient is
     // currently selected in the "Previewing as" picker — recalculates as
@@ -580,7 +598,9 @@ export default {
     // template. Kept intentionally simple (one merge tag) rather than a
     // full template engine.
     renderTemplate(str, name) {
-      return (str || '').split('{{name}}').join(name)
+      return (str || '')
+        .split('{{name}}').join(name)
+        .split('{{event}}').join(this.selectedEventName)
     },
 
     // Opens the preview/edit modal for one person (row Send) or several
