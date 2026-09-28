@@ -414,10 +414,6 @@
                   <div class="flex-1 min-w-0">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span class="font-semibold">{{ r.presenter }}</span>
-                      <span v-if="r.assigned" class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 uppercase tracking-wide">
-                        <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                        in room
-                      </span>
                       <span v-if="r.presentation_ext" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase">{{ r.presentation_ext }}</span>
                       <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase"
                         :class="r.presentation_type === 'poster' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'">
@@ -425,9 +421,6 @@
                       </span>
                     </div>
                     <div class="text-xs text-gray-500 truncate mt-0.5">{{ r.title }}</div>
-                    <div v-if="r.assigned && r.entries.length" class="text-[10px] text-green-700 mt-0.5">
-                      Current: {{ r.entries[0].day }} · {{ r.entries[0].room }}<template v-if="r.entries[0].session"> · {{ r.entries[0].session }}</template>
-                    </div>
                   </div>
                   <button v-if="r.has_presentation" @click.prevent.stop="previewAssignAbstract(r)"
                     class="text-[11px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0"
@@ -1463,10 +1456,14 @@ export default {
           params: { event_id: 1 },
           headers: { Authorization: `Bearer ${this.accessToken}` },
         })
-        this.assignRows = res.data.data || []
+        // Already-assigned presenters are pointless clutter here — this
+        // modal is for assigning people who still need a room, not for
+        // moving/reassigning someone already placed (do that from the room
+        // card's pencil icon instead).
+        this.assignRows = (res.data.data || []).filter(r => !r.assigned)
         this.assignSelected = {}
         for (const r of this.assignRows) {
-          if (!r.assigned) this.assignSelected[r.abstract_id] = true
+          this.assignSelected[r.abstract_id] = true
         }
       } catch (e) {
         this.assignErr = e.response?.data?.detail || 'Failed to load presenters.'
