@@ -40,6 +40,7 @@ from routers import (
     attendance_form,
     programme,
     departure_details,
+    certificates,
 )
 
 app = FastAPI(
@@ -115,3 +116,4 @@ app.include_router(email_logs.router, prefix="/email-logs", tags=["Email Logs"])
 app.include_router(attendance_form.router, prefix="/attendance-form", tags=["Attendance Form"])
 app.include_router(departure_details.router, prefix="/departure-details", tags=["Departure Details"])
 app.include_router(programme.router, prefix="/programme", tags=["Programme"])
+app.include_router(certificates.router, prefix="/certificates", tags=["Certificates"])

@@ -20,6 +20,7 @@ const routeComponents = {
   WebEventsView: () => import("@/views/web/WebEvents.vue"),
   WebEventView: () => import("@/views/web/WebEvent.vue"),
   RoomProgrammeView: () => import("@/views/web/RoomProgramme.vue"),
+  PublicProgrammeRoomsView: () => import("@/views/web/PublicProgrammeRooms.vue"),
   UserEventStatusView: () => import("@/views/web/UserEventStatus.vue"),
   AttendanceView: () => import("@/views/web/Attendance.vue"),
   OnsiteRegistrationView: () => import("@/views/web/OnsiteRegistration.vue"),
@@ -159,6 +160,16 @@ const routes = [
         path: "/room-programme",
         name: "RoomProgramme",
         component: routeComponents.RoomProgrammeView,
+      },
+      {
+        // Public, read-only, all-rooms/all-days version of the admin
+        // /programme-rooms page — no login required. Deliberately a
+        // separate URL from the admin page rather than reusing its path,
+        // so the admin page (delete/upload/match actions, behind
+        // ADMIN_DASHBOARD) never becomes reachable without a token.
+        path: "/programme-rooms-public",
+        name: "ProgrammeRoomsPublic",
+        component: routeComponents.PublicProgrammeRoomsView,
       },
       {
         path: "/user-event-status/:userId/:eventId",

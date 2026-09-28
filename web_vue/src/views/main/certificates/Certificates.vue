@@ -91,6 +91,7 @@
                 <th class="px-3 py-3 text-left whitespace-nowrap">Name on certificate</th>
                 <th class="px-3 py-3 text-left whitespace-nowrap">{{ type === 'presenter' ? 'Session' : 'Category' }}</th>
                 <th class="px-3 py-3 text-left">{{ type === 'presenter' ? 'Presentation' : 'Country' }}</th>
+                <th class="px-3 py-3 text-left whitespace-nowrap">Email</th>
               </tr>
             </thead>
             <tbody>
@@ -102,6 +103,25 @@
                 <td class="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{{ p.name }}</td>
                 <td class="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap capitalize">{{ p.category }}</td>
                 <td class="px-3 py-2.5 text-gray-500 text-xs">{{ p.detail }}</td>
+                <td class="px-3 py-2.5 whitespace-nowrap">
+                  <button v-if="p.email" type="button" @click="sendOne(p)"
+                    :disabled="sendingKey === p.key || emailBusy"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition disabled:opacity-40"
+                    :class="rowMsg && rowMsg.key === p.key
+                      ? (rowMsg.ok ? 'border-green-200 text-green-600' : 'border-red-200 text-red-500')
+                      : 'border-gray-200 text-gray-600 hover:border-pink-300 hover:text-pink-500'"
+                    :title="p.email">
+                    <svg v-if="sendingKey === p.key" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Send' }}
+                  </button>
+                  <span v-else class="text-xs text-gray-300 italic" title="No email on file">no email</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -119,11 +139,33 @@
             placeholder="Anyone not in the list above — one full name per line, exactly as it should appear"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"></textarea>
         </div>
+        <div v-if="emailError" class="p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{{ emailError }}</div>
+        <div v-if="emailSuccess" class="p-3 rounded-xl text-sm text-green-700 bg-green-50 border border-green-200">{{ emailSuccess }}</div>
+        <div v-if="emailProgress" class="p-3 rounded-xl text-sm text-gray-600 bg-gray-50 border border-gray-200">
+          {{ emailProgress.phase }} certificate{{ emailProgress.total === 1 ? '' : 's' }}… {{ emailProgress.done }} of {{ emailProgress.total }}
+        </div>
+
         <div class="flex flex-wrap items-center gap-3">
           <p class="text-xs text-gray-400 flex-1">
-            Opens in a new tab and brings up the print dialog — choose <strong>Save as PDF</strong> and turn on
-            <strong>Background graphics</strong> for one PDF with a page per person. ALL-CAPS / lowercase names are tidied to Title Case.
+            <strong>Generate</strong> opens a print tab — choose <strong>Save as PDF</strong> and turn on
+            <strong>Background graphics</strong> for one PDF with a page per person.
+            <strong>Email</strong> sends each selected person their own certificate at their registration email
+            (embedded in the message) — people typed under "Additional names" have no email on file and are skipped.
+            ALL-CAPS / lowercase names are tidied to Title Case.
           </p>
+          <button type="button" @click="emailSelected" :disabled="!emailableSelected.length || emailBusy || sendingKey"
+            class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-40"
+            style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
+            <svg v-if="emailBusy" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+            {{ emailBusy ? 'Sending…' : `Email ${emailableSelected.length} Certificate${emailableSelected.length === 1 ? '' : 's'}` }}
+          </button>
           <button type="button" @click="generate" :disabled="!finalNames.length"
             class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
             style="background-color: rgb(254,80,103);">
@@ -134,23 +176,37 @@
             Generate {{ finalNames.length }} Certificate{{ finalNames.length === 1 ? '' : 's' }}
           </button>
         </div>
+        <p v-if="skippedNoEmailCount" class="text-[11px] text-gray-400">
+          {{ skippedNoEmailCount }} selected {{ skippedNoEmailCount === 1 ? 'person has' : 'people have' }} no email on file and will be skipped by Email (still included in Generate).
+        </p>
       </div>
     </template>
+
+    <!-- Off-screen certificate used to render each recipient's image before
+    upload (Send/Email) — parked far off-window so it's never visible. -->
+    <div style="position: fixed; left: -99999px; top: 0; pointer-events: none;" aria-hidden="true">
+      <CertificateSheet ref="renderSheet" :name="renderJob.name" :type="renderJob.type" uid="email-render" />
+    </div>
   </div>
 </template>
 
 <script>
 import axios from 'axios'
 import HeaderView from '@/includes/Header.vue'
+import CertificateSheet from '@/components/CertificateSheet.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, tidyName } from '@/utils/certificateTypes'
 
 const API_URL = import.meta.env.VITE_API_URL
+// Certificate images are rendered client-side (same markup as the print
+// page) then uploaded — batch emailing hands them to the server a handful
+// at a time rather than one giant request.
+const EMAIL_BATCH_SIZE = 15
 
 export default {
   name: 'CertificatesView',
-  components: { HeaderView },
+  components: { HeaderView, CertificateSheet },
   setup() {
     const authStore = useAuthStore()
     return { authStore }
@@ -172,6 +228,15 @@ export default {
       // person key -> true; kept per type so switching tabs doesn't lose ticks
       selections: { attendee: {}, presenter: {}, usher: {} },
       extraNames: '',
+      // off-screen certificate used to rasterize each recipient's image
+      // before upload — see renderCertificateImage()
+      renderJob: { name: '', type: CERTIFICATE_TYPES.attendee },
+      sendingKey: null,
+      rowMsg: null,
+      emailBusy: false,
+      emailError: '',
+      emailSuccess: '',
+      emailProgress: null,
     }
   },
   computed: {
@@ -200,6 +265,7 @@ export default {
         name: tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' ')),
         category: this.roleLabel(r),
         detail: r.country || '',
+        email: r.email || '',
       })).sort((a, b) => a.name.localeCompare(b.name))
     },
     presenters() {
@@ -210,13 +276,17 @@ export default {
         if (!name) return
         const key = `prog-${name.toLowerCase()}`
         if (!byName[key]) {
-          byName[key] = { key, name, categories: new Set(), sessions: [], titles: [] }
+          byName[key] = { key, name, categories: new Set(), sessions: [], titles: [], email: '' }
         }
         const p = byName[key]
         p.categories.add(e.category)
         p.sessions.push([e.day, e.session, e.category].filter(Boolean).join(' · '))
         const title = e.title || e.activity || e.role
         if (title) p.titles.push(title)
+        // presenter's registration email, matched server-side by name — every
+        // slot sharing this name should match the same person, so keep the
+        // first one found.
+        if (!p.email && e.matched_email) p.email = e.matched_email
       })
       return Object.values(byName)
         .filter(p => !this.categoryFilter.length || this.categoryFilter.some(c => p.categories.has(c)))
@@ -225,6 +295,7 @@ export default {
           name: p.name,
           category: p.sessions.join(', '),
           detail: p.titles.join(' | '),
+          email: p.email,
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
     },
@@ -260,6 +331,17 @@ export default {
         seen.add(k)
         return true
       })
+    },
+    // Only registration/programme-linked people have a known email — typed
+    // "Additional names" never do, and are excluded here (they still print
+    // fine via Generate, just can't be emailed automatically).
+    emailableSelected() {
+      return this.people.filter(p => this.selected[p.key] && p.email)
+    },
+    skippedNoEmailCount() {
+      const selectedNoEmail = this.people.filter(p => this.selected[p.key] && !p.email).length
+      const extraCount = this.extraNames.split('\n').map(n => tidyName(n)).filter(Boolean).length
+      return selectedNoEmail + extraCount
     },
   },
   mounted() {
@@ -359,6 +441,83 @@ export default {
     },
     preview() {
       this.openPrint({ type: this.type, names: ['Full Name'], autoPrint: false })
+    },
+
+    // ── Email the certificate ────────────────────────────────
+    // Rasterizes the hidden CertificateSheet (same markup the print page
+    // uses) to a JPEG blob via html2canvas, at full 1920x1080 resolution.
+    async renderCertificateImage(name) {
+      this.renderJob = { name, type: this.types[this.type] }
+      await this.$nextTick()
+      await document.fonts.ready
+      const sheet = this.$refs.renderSheet
+      if (sheet && sheet.fitName) sheet.fitName()
+      await this.$nextTick()
+      const hcMod = await import('html2canvas')
+      const html2canvas = hcMod.default || hcMod
+      const canvas = await html2canvas(sheet.$el, {
+        scale: 1, useCORS: true, backgroundColor: '#ffffff', logging: false,
+        width: 1920, height: 1080,
+      })
+      return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    },
+
+    async sendOne(p) {
+      if (!p.email || this.sendingKey || this.emailBusy) return
+      this.sendingKey = p.key
+      this.rowMsg = null
+      try {
+        const blob = await this.renderCertificateImage(p.name)
+        const form = new FormData()
+        form.append('recipient_email', p.email)
+        form.append('recipient_name', p.name)
+        form.append('subject', `Your certificate — ${p.name}`)
+        form.append('image', blob, 'certificate.jpg')
+        await this.api().post('/certificates/send', form)
+        this.rowMsg = { key: p.key, ok: true, text: 'Sent' }
+      } catch (e) {
+        this.rowMsg = { key: p.key, ok: false, text: e.response?.data?.detail || 'Failed to send' }
+      } finally {
+        this.sendingKey = null
+      }
+    },
+
+    async emailSelected() {
+      const recipients = this.emailableSelected
+      if (!recipients.length || this.emailBusy || this.sendingKey) return
+      this.emailBusy = true
+      this.emailError = ''
+      this.emailSuccess = ''
+      this.emailProgress = { phase: 'Rendering', done: 0, total: recipients.length }
+      let queued = 0
+      let skipped = 0
+      try {
+        for (let start = 0; start < recipients.length; start += EMAIL_BATCH_SIZE) {
+          const batch = recipients.slice(start, start + EMAIL_BATCH_SIZE)
+          const form = new FormData()
+          const manifest = []
+          for (const p of batch) {
+            const blob = await this.renderCertificateImage(p.name)
+            const filename = `${p.key.replace(/[^A-Za-z0-9_-]+/g, '_')}.jpg`
+            form.append('images', blob, filename)
+            manifest.push({ filename, email: p.email, name: p.name })
+            this.emailProgress.done++
+          }
+          form.append('manifest', JSON.stringify(manifest))
+          this.emailProgress.phase = 'Sending'
+          const res = await this.api().post('/certificates/send-bulk', form)
+          queued += res.data?.queued || 0
+          skipped += res.data?.skipped || 0
+          this.emailProgress.phase = 'Rendering'
+        }
+        this.emailSuccess = `Queued ${queued} certificate email${queued === 1 ? '' : 's'}.` +
+          (skipped ? ` ${skipped} skipped (no image/email matched).` : '')
+      } catch (e) {
+        this.emailError = e.response?.data?.detail || 'Failed to send certificate emails.'
+      } finally {
+        this.emailBusy = false
+        this.emailProgress = null
+      }
     },
   },
 }

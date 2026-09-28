@@ -277,6 +277,7 @@ const TYPE_LABELS = {
   reviewer_assignment: 'Reviewer Assignment',
   registration_reminder: 'Registration Reminder',
   payment_receipt: 'Payment Receipt',
+  certificate: 'Certificate',
   test: 'Test',
 }
 
@@ -292,6 +293,7 @@ const TYPE_CLASSES = {
   reviewer_assignment: 'bg-teal-100 text-teal-700',
   registration_reminder: 'bg-orange-100 text-orange-700',
   payment_receipt: 'bg-green-100 text-green-700',
+  certificate: 'bg-rose-100 text-rose-700',
   test: 'bg-pink-100 text-pink-700',
 }
 
@@ -308,6 +310,7 @@ const TYPE_BAR_CLASSES = {
   reviewer_assignment: 'bg-teal-500',
   registration_reminder: 'bg-orange-500',
   payment_receipt: 'bg-green-500',
+  certificate: 'bg-rose-500',
   test: 'bg-pink-500',
 }
 

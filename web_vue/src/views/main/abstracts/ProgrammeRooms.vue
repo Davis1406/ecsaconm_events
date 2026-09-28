@@ -38,6 +38,15 @@
           {{ r }}
         </button>
         <div class="flex-1"></div>
+        <button @click="copyPublicProgrammeLink"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
+          style="border-color: rgb(0,150,180); color: rgb(0,150,180);"
+          title="Copy a no-login link showing every room/day, view-only">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5"/>
+          </svg>
+          Share Full Programme
+        </button>
         <button v-if="isAdmin" @click="openAdd" :disabled="addBusy"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
           style="border-color: rgb(34,197,94); color: rgb(16,150,60);">
@@ -998,6 +1007,15 @@ export default {
       } catch (e) {
         // clipboard API can be unavailable (older browsers, non-HTTPS) —
         // fall back to just showing it so it can be selected and copied.
+        window.prompt('Copy this link:', url)
+      }
+    },
+    async copyPublicProgrammeLink() {
+      const url = `${window.location.origin}${window.location.pathname}#/programme-rooms-public?event_id=1`
+      try {
+        await navigator.clipboard.writeText(url)
+        this.flash('Link copied — view-only, no login required, every room and day.')
+      } catch (e) {
         window.prompt('Copy this link:', url)
       }
     },

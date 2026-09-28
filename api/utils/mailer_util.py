@@ -348,7 +348,11 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
     `inline_image_bytes`/`inline_image_filename`/`inline_image_subtype`, if
     given, take over the whole message body for every job in the batch: the
     body becomes just that image, embedded inline and attached again as a
-    file (job["email_body"] is ignored in that case).
+    file (job["email_body"] is ignored in that case). A job may instead (or
+    also) carry its own `inline_image_bytes`/`inline_image_filename`/
+    `inline_image_subtype` keys, which take priority over the batch-level
+    ones — used for personalized-per-recipient images (e.g. certificates,
+    where every job's image differs) rather than one shared image.
 
     Returns {"sent": int, "failed": int}.
     """
@@ -480,11 +484,14 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
             else:
                 log_id = _create_email_log(recipient_email, subject, email_type,
                                             sent_by_user_id, reply_to_email, email_body)
-            if inline_image_bytes:
+            job_inline_bytes = job.get("inline_image_bytes", inline_image_bytes)
+            if job_inline_bytes:
+                job_inline_filename = job.get("inline_image_filename", inline_image_filename)
+                job_inline_subtype = job.get("inline_image_subtype", inline_image_subtype)
                 final_body = _inject_tracking_pixel(_image_invitation_body_html(), log_id)
                 message = _build_image_invitation_message(
                     from_name, from_email, recipient_email, subject, reply_to_email,
-                    inline_image_bytes, inline_image_filename, inline_image_subtype, final_body,
+                    job_inline_bytes, job_inline_filename, job_inline_subtype, final_body,
                 )
                 if msgs_on_connection >= max_msgs_per_connection:
                     try:

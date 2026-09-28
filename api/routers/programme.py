@@ -95,7 +95,7 @@ def _name_score(pname, cand_first, cand_last):
 
 
 def best_registration_match(pname, reg_rows):
-    """reg_rows: list of dicts {user_id, first, last, is_paid}. Mirrors the JS bestMatch."""
+    """reg_rows: list of dicts {user_id, first, last, email, is_paid}. Mirrors the JS bestMatch."""
     best, best_score = None, -1
     for r in reg_rows:
         sc = _name_score(pname, r["first"], r["last"])
@@ -105,7 +105,7 @@ def best_registration_match(pname, reg_rows):
     if not best or best_score < 3:
         return None
     return {"id": best["user_id"], "first": best["first"], "last": best["last"],
-            "paid": best["is_paid"], "score": best_score}
+            "email": best.get("email"), "paid": best["is_paid"], "score": best_score}
 
 
 # ── Matching programme slots to submitted Abstracts ──────────────────────────
@@ -232,7 +232,7 @@ def _compute_abstract_matches(db: Session, event_id: int, category: str):
 
 def _load_reg_rows(db: Session, event_id: int):
     rows = (
-        db.query(User.id, User.firstname, User.lastname, Registration.id.label("reg_id"), Registration.paid)
+        db.query(User.id, User.firstname, User.lastname, User.email, Registration.id.label("reg_id"), Registration.paid)
         .join(Registration, Registration.user_id == User.id)
         .filter(Registration.event_id == event_id, Registration.deleted_at == None)
         .all()
@@ -243,6 +243,7 @@ def _load_reg_rows(db: Session, event_id: int):
             "user_id": r.id,
             "first": r.firstname or "",
             "last": r.lastname or "",
+            "email": r.email,
             "is_paid": bool(r.paid),
         })
     return out
@@ -309,6 +310,7 @@ def _serialize(entry: ProgrammeEntry, match=None):
         "matched_user_id": match["id"] if match else None,
         "matched_first": match["first"] if match else None,
         "matched_last": match["last"] if match else None,
+        "matched_email": match["email"] if match else None,
     })
     return base
 
@@ -462,6 +464,46 @@ def programme_rooms(
         "data": result,
         # "Day N" labels map to event.start_date + (N-1) days — lets the UI
         # filter by day and auto-hide days that have already passed.
+        "event_start_date": event.start_date.date().isoformat() if event and event.start_date else None,
+        "event_end_date": event.end_date.date().isoformat() if event and event.end_date else None,
+    }
+
+
+@router.get("/public-rooms")
+def public_programme_rooms(
+    db: Session = Depends(get_db),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+):
+    """Read-only, all-rooms/all-days version of /rooms for the public
+    programme page — same trust model as /room-view below: public-by-URL, no
+    JWT/admin check, and only the fields _serialize_base() considers safe to
+    hand to anyone with the link (no registration/payment status, no raw
+    server file paths, no admin-only edit/delete/upload actions)."""
+    event = db.query(Event).filter(Event.id == event_id).first()
+    entries = db.query(ProgrammeEntry).options(joinedload(ProgrammeEntry.abstract)).filter(
+        ProgrammeEntry.event_id == event_id,
+        ProgrammeEntry.deleted_at == None,
+    ).all()
+    rooms = {}   # (day, room) -> {total, with_slide, entries: [...]}
+    for e in entries:
+        day = e.day or "Unassigned"
+        room_label = e.room or "Unassigned"
+        bucket = rooms.setdefault((day, room_label), {
+            "day": day, "room": room_label,
+            "total": 0, "with_slide": 0, "entries": [],
+        })
+        bucket["total"] += 1
+        if _effective_presentation_file(e):
+            bucket["with_slide"] += 1
+        bucket["entries"].append(_serialize_base(e))
+    result = []
+    for (day, room), bucket in sorted(rooms.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        bucket["entries"].sort(key=lambda x: (x["session"] or "", x["code"] or "", x["title"] or ""))
+        result.append({"day": bucket["day"], "room": bucket["room"], "total": bucket["total"],
+                        "with_slide": bucket["with_slide"], "entries": bucket["entries"]})
+    return {
+        "data": result,
+        "event": {"id": event.id, "name": event.event} if event else None,
         "event_start_date": event.start_date.date().isoformat() if event and event.start_date else None,
         "event_end_date": event.end_date.date().isoformat() if event and event.end_date else None,
     }
