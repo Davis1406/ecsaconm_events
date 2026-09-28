@@ -80,6 +80,15 @@
           </svg>
           {{ matchLoading ? 'Matching…' : `Match ${entryCategory === 'poster' ? 'Posters' : 'Abstracts'}` }}
         </button>
+        <button v-if="isAdmin" @click="openBulkUpload"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
+          style="border-color: rgb(120,80,200); color: rgb(100,60,180);"
+          title="Select a folder of local presentation/video files and match+upload them to the right entry in one go">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 12v9m0-9l-3 3m3-3l3 3"/>
+          </svg>
+          Bulk Match & Upload
+        </button>
         <span class="text-xs text-gray-500">{{ slideCountSummary }}</span>
       </div>
 
@@ -641,6 +650,97 @@
         <p v-if="zipProgress.totalMB" class="text-right text-xs text-gray-400 mt-1">{{ zipProgress.percent }}%</p>
       </div>
     </div>
+
+    <!-- Bulk file matcher modal -->
+    <div v-if="bulkOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="closeBulkUpload">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h3 class="font-bold text-gray-800">Bulk Match & Upload Presentations</h3>
+            <p class="text-xs text-gray-500 mt-0.5">Pick every file from a folder at once — each gets matched to a programme entry by abstract code or presenter name. Review the guesses, fix any that are wrong, then upload.</p>
+          </div>
+          <button @click="closeBulkUpload" :disabled="bulkBusy" class="text-gray-400 hover:text-gray-600 disabled:opacity-40">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+          <div v-if="bulkTargetsLoading" class="py-10"><SpinnerComponent /></div>
+          <div v-else-if="bulkTargetsErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ bulkTargetsErr }}</div>
+          <template v-else>
+            <div class="flex flex-wrap items-center gap-3">
+              <button @click="$refs.bulkFileInput.click()" :disabled="bulkBusy"
+                class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                style="background-color: rgb(120,80,200);">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                </svg>
+                Choose Files…
+              </button>
+              <span class="text-xs text-gray-500">Select every file at once (⌘/Ctrl-click or Ctrl/Cmd-A in the picker) — PDF, PPTX, images, or video (MP4/MOV).</span>
+            </div>
+
+            <div v-if="bulkRows.length === 0" class="py-10 text-center text-sm text-gray-400 italic border border-dashed border-gray-200 rounded-lg">
+              No files chosen yet.
+            </div>
+
+            <div v-else class="rounded-lg border border-gray-200 divide-y divide-gray-100">
+              <div v-for="(row, i) in bulkRows" :key="i" class="px-4 py-3 flex flex-col gap-2">
+                <div class="flex items-start gap-3">
+                  <input type="checkbox" v-model="row.include" :disabled="bulkBusy" class="mt-1.5 accent-cp-secondary flex-shrink-0" />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span class="font-semibold text-sm truncate">{{ row.name }}</span>
+                      <span class="text-[11px] text-gray-400">{{ row.sizeLabel }}</span>
+                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" :class="bulkConfidenceClass(row.confidence)">
+                        {{ bulkConfidenceLabel(row.confidence) }}
+                      </span>
+                      <span v-if="row.status === 'uploading'" class="text-[11px] font-semibold text-blue-600">Uploading…</span>
+                      <span v-if="row.status === 'done'" class="text-[11px] font-semibold text-green-600">✓ Uploaded</span>
+                      <span v-if="row.status === 'error'" class="text-[11px] font-semibold text-red-600">{{ row.error }}</span>
+                    </div>
+                    <input v-model="row.pickText" @input="resolveBulkPick(row)" list="bulkEntryOptions"
+                      :disabled="bulkBusy || row.status === 'done'"
+                      placeholder="Type presenter name, code, or title to search the programme…"
+                      class="field-input !py-1.5 !text-xs mt-1 w-full disabled:bg-gray-50 disabled:text-gray-400" />
+                    <p v-if="row.include && !row.entryId" class="text-[11px] text-amber-600 mt-1">No entry chosen yet — pick one above or untick to skip this file.</p>
+                  </div>
+                  <button v-if="row.status !== 'done'" @click="removeBulkRow(row)" :disabled="bulkBusy" title="Remove"
+                    class="text-gray-300 hover:text-red-500 flex-shrink-0 disabled:opacity-40">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <datalist id="bulkEntryOptions">
+              <option v-for="o in bulkDatalistOptions" :key="o.id" :value="o.label" />
+            </datalist>
+
+            <div v-if="bulkUnresolvedCount > 0" class="text-xs text-amber-600">
+              {{ bulkUnresolvedCount }} selected file{{ bulkUnresolvedCount !== 1 ? 's' : '' }} still need{{ bulkUnresolvedCount === 1 ? 's' : '' }} a matching entry before they can upload.
+            </div>
+            <div v-if="bulkErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ bulkErr }}</div>
+          </template>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0 bg-white">
+          <div class="text-xs text-gray-500">
+            <template v-if="bulkBusy">Uploading {{ bulkProgress.done }} / {{ bulkProgress.total }}…</template>
+            <template v-else-if="bulkIncludedCount">{{ bulkIncludedCount }} file{{ bulkIncludedCount !== 1 ? 's' : '' }} ready to upload</template>
+          </div>
+          <div class="flex gap-2">
+            <button @click="closeBulkUpload" :disabled="bulkBusy" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg disabled:opacity-40">Close</button>
+            <button @click="runBulkUpload" :disabled="bulkBusy || bulkIncludedCount === 0"
+              class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
+              style="background-color: rgb(120,80,200);">
+              {{ bulkBusy ? `Uploading… (${bulkProgress.done}/${bulkProgress.total})` : `Upload ${bulkIncludedCount} File${bulkIncludedCount !== 1 ? 's' : ''}` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <input type="file" ref="bulkFileInput" class="hidden" multiple :accept="bulkAcceptedExtensions" @change="onBulkFilesChosen" />
   </div>
 </template>
 
@@ -656,6 +756,80 @@ import ecsaCrest from '@/assets/images/ecsalogo.png?inline'
 import ecsaconmMark from '@/assets/images/logo.png?inline'
 
 const DAY_ORDER = ['Day 1', 'Day 2', 'Day 3', 'Day 1-3', 'Unassigned']
+
+// ── Bulk file matcher helpers ─────────────────────────────────────────────
+// Pure string-matching used to line a folder of local presentation files up
+// against programme entries before upload. Runs entirely client-side — the
+// files themselves never leave the browser until the admin confirms a match
+// and clicks Upload, one authenticated POST per file, same as a manual
+// single-file upload would do.
+const BULK_STOPWORDS = new Set([
+  'ecsaconm', 'ecsacon', 'conference', 'presentation', 'presentations', 'present',
+  'final', 'fin', 'draft', 'rev', 'revised', 'ppt', 'pptx', 'pdf', 'poster',
+  'oral', 'abstract', 'sept', 'september', '2025', '2026', 'the', 'a', 'an',
+  'of', 'and', 'for', 'to', 'on', 'in', 'at', 'dr', 'prof', 'professor', 'mr',
+  'mrs', 'ms', 'phd', 'rn', 'rm', 'msc', 'bsc', 'copy', 'new',
+])
+const BULK_CODE_RE = /\b(HAE|RIN|LAP|TECH|CLIM|ID)-?0*(\d{1,4})\b/i
+
+function bulkNorm(s) {
+  return (s || '')
+    .toString()
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+function bulkTokens(s) {
+  return bulkNorm(s).split(' ').filter(t => t.length > 1 && !BULK_STOPWORDS.has(t))
+}
+function bulkExtractCode(filename) {
+  const m = (filename || '').match(BULK_CODE_RE)
+  if (!m) return null
+  return `${m[1].toUpperCase()}${m[2].padStart(3, '0')}`
+}
+// Ranks every candidate entry against one filename and returns the best
+// guess plus a confidence label. Never auto-selects on its own — the caller
+// always shows this as an editable, overridable suggestion.
+function bulkBestMatch(filename, targets) {
+  const stem = filename.replace(/\.[a-z0-9]+$/i, '')
+  const code = bulkExtractCode(stem)
+  if (code) {
+    const hit = targets.find(t => (t.code || '').toUpperCase() === code)
+    if (hit) return { entry: hit, confidence: 'high', reason: `code ${code}` }
+  }
+  const fileTokens = new Set(bulkTokens(stem))
+  if (fileTokens.size === 0) return { entry: null, confidence: 'none', reason: '' }
+  let best = null
+  let bestScore = 0
+  let bestNameHits = 0
+  for (const t of targets) {
+    const nameTokens = bulkTokens(t.presenter_name)
+    const titleTokens = bulkTokens(t.title || t.activity || '')
+    let nameHits = 0
+    for (const tok of nameTokens) if (fileTokens.has(tok)) nameHits++
+    let titleHits = 0
+    for (const tok of titleTokens) if (fileTokens.has(tok)) titleHits++
+    const score = nameHits * 3 + titleHits
+    if (score > bestScore) {
+      bestScore = score
+      best = t
+      bestNameHits = nameHits
+    }
+  }
+  if (!best) return { entry: null, confidence: 'none', reason: '' }
+  if (bestNameHits >= 2) return { entry: best, confidence: 'medium', reason: 'name match' }
+  if (bestNameHits === 1 && bestScore >= 4) return { entry: best, confidence: 'low', reason: 'partial name + title match' }
+  if (bestNameHits === 1) return { entry: best, confidence: 'low', reason: 'weak name match' }
+  return { entry: null, confidence: 'none', reason: '' }
+}
+function bulkEntryLabel(t) {
+  const cat = t.category === 'plenary' ? 'Plenary' : t.category === 'poster' ? 'Poster' : 'Oral'
+  const code = t.code ? `${t.code} · ` : ''
+  const where = [t.day, t.room].filter(Boolean).join(' · ')
+  const what = (t.title || t.activity || '').slice(0, 70)
+  return `#${t.id} · ${cat} · ${code}${t.presenter_name || '—'} — ${what}${where ? ` (${where})` : ''}`
+}
 
 export default {
   name: 'ProgrammeRoomsView',
@@ -696,6 +870,10 @@ export default {
       assignSearch: '',
       assignErr: '', assignDone: null, assignBusy: false, assignSelected: {},
       assignForm: { room: '', day: 'Day 2' },
+      // bulk file matcher state
+      bulkOpen: false, bulkTargetsLoading: false, bulkTargets: [], bulkTargetsErr: '',
+      bulkRows: [], bulkBusy: false, bulkProgress: { done: 0, total: 0 }, bulkErr: '',
+      bulkAcceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp,.mp4,.mov,.m4v,.webm',
     }
   },
 
@@ -847,6 +1025,17 @@ export default {
         rooms.add(d.room)
       }
       return [...rooms].sort((a, b) => a.localeCompare(b))
+    },
+
+    // ── bulk file matcher ──────────────────────────────────────
+    bulkDatalistOptions() {
+      return this.bulkTargets.map(t => ({ id: t.id, label: bulkEntryLabel(t) }))
+    },
+    bulkIncludedCount() {
+      return this.bulkRows.filter(r => r.include && r.entryId).length
+    },
+    bulkUnresolvedCount() {
+      return this.bulkRows.filter(r => r.include && !r.entryId).length
     },
   },
 
@@ -1561,6 +1750,134 @@ export default {
       } finally {
         this.assignBusy = false
       }
+    },
+
+    // ── bulk file matcher ──────────────────────────────────────
+    async openBulkUpload() {
+      this.bulkOpen = true
+      this.bulkErr = ''
+      this.bulkRows = []
+      this.bulkProgress = { done: 0, total: 0 }
+      if (this.bulkTargets.length) return
+      this.bulkTargetsLoading = true
+      this.bulkTargetsErr = ''
+      try {
+        const res = await axios.get(`${this.apiUrl}/programme/match-targets`, {
+          params: { event_id: 1 },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.bulkTargets = res.data.data || []
+      } catch (e) {
+        this.bulkTargetsErr = e.response?.data?.detail || 'Failed to load the programme for matching.'
+      } finally {
+        this.bulkTargetsLoading = false
+      }
+    },
+    closeBulkUpload() {
+      if (this.bulkBusy) return
+      this.bulkOpen = false
+    },
+    onBulkFilesChosen(e) {
+      const files = Array.from(e.target.files || [])
+      if (!files.length) return
+      const rows = files.map(file => {
+        const { entry, confidence, reason } = bulkBestMatch(file.name, this.bulkTargets)
+        return {
+          file,
+          name: file.name,
+          sizeLabel: this.formatFileSize(file.size),
+          entryId: entry ? entry.id : null,
+          entry: entry || null,
+          pickText: entry ? bulkEntryLabel(entry) : '',
+          confidence,
+          reason,
+          // Only auto-include files we're at least reasonably sure about —
+          // "low"/"none" still show up (so nothing silently gets skipped)
+          // but need the admin to actively confirm a target first.
+          include: confidence === 'high' || confidence === 'medium',
+          status: 'pending', // pending | uploading | done | error
+          error: '',
+        }
+      })
+      this.bulkRows = [...this.bulkRows, ...rows]
+      if (this.$refs.bulkFileInput) this.$refs.bulkFileInput.value = ''
+    },
+    removeBulkRow(row) {
+      this.bulkRows = this.bulkRows.filter(r => r !== row)
+    },
+    resolveBulkPick(row) {
+      const m = (row.pickText || '').match(/^#(\d+)/)
+      if (!m) {
+        row.entryId = null
+        row.entry = null
+        return
+      }
+      const id = Number(m[1])
+      const entry = this.bulkTargets.find(t => t.id === id) || null
+      row.entryId = entry ? entry.id : null
+      row.entry = entry
+      if (entry) row.include = true
+    },
+    bulkConfidenceLabel(c) {
+      return { high: 'Code match', medium: 'Name match', low: 'Weak match', none: 'No match' }[c] || ''
+    },
+    bulkConfidenceClass(c) {
+      return {
+        high: 'bg-green-100 text-green-700',
+        medium: 'bg-blue-100 text-blue-700',
+        low: 'bg-amber-100 text-amber-700',
+        none: 'bg-gray-100 text-gray-500',
+      }[c] || 'bg-gray-100 text-gray-500'
+    },
+    formatFileSize(bytes) {
+      if (!bytes && bytes !== 0) return ''
+      const mb = bytes / (1024 * 1024)
+      return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+    },
+    async runBulkUpload() {
+      const rows = this.bulkRows.filter(r => r.include && r.entryId && r.status !== 'done')
+      if (!rows.length) return
+      this.bulkBusy = true
+      this.bulkErr = ''
+      this.bulkProgress = { done: 0, total: rows.length }
+      // Sequential, not parallel — some of these files run into the
+      // hundreds of MB (embedded video), so uploading one at a time avoids
+      // saturating the admin's own upload bandwidth across many at once and
+      // keeps per-file progress/errors easy to attribute.
+      for (const row of rows) {
+        row.status = 'uploading'
+        row.error = ''
+        try {
+          const form = new FormData()
+          form.append('file', row.file)
+          const res = await axios.post(`${this.apiUrl}/programme/${row.entryId}/upload-presentation`, form, {
+            headers: {
+              Authorization: `Bearer ${this.accessToken}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          })
+          row.status = 'done'
+          const target = this.bulkTargets.find(t => t.id === row.entryId)
+          if (target) {
+            target.has_presentation = true
+            target.presentation_uploaded_at = new Date().toISOString()
+          }
+          this.updateAllEntries({ id: row.entryId, presentation_file: res.data.presentation_file, presentation_uploaded_at: new Date().toISOString() })
+        } catch (e) {
+          row.status = 'error'
+          row.error = e.response?.data?.detail || 'Upload failed.'
+        } finally {
+          this.bulkProgress.done++
+        }
+      }
+      this.bulkBusy = false
+      const okCount = rows.filter(r => r.status === 'done').length
+      const failCount = rows.filter(r => r.status === 'error').length
+      this.flash(
+        `Uploaded ${okCount} file${okCount !== 1 ? 's' : ''}.` + (failCount ? ` ${failCount} failed — see the list below.` : ''),
+        failCount > 0 && okCount === 0,
+      )
+      await this.loadRooms()
     },
   },
 }

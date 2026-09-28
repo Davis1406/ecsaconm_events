@@ -24,8 +24,14 @@ from schemas.events_space import (
 
 PRESENTATION_UPLOAD_DIR = "uploads/presentations"
 os.makedirs(PRESENTATION_UPLOAD_DIR, exist_ok=True)
-ALLOWED_PRESENTATION_EXTS = {".pdf", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
-MAX_PRESENTATION_MB = 100
+ALLOWED_PRESENTATION_EXTS = {
+    ".pdf", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
+    # Recorded talks — some presenters submit a video instead of/alongside slides.
+    ".mp4", ".mov", ".m4v", ".webm",
+}
+# App-level cap only — nginx's client_max_body_size on the server must be
+# raised to match (see deploy/README.md) or large uploads never get here.
+MAX_PRESENTATION_MB = 500
 
 PRESENTATION_PREVIEW_MEDIA_TYPES = {
     ".pdf": "application/pdf",
@@ -37,6 +43,10 @@ PRESENTATION_PREVIEW_MEDIA_TYPES = {
     ".gif": "image/gif",
     ".bmp": "image/bmp",
     ".webp": "image/webp",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".m4v": "video/x-m4v",
+    ".webm": "video/webm",
 }
 
 router = APIRouter()

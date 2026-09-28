@@ -23,8 +23,16 @@ user_dependency = Annotated[dict, Depends(get_current_user)]
 
 PROGRAMME_UPLOAD_DIR = "uploads/presentations"
 os.makedirs(PROGRAMME_UPLOAD_DIR, exist_ok=True)
-ALLOWED_PRESENTATION_EXTS = {".pdf", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
-MAX_PRESENTATION_MB = 100
+ALLOWED_PRESENTATION_EXTS = {
+    ".pdf", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
+    # Recorded talks — some presenters submit a video instead of/alongside slides.
+    ".mp4", ".mov", ".m4v", ".webm",
+}
+# Some submissions embed video inside the slide deck itself and run well past
+# 100MB — this is the app-level cap only; nginx's client_max_body_size on the
+# server must be raised to match (see deploy/README.md) or large uploads will
+# be rejected before they even reach this check.
+MAX_PRESENTATION_MB = 500
 PREVIEW_MEDIA_TYPES = {
     ".pdf": "application/pdf",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -34,6 +42,10 @@ PREVIEW_MEDIA_TYPES = {
     ".gif": "image/gif",
     ".bmp": "image/bmp",
     ".webp": "image/webp",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".m4v": "video/x-m4v",
+    ".webm": "video/webm",
 }
 
 DEFAULT_EVENT_ID = 1
@@ -603,6 +615,46 @@ def presenters_with_slides(
         "total": len(data),
         "assigned": sum(1 for d in data if d["assigned"]),
         "unassigned": sum(1 for d in data if not d["assigned"]),
+    }
+
+
+# ── Match targets (for the "Bulk Match & Upload" tool) ───────────────────────
+@router.get("/match-targets")
+def match_targets(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+):
+    """Every programme entry (plenary, oral and poster alike) as a flat,
+    matchable list: id, code, presenter, title, where it sits in the
+    schedule, and whether it already has a slide/video attached. Used by the
+    admin's client-side bulk file matcher to line up a folder of local
+    presentation files against the right entry before uploading — the
+    matching itself happens in the browser (it's just string comparison
+    against these fields), this just hands over the raw candidates."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    entries = db.query(ProgrammeEntry).filter(
+        ProgrammeEntry.event_id == event_id,
+        ProgrammeEntry.deleted_at == None,
+    ).order_by(ProgrammeEntry.category, ProgrammeEntry.code, ProgrammeEntry.id).all()
+    return {
+        "data": [
+            {
+                "id": e.id,
+                "category": e.category,
+                "code": e.code,
+                "day": e.day,
+                "session": e.session,
+                "room": e.room,
+                "presenter_name": e.presenter_name,
+                "title": e.title,
+                "activity": e.activity,
+                "has_presentation": bool(_effective_presentation_file(e)),
+                "presentation_uploaded_at": e.presentation_uploaded_at.isoformat() if e.presentation_uploaded_at else None,
+            }
+            for e in entries
+        ],
     }
 
 
