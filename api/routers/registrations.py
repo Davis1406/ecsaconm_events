@@ -14,7 +14,15 @@ from openpyxl.utils import get_column_letter
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import Registration, User, Event, UserProfile, ParticipationRole
+from models.models import (
+    Registration,
+    User,
+    Event,
+    UserProfile,
+    ParticipationRole,
+    Abstract,
+    AbstractAuthor,
+)
 
 router = APIRouter()
 
@@ -106,9 +114,10 @@ def _load_gala_invitation_image():
         return f.read()
 
 
-def _serialize_reg(r: Registration) -> dict:
+def _serialize_reg(r: Registration, presenter_emails: set = None) -> dict:
     user = r.user
     profile = user.user_profile[0] if user.user_profile else None
+    email = (user.email or "").strip().lower()
     return {
         "id": r.id,
         "event_id": r.event_id,
@@ -126,9 +135,35 @@ def _serialize_reg(r: Registration) -> dict:
         "designation": profile.designation if profile else "",
         "participation_role": r.participation_role.name if r.participation_role else "",
         "paid": r.is_paid,
+        # Accepted-abstract presenting author for this event — the same signal
+        # the event page's participant table shows as "Abstract Presenter".
+        # Only resolved when a presenter_emails set is passed in (i.e. the
+        # request was scoped to a single event), since it's event-specific.
+        "is_abstract_presenter": (
+            email in presenter_emails if presenter_emails is not None else False
+        ),
         "payment_proof": r.payment_proof,
         "registered_at": r.registered_at,
     }
+
+
+def _presenter_emails_for_event(db: Session, event_id: int) -> set:
+    """Emails of the accepted abstracts' presenting authors for one event —
+    one query, so callers can flag presenters across a whole page of rows."""
+    rows = (
+        db.query(AbstractAuthor.email)
+        .join(Abstract, AbstractAuthor.abstract_id == Abstract.id)
+        .filter(
+            Abstract.event_id == event_id,
+            Abstract.deleted_at == None,
+            Abstract.status == "accepted",
+            AbstractAuthor.is_presenting == True,
+            AbstractAuthor.email != None,
+            AbstractAuthor.email != "",
+        )
+        .all()
+    )
+    return {(r[0] or "").strip().lower() for r in rows if r[0]}
 
 
 @router.get("/participant_status/{registration_id}")
@@ -203,7 +238,7 @@ async def list_registrations(
         db.query(Registration)
         .join(Registration.user)
         .options(
-            joinedload(Registration.user).joinedload(User.user_profile),
+            joinedload(Registration.user).joinedload(User.user_profile).joinedload(UserProfile.country),
             joinedload(Registration.events),
         )
         .filter(Registration.deleted_at == None)
@@ -247,10 +282,14 @@ async def list_registrations(
     registrations = q.order_by(Registration.registered_at.desc()).offset(skip).limit(limit).all()
     pages = math.ceil(total / limit) if limit else 1
 
+    # Presenter status is per-event, so only resolve it when the caller scoped
+    # the request to one event (one extra query, not one per row).
+    presenter_emails = _presenter_emails_for_event(db, event_id) if event_id else None
+
     return {
         "pages": pages,
         "total": total,
-        "data": [_serialize_reg(r) for r in registrations],
+        "data": [_serialize_reg(r, presenter_emails) for r in registrations],
     }
 
 

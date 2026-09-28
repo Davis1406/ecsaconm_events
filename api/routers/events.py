@@ -3814,9 +3814,18 @@ async def get_event_attendance(
     auth_dependency.secure_access("VIEW_EVENT", current_user["user_id"])
 
     from models.models import EventAttendance
+    # Eager-load the whole chain the loop below reads (registration → user →
+    # profile → country); without this each attendance record fires 4 lazy
+    # queries, which is thousands of round-trips for a fully-scanned event.
     records = (
         db.query(EventAttendance)
         .join(Registration, EventAttendance.registration_id == Registration.id)
+        .options(
+            joinedload(EventAttendance.registration)
+            .joinedload(Registration.user)
+            .joinedload(User.user_profile)
+            .joinedload(UserProfile.country)
+        )
         .filter(Registration.event_id == event_id)
         .order_by(EventAttendance.attendance_date.desc())
         .all()

@@ -72,7 +72,7 @@
               class="px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition"
               :class="categoryFilter.includes(c) ? 'text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'"
               :style="categoryFilter.includes(c) ? { backgroundColor: 'rgb(254,80,103)' } : {}">
-              {{ c }}
+              {{ presenterCategoryLabel(c) }}
             </button>
           </template>
           <span class="text-xs text-gray-400 font-medium sm:ml-auto">
@@ -263,9 +263,15 @@ import CertificateSheet from '@/components/CertificateSheet.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
-import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, tidyName } from '@/utils/certificateTypes'
+import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, certificateCategory, tidyName } from '@/utils/certificateTypes'
 
 const API_URL = import.meta.env.VITE_API_URL
+// A paid abstract presenter who doesn't appear anywhere in the programme book.
+// They still count as a presenter (that's how the event page pairs "Abstract
+// Presenters" with "Paid"), so they get their own filter chip rather than
+// being folded into a session type they don't have.
+const ABSTRACT_ONLY_CATEGORY = 'abstract only'
+const ABSTRACT_ONLY_LABEL = 'Abstract presenter — no programme slot'
 // Certificate images are rendered client-side (same markup as the print
 // page) then uploaded — batch emailing hands them to the server a handful
 // at a time rather than one giant request.
@@ -332,23 +338,30 @@ export default {
     },
     sourceHint() {
       return {
-        attendee: 'Other paid delegates — registered, paid (secretariat always counts as paid), and not a presenter, usher or secretariat member. Use the category buttons to narrow the list; tick "only scanned as attended" to limit it to people whose QR badge was scanned.',
-        presenter: 'Everyone named in the conference programme — plenary, oral and poster alike (Presentations by Room and the plenary schedule) — one row per person, cross-matched to their registration for an email.',
+        attendee: 'Other paid delegates — registered, paid (secretariat always counts as paid), and not a presenter, usher or secretariat member. Member State, Other Africa, Participant and Exhibitor registrations are all grouped as one "Delegate" category. Use the category buttons to narrow the list; tick "only scanned as attended" to limit it to people whose QR badge was scanned.',
+        presenter: 'Everyone named in the conference programme (Presentations by Room and the plenary schedule) plus every paid abstract presenter, one row per person, cross-matched to their registration for an email.',
         usher: 'Ushers and secretariat/support staff — registered with either role, same certificate for both.',
       }[this.type]
+    },
+    // Lookup sets used to keep a presenter out of the delegate list, so they
+    // never get mailed two certificates. Email is the reliable join (a
+    // programme slot is matched to a registration server-side); the name set
+    // is the fallback for presenters with no email on file.
+    presenterEmails() {
+      return new Set(this.presenters.map(p => (p.email || '').trim().toLowerCase()).filter(Boolean))
+    },
+    presenterNames() {
+      return new Set(this.presenters.map(p => p.name.toLowerCase()))
     },
     people() {
       if (this.type === 'presenter') return this.presenters
       // A presenter shouldn't also show up (and get double-emailed) under
-      // "other delegates" just because they also have a paid registration —
-      // matched by name against the programme-derived presenter list.
-      const presenterNames = new Set(this.presenters.map(p => p.name.toLowerCase()))
+      // "other delegates" just because they also have a paid registration.
       const regs = this.registrations.filter(r => {
         const isSupport = this.isSupportRole(r)
         if (this.type === 'usher') return isSupport
         if (isSupport || !r.paid) return false
-        const name = tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' '))
-        if (presenterNames.has(name.toLowerCase())) return false
+        if (this.isPresenter(r)) return false
         const cats = this.attendeeCategoryFilter
         if (cats.length && !cats.includes(this.roleLabel(r))) return false
         return !this.attendedOnly || this.attendedRegIds.has(r.id)
@@ -362,43 +375,90 @@ export default {
       })).sort((a, b) => a.name.localeCompare(b.name))
     },
     presenters() {
-      // One row per distinct presenter name (a presenter can appear in several slots).
-      const byName = {}
+      // ONE presenter group, built from two sources:
+      //  1. the conference programme (Rooms page) — everyone named in a
+      //     plenary/oral/poster slot;
+      //  2. paid abstract presenters — an accepted abstract's presenting
+      //     author who has a paid registration, the same pairing the event
+      //     page counts as "Abstract Presenters / Paid". Someone whose
+      //     abstract was accepted but who never made it onto the programme
+      //     still gets a presenter certificate this way.
+      // Dedupe across both: by email where the programme entry was matched to
+      // a registration, otherwise by name.
+      const byKey = {}
+      const addSlot = (person) => {
+        const p = byKey[person.key]
+        if (!p) {
+          byKey[person.key] = {
+            key: person.key, name: person.name, email: person.email,
+            categories: new Set(), sessions: [], titles: [],
+          }
+          return byKey[person.key]
+        }
+        // An abstract-presenter registration is the authoritative email for
+        // this person if the programme slot had none.
+        if (!p.email && person.email) p.email = person.email
+        return p
+      }
+
       this.programme.forEach(e => {
         const name = tidyName(e.presenter_name)
         if (!name) return
-        const key = `prog-${name.toLowerCase()}`
-        if (!byName[key]) {
-          byName[key] = { key, name, categories: new Set(), sessions: [], titles: [], email: '' }
-        }
-        const p = byName[key]
+        const email = (e.matched_email || '').trim().toLowerCase()
+        const p = addSlot({
+          key: email ? `email-${email}` : `prog-${name.toLowerCase()}`,
+          name, email,
+        })
         p.categories.add(e.category)
         p.sessions.push([e.day, e.session, e.category].filter(Boolean).join(' · '))
         const title = e.title || e.activity || e.role
         if (title) p.titles.push(title)
-        // presenter's registration email, matched server-side by name — every
-        // slot sharing this name should match the same person, so keep the
-        // first one found.
-        if (!p.email && e.matched_email) p.email = e.matched_email
       })
-      return Object.values(byName)
+
+      this.registrations
+        .filter(r => r.is_abstract_presenter && r.paid)
+        .forEach(r => {
+          const name = tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' '))
+          if (!name) return
+          const email = (r.email || '').trim().toLowerCase()
+          // Same person as a programme slot? Then the slot's key (email-based
+          // when matched, name-based otherwise) is what we have to land on.
+          const existingKey = email && byKey[`email-${email}`]
+            ? `email-${email}`
+            : `prog-${name.toLowerCase()}`
+          addSlot({ key: existingKey, name, email })
+        })
+
+      return Object.values(byKey)
+        .map(p => {
+          // An abstract presenter with no programme slot has no session type to
+          // show — flag the source so they're still filterable and obvious.
+          const categories = new Set(p.categories)
+          if (!categories.size) categories.add(ABSTRACT_ONLY_CATEGORY)
+          return {
+            key: p.key,
+            name: p.name,
+            category: p.sessions.length ? p.sessions.join(', ') : ABSTRACT_ONLY_LABEL,
+            categories,
+            detail: p.titles.join(' | '),
+            email: p.email,
+          }
+        })
         .filter(p => !this.categoryFilter.length || this.categoryFilter.some(c => p.categories.has(c)))
-        .map(p => ({
-          key: p.key,
-          name: p.name,
-          category: p.sessions.join(', '),
-          detail: p.titles.join(' | '),
-          email: p.email,
-        }))
         .sort((a, b) => a.name.localeCompare(b.name))
     },
+    presenterCategories() {
+      const cats = new Set(this.programme.map(e => e.category).filter(Boolean))
+      if (this.presenters.some(p => p.categories.has(ABSTRACT_ONLY_CATEGORY))) {
+        cats.add(ABSTRACT_ONLY_CATEGORY)
+      }
+      return [...cats].sort()
+    },
     attendeeCategories() {
-      const presenterNames = new Set(this.presenters.map(p => p.name.toLowerCase()))
       const counts = {}
       this.registrations.forEach(r => {
         if (this.isSupportRole(r) || !r.paid) return
-        const fullName = tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' '))
-        if (presenterNames.has(fullName.toLowerCase())) return
+        if (this.isPresenter(r)) return
         const name = this.roleLabel(r)
         counts[name] = (counts[name] || 0) + 1
       })
@@ -486,6 +546,28 @@ export default {
         console.error('Error loading events:', e)
       }
     },
+    // Registrations come back a page at a time; the first response tells us the
+    // total, so any remaining pages are all requested at once rather than one
+    // after another.
+    async fetchRegistrations(api, eventId) {
+      const first = (await api.get(`/registrations/?event_id=${eventId}&skip=0&limit=1000`)).data
+      const regs = first?.data || []
+      const total = first?.total ?? regs.length
+      const skips = []
+      for (let skip = 1000; skip < total; skip += 1000) skips.push(skip)
+      if (skips.length) {
+        const pages = await Promise.all(
+          skips.map(skip => api.get(`/registrations/?event_id=${eventId}&skip=${skip}&limit=1000`))
+        )
+        pages.forEach(p => regs.push(...(p.data?.data || [])))
+      }
+      return regs
+    },
+
+    // The four sources the page needs are independent, so they're fetched
+    // concurrently — the page renders as soon as the slowest one lands rather
+    // than the sum of all four. Each is optional: a failure in one (no
+    // programme book yet, no attendance data) must not blank the page.
     async loadPeople() {
       this.registrations = []
       this.attendedRegIds = new Set()
@@ -498,35 +580,36 @@ export default {
       const api = this.api()
       const eventId = this.selectedEventId
       try {
-        const first = (await api.get(`/registrations/?event_id=${eventId}&skip=0&limit=1000`)).data
-        let regs = first?.data || []
-        const total = first?.total ?? regs.length
-        for (let skip = 1000; skip < total; skip += 1000) {
-          const page = await api.get(`/registrations/?event_id=${eventId}&skip=${skip}&limit=1000`)
-          regs = regs.concat(page.data?.data || [])
-        }
-        this.registrations = regs
+        const [regs, attendance, programme, event] = await Promise.allSettled([
+          this.fetchRegistrations(api, eventId),
+          api.get(`/events/${eventId}/attendance`),
+          api.get(`/programme`, { params: { event_id: eventId, limit: 5000 } }),
+          api.get(`/events/${eventId}`),
+        ])
 
-        try {
-          const att = (await api.get(`/events/${eventId}/attendance`)).data?.data || []
+        if (regs.status === 'fulfilled') this.registrations = regs.value
+        else console.error('Error loading registrations:', regs.reason)
+
+        if (attendance.status === 'fulfilled') {
+          const att = attendance.value.data?.data || []
           this.attendedRegIds = new Set(att.map(a => a.registration_id))
           // Default to "attended only" once the QR scans have been used.
           this.attendedOnly = this.attendedRegIds.size > 0
-        } catch (e) { /* no attendance data */ }
+        }
 
-        try {
-          this.programme = (await api.get(`/programme`, { params: { event_id: eventId, limit: 5000 } })).data?.data || []
-        } catch (e) { /* no programme for this event */ }
+        if (programme.status === 'fulfilled') {
+          this.programme = programme.value.data?.data || []
+        } else {
+          console.error('Error loading programme:', programme.reason)
+        }
 
-        // Public Links (event page's Links tab) — shown under the
-        // certificate in the email preview; the actual send re-fetches
-        // these fresh server-side rather than trusting this copy.
-        try {
-          const links = (await api.get(`/events/${eventId}`)).data?.links || []
+        // Public Links (event page's Links tab) — shown under the certificate
+        // in the email preview; the actual send re-fetches these fresh
+        // server-side rather than trusting this copy.
+        if (event.status === 'fulfilled') {
+          const links = event.value.data?.links || []
           this.eventLinks = links.filter(l => (l.access_level || 'public') === 'public')
-        } catch (e) { /* no links for this event */ }
-      } catch (e) {
-        console.error('Error loading certificate recipients:', e)
+        }
       } finally {
         this.isLoading = false
       }
@@ -536,7 +619,19 @@ export default {
       this.search = ''
     },
     roleLabel(r) {
-      return (r.participation_role || 'delegate').replace(/_/g, ' ')
+      return certificateCategory(r.participation_role)
+    },
+    presenterCategoryLabel(c) {
+      return c === ABSTRACT_ONLY_CATEGORY ? 'abstract presenter' : c
+    },
+    // True when this registration belongs to someone already in the presenter
+    // group, so they're only listed (and mailed) once, as a presenter.
+    isPresenter(reg) {
+      const email = (reg.email || '').trim().toLowerCase()
+      if (email && this.presenterEmails.has(email)) return true
+      return this.presenterNames.has(
+        tidyName([reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ')).toLowerCase()
+      )
     },
     // Support staff — ushers and secretariat get the same certificate, so
     // they're one group for this purpose even though they're two different
