@@ -288,7 +288,8 @@
 
     <!-- Preview & edit email modal (both per-row Send and bulk Email open this) -->
     <div v-if="emailModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @click.self="closeEmailModal">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="relative w-full max-w-2xl">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-h-[90vh] overflow-y-auto">
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
           <div>
             <div class="font-bold text-gray-800">Preview &amp; Edit Certificate Email</div>
@@ -297,7 +298,7 @@
               — use <code class="bg-gray-100 px-1 rounded">{{ mergeTagExample }}</code> and <code class="bg-gray-100 px-1 rounded">{{ mergeTagEventExample }}</code> in Subject/Message to personalize each one.
             </p>
           </div>
-          <button type="button" @click="closeEmailModal" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3">
+          <button type="button" @click="closeEmailModal" :disabled="emailModal.sending" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3 disabled:opacity-40">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
@@ -341,13 +342,23 @@
                   <p class="text-[11px] text-gray-400">
                     Delivered as a PDF attachment (rendered above as the live certificate) — most inboxes will also display this image directly in the message.
                   </p>
-              <div v-if="eventLinks.length" class="pt-2 border-t border-gray-100">
-                <div class="text-xs font-bold text-gray-600 mb-1">Useful links</div>
-                <ul class="text-sm space-y-0.5">
-                  <li v-for="l in eventLinks" :key="l.id">
-                    <a :href="l.link" target="_blank" class="hover:underline" style="color: rgb(0,150,180);">{{ l.name }}</a>
-                  </li>
-                </ul>
+              <!-- Mirrors mailer_util.links_to_html() — keep the two in step. -->
+              <div v-if="eventLinks.length" class="pt-3 border-t border-gray-100">
+                <div class="text-xs font-bold uppercase mb-2.5" style="letter-spacing: 1.5px; color: rgb(220,50,75);">Useful links</div>
+                <div class="space-y-2.5">
+                  <div v-for="l in eventLinks" :key="l.id"
+                    class="flex items-center gap-3 bg-white rounded-[10px] px-3.5 py-3"
+                    style="border: 1px solid #f3d3d9; border-left: 4px solid #fe5066;">
+                    <div class="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center text-lg" style="background: #fff0f2;">{{ linkIcon(l.name) }}</div>
+                    <div class="flex-1 min-w-0">
+                      <a :href="l.link" target="_blank" class="block text-[15px] font-bold text-gray-800 truncate hover:underline">{{ l.name }}</a>
+                      <div class="text-xs text-gray-500 truncate">{{ linkHost(l.link) }}</div>
+                    </div>
+                    <a :href="l.link" target="_blank"
+                      class="flex-shrink-0 text-white text-[13px] font-bold px-3.5 py-2 rounded-md hover:opacity-90"
+                      style="background: #fe5066;">Open &rarr;</a>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -356,15 +367,50 @@
         </div>
 
         <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
-          <button type="button" @click="closeEmailModal" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Cancel</button>
+          <button type="button" @click="closeEmailModal" :disabled="emailModal.sending" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg disabled:opacity-40">Cancel</button>
           <button type="button" @click="confirmSendEmail" :disabled="emailModal.sending || emailModal.rendering"
-            class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
+            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-60"
             style="background-color: rgb(254,80,103);">
+            <svg v-if="emailModal.sending" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.3" stroke-width="3"/>
+              <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            </svg>
             {{ emailModal.sending
               ? (emailModal.recipients.length > 1 ? `Sending ${emailModal.progressDone}/${emailModal.progressTotal}…` : 'Sending…')
               : (emailModal.recipients.length > 1 ? `Send ${emailModal.recipients.length} Emails` : 'Send Email') }}
           </button>
         </div>
+      </div>
+
+      <!-- Dispatch progress — covers the card (not just its scrolled viewport)
+           while certificates are rendered and uploaded. -->
+      <div v-if="emailModal.sending"
+        class="absolute inset-0 z-20 rounded-2xl bg-white/95 flex flex-col items-center justify-center px-8 text-center">
+        <div class="relative w-32 h-32">
+          <svg class="w-32 h-32 -rotate-90" viewBox="0 0 120 120" :class="{ 'animate-spin': !sendProgress.determinate }">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#fde2e6" stroke-width="10"/>
+            <circle cx="60" cy="60" r="52" fill="none" stroke="rgb(254,80,103)" stroke-width="10" stroke-linecap="round"
+              :stroke-dasharray="sendProgress.circumference"
+              :stroke-dashoffset="sendProgress.dashOffset"
+              style="transition: stroke-dashoffset 0.4s ease;"/>
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <template v-if="sendProgress.determinate">
+              <span class="text-2xl font-bold text-gray-800">{{ sendProgress.percent }}%</span>
+              <span class="text-[11px] text-gray-500">{{ emailModal.progressDone }} / {{ emailModal.progressTotal }}</span>
+            </template>
+            <svg v-else class="w-8 h-8" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+            </svg>
+          </div>
+        </div>
+        <div class="mt-5 font-bold text-gray-800">{{ emailModal.stage || 'Sending…' }}</div>
+        <div v-if="emailModal.currentName" class="mt-1 text-sm text-gray-500 truncate max-w-full">{{ emailModal.currentName }}</div>
+        <div v-if="sendProgress.determinate" class="mt-4 w-full max-w-xs h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full" style="background: rgb(254,80,103); transition: width 0.4s ease;" :style="{ width: sendProgress.percent + '%' }"></div>
+        </div>
+        <p class="mt-4 text-xs text-gray-400">Please keep this tab open until sending finishes.</p>
+      </div>
       </div>
     </div>
 
@@ -469,6 +515,20 @@ export default {
     }
   },
   computed: {
+    // Ring/bar state for the dispatch overlay. Bulk sends show real progress
+    // (certificates prepared / total); a single send just spins.
+    sendProgress() {
+      const m = this.emailModal
+      const circumference = 2 * Math.PI * 52
+      const determinate = !!m && m.progressTotal > 1
+      const pct = determinate ? Math.round((m.progressDone / m.progressTotal) * 100) : 25
+      return {
+        determinate,
+        percent: pct,
+        circumference,
+        dashOffset: circumference * (1 - pct / 100),
+      }
+    },
     selected() {
       return this.selections[this.type]
     },
@@ -920,12 +980,27 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
         sending: false,
         progressDone: 0,
         progressTotal: recipients.length,
+        stage: '',
+        currentName: '',
         error: '',
       }
       this.refreshPreview()
     },
     closeEmailModal() {
+      if (this.emailModal && this.emailModal.sending) return
       this.emailModal = null
+    },
+    // Link-card helpers for the modal preview — same rules as the email's
+    // mailer_util._link_icon() / host line.
+    linkIcon(label) {
+      const l = (label || '').toLowerCase()
+      if (['photo', 'picture', 'gallery', 'image'].some(k => l.includes(k))) return '📷'
+      if (['presentation', 'slide', 'programme', 'program'].some(k => l.includes(k))) return '📊'
+      if (['video', 'recording', 'stream', 'youtube'].some(k => l.includes(k))) return '🎥'
+      return '🔗'
+    },
+    linkHost(url) {
+      try { return new URL(url).host.replace(/^www\./, '') } catch (e) { return '' }
     },
     // Fits the live certificate sheet in the modal — the same markup the
     // print page (#/certificates/print) renders. Rasterizing is no longer
@@ -950,6 +1025,9 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       if (!m || m.sending) return
       m.sending = true
       m.error = ''
+      m.progressDone = 0
+      m.stage = ''
+      m.currentName = ''
       try {
         if (m.recipients.length === 1) {
           const p = m.recipients[0]
@@ -1167,7 +1245,10 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
 
     async doSendOne(p, subjectTpl, messageTpl) {
       this.rowMsg = null
+      const m = this.emailModal
+      if (m) { m.stage = 'Preparing certificate…'; m.currentName = `${p.name} — ${p.email}` }
       const { jpegBlob, pdfBlob } = await this.renderCertificateAssets(p.name)
+      if (m) m.stage = 'Sending email…'
       const form = new FormData()
       form.append('recipient_email', p.email)
       form.append('recipient_name', p.name)
@@ -1189,6 +1270,8 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
         const form = new FormData()
         const manifest = []
         for (const p of batch) {
+          modal.stage = `Preparing certificate ${modal.progressDone + 1} of ${modal.progressTotal}`
+          modal.currentName = p.name
           const { jpegBlob, pdfBlob } = await this.renderCertificateAssets(p.name)
           const base = p.key.replace(/[^A-Za-z0-9_-]+/g, '_')
           const filename = `${base}.jpg`
@@ -1202,6 +1285,8 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
           })
           modal.progressDone++
         }
+        modal.stage = `Uploading ${batch.length} certificate${batch.length === 1 ? '' : 's'}…`
+        modal.currentName = ''
         form.append('manifest', JSON.stringify(manifest))
         form.append('event_id', this.selectedEventId)
         const res = await this.api().post('/certificates/send-bulk', form)

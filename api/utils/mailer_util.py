@@ -4,6 +4,7 @@ import logging
 import time
 import uuid
 import html as _html
+from urllib.parse import urlparse
 from collections import deque
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -209,23 +210,63 @@ def links_to_html(links):
     <a> tags. Label/URL text is escaped; entries without an http(s) URL are
     silently dropped (defends against a stray javascript: URL or similar).
     Returns '' for an empty/falsy list, so callers can always include it."""
-    items = []
+    # Table-based cards (not flex/grid) so Outlook and Gmail render them the
+    # same; every style is inline because most clients strip <style> blocks.
+    font = "font-family:Arial,Helvetica,sans-serif;"
+    rows = []
     for entry in (links or []):
-        label = _html.escape(str((entry or {}).get("label") or (entry or {}).get("name") or "").strip())
+        raw_label = str((entry or {}).get("label") or (entry or {}).get("name") or "").strip()
         url = str((entry or {}).get("url") or (entry or {}).get("link") or "").strip()
-        if not label or not url.lower().startswith(("http://", "https://")):
+        if not raw_label or not url.lower().startswith(("http://", "https://")):
             continue
+        label = _html.escape(raw_label)
         safe_url = _html.escape(url, quote=True)
-        items.append(f'<li style="margin:2px 0;"><a href="{safe_url}" style="color:#0096b4;">{label}</a></li>')
-    if not items:
+        netloc = urlparse(url).netloc.lower()
+        host = _html.escape(netloc[4:] if netloc.startswith("www.") else netloc)
+        icon = _link_icon(raw_label)
+        rows.append(
+            '<tr><td style="padding:0 0 10px;">'
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+            'style="border-collapse:separate;background:#ffffff;border:1px solid #f3d3d9;'
+            'border-left:4px solid #fe5066;border-radius:10px;">'
+            '<tr>'
+            '<td width="44" valign="middle" style="padding:12px 0 12px 14px;">'
+            '<div style="width:36px;height:36px;line-height:36px;text-align:center;'
+            f'background:#fff0f2;border-radius:8px;font-size:18px;">{icon}</div></td>'
+            f'<td valign="middle" style="padding:12px 10px 12px 12px;{font}">'
+            f'<a href="{safe_url}" target="_blank" style="color:#1f2937;text-decoration:none;'
+            f'font-size:15px;font-weight:700;">{label}</a>'
+            f'<div style="font-size:12px;color:#6b7280;margin-top:2px;">{host}</div></td>'
+            f'<td align="right" valign="middle" style="padding:12px 14px 12px 0;white-space:nowrap;{font}">'
+            f'<a href="{safe_url}" target="_blank" style="display:inline-block;background:#fe5066;'
+            'color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;'
+            'padding:8px 14px;border-radius:6px;">Open &rarr;</a></td>'
+            '</tr></table>'
+            '</td></tr>'
+        )
+    if not rows:
         return ""
     return (
-        '<div style="max-width:650px;margin:16px auto 0;font-family:Arial,Helvetica,sans-serif;'
-        'font-size:14px;color:#1f2937;">'
-        '<div style="font-weight:700;margin-bottom:4px;">Useful links</div>'
-        f'<ul style="margin:0;padding-left:18px;">{"".join(items)}</ul>'
-        '</div>'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="max-width:650px;margin:24px auto 0;">'
+        f'<tr><td style="padding:0 0 12px;{font}font-size:12px;font-weight:700;'
+        'letter-spacing:1.5px;text-transform:uppercase;color:#dc324b;">Useful links</td></tr>'
+        f'{"".join(rows)}'
+        '</table>'
     )
+
+
+def _link_icon(label):
+    """A small emoji for a link card, picked from its label — emoji render in
+    every mainstream mail client without hosting any image files."""
+    l = label.lower()
+    if any(k in l for k in ("photo", "picture", "gallery", "image")):
+        return "&#128247;"   # camera
+    if any(k in l for k in ("presentation", "slide", "programme", "program")):
+        return "&#128202;"   # bar chart
+    if any(k in l for k in ("video", "recording", "stream", "youtube")):
+        return "&#127909;"   # movie camera
+    return "&#128279;"       # link
 
 
 def _image_invitation_body_html(cid="gala_invite_image", intro_html="", links_html=""):
