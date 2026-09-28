@@ -1040,7 +1040,7 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       const styleBlock = fontCss ? `<style>${fontCss}</style>` : ''
       // Serialize through XMLSerializer, not outerHTML: outerHTML emits HTML
       // entities (e.g. the &nbsp; run in the college header) that are invalid
-      // in an XML/SVG document and would make the SVG blob fail to parse.
+      // in an XML/SVG document and would make the SVG fail to parse.
       const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
       wrapper.appendChild(clone)
       const inner = new XMLSerializer().serializeToString(wrapper)
@@ -1051,8 +1051,11 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
         `</foreignObject>`,
         `</svg>`,
       ].join('')
-      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
+      // Must be a data: URI, NOT a blob: URL — a blob URL makes the browser
+      // treat the SVG as cross-origin and taint the canvas, so toBlob() throws
+      // SecurityError and the send fails ("Failed to send."). A data URI keeps
+      // it same-origin and the canvas is exportable.
+      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
       try {
         const img = new Image()
         img.decoding = 'async'
@@ -1067,8 +1070,16 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
         const ctx = canvas.getContext('2d')
         ctx.drawImage(img, 0, 0, width, height)
         return canvas
-      } finally {
-        URL.revokeObjectURL(url)
+      } catch (e) {
+        // Fall back to html2canvas only if this browser can't render the
+        // foreignObject SVG (rare); html2canvas's own font measurement can
+        // shift script fonts, but it still produces a usable certificate.
+        const hcMod = await import('html2canvas')
+        const html2canvas = hcMod.default || hcMod
+        return html2canvas(el, {
+          scale: 1, useCORS: true, backgroundColor: '#ffffff', logging: false,
+          width, height,
+        })
       }
     },
 
