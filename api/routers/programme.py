@@ -962,6 +962,95 @@ def update_entry(
     return _serialize(entry, m)
 
 
+
+# ── Backfill missing rooms from the official printed programme ─────────────
+# Every code below is transcribed directly from the 17th ECSACONM Biennial
+# Scientific Conference programme PDF (Oral Presentation Sessions 01, 02, 03,
+# 04 and 06 — there is no Session 05 in the printed programme), one dict per
+# room using the exact room wording already used in the database. Entries in
+# the printed programme that already carry the same room in the DB are
+# unaffected; this only fills in entries whose room is currently empty
+# (the "Unassigned" bucket on the Rooms page), matched by their abstract
+# code — never by session, since a single "session" slot runs in parallel
+# across all four rooms and can't be used to infer which room a given
+# presenter belongs to (see the 2026-09-28 investigation in deployment.md).
+PROGRAMME_ROOM_GUIDANCE = {
+    "GTCC-1": [
+        # Session 01
+        "HAE021", "HAE003", "HAE005", "HAE007",
+        # Session 02
+        "HAE038", "HAE011", "HAE013", "HAE015",
+        # Session 03
+        "HAE017", "HAE019", "HAE023", "HAE025", "HAE027", "HAE029",
+        # Session 04
+        "HAE031", "HAE033", "HAE035", "HAE037", "HAE039", "HAE002", "HAE043", "ID226",
+        # Session 06
+        "HAE056", "HAE057", "HAE058", "HAE059", "HAE060", "HAE061", "HAE062",
+    ],
+    "GTCC-2": [
+        "HAE041", "HAE004", "HAE006", "HAE008",
+        "HAE010", "HAE012", "HAE014", "HAE016",
+        "HAE018", "HAE020", "HAE022", "HAE024", "HAE026", "HAE028", "HAE030",
+        "HAE032", "HAE034", "HAE001", "HAE009", "HAE040", "HAE042", "HAE044",
+        "TECH003", "TECH006", "TECH008", "TECH010", "TECH012", "TECH014", "TECH016",
+    ],
+    "Jahazi-1 (room 3)": [
+        "RIN028", "RIN002", "RIN003", "RIN004",
+        "RIN005", "RIN006", "RIN007", "RIN008",
+        "RIN009", "RIN010", "RIN011", "RIN012", "RIN013", "RIN014", "RIN015",
+        "RIN016", "RIN017", "RIN018", "RIN019", "RIN020", "RIN021", "RIN022",
+        "RIN030", "RIN031", "RIN032", "RIN033", "RIN034", "RIN035", "TECH018",
+    ],
+    "Jahazi-2 (room 4)": [
+        "LAP011", "LAP021", "LAP003", "LAP014",
+        "LAP005", "LAP006", "LAP007", "LAP008",
+        "LAP009", "LAP010", "LAP001", "LAP012", "LAP013", "LAP004", "LAP015",
+        "LAP016", "LAP017", "LAP018", "LAP019", "LAP020", "LAP002", "LAP022",
+        "TECH005", "TECH007", "TECH009", "TECH011", "TECH013", "TECH015", "TECH017",
+    ],
+}
+# code -> room, built from the above (a code repeated across sessions in the
+# printed programme — e.g. HAE021 appears in both Session 01 and Session 03
+# — always maps to the same room in this data, so last-write-wins is safe).
+_CODE_TO_ROOM = {code: room for room, codes in PROGRAMME_ROOM_GUIDANCE.items() for code in codes}
+
+
+@router.post("/backfill-rooms")
+def backfill_rooms(
+    current_user: user_dependency,
+    db: Session = Depends(get_db),
+    auth_dependency: Auth = Depends(get_auth_dep),
+    event_id: int = Query(DEFAULT_EVENT_ID),
+):
+    """One-off data fix: fill in `room` for entries that don't have one yet,
+    using PROGRAMME_ROOM_GUIDANCE (transcribed from the official programme
+    PDF) matched by exact abstract code. Never touches an entry that already
+    has a room. Safe to run more than once — already-filled entries are
+    simply skipped on a re-run."""
+    auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
+    candidates = db.query(ProgrammeEntry).filter(
+        ProgrammeEntry.event_id == event_id,
+        ProgrammeEntry.deleted_at == None,
+        ProgrammeEntry.room == None,
+    ).all()
+    updated = []
+    not_found = []
+    for e in candidates:
+        room = _CODE_TO_ROOM.get((e.code or "").strip())
+        if room:
+            e.room = room
+            updated.append({"id": e.id, "code": e.code, "day": e.day, "session": e.session, "room": room})
+        else:
+            not_found.append({"id": e.id, "code": e.code, "presenter_name": e.presenter_name, "day": e.day, "session": e.session})
+    db.commit()
+    return {
+        "updated_count": len(updated),
+        "not_found_count": len(not_found),
+        "updated": updated,
+        "not_found": not_found,
+    }
+
+
 @router.delete("/room")
 def delete_room(
     current_user: user_dependency,

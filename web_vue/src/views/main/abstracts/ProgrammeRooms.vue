@@ -47,6 +47,15 @@
           </svg>
           Share Full Programme
         </button>
+        <button v-if="isAdmin" @click="runBackfillRooms" :disabled="backfillBusy"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border disabled:opacity-50"
+          style="border-color: rgb(180,120,0); color: rgb(150,100,0);"
+          title="Fill in Unassigned entries' rooms from the official programme PDF, matched by abstract code — never overwrites an existing room">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          {{ backfillBusy ? 'Filling rooms…' : 'Fill Unassigned Rooms from Programme' }}
+        </button>
         <button v-if="isAdmin" @click="openAdd" :disabled="addBusy"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
           style="border-color: rgb(34,197,94); color: rgb(16,150,60);">
@@ -677,6 +686,7 @@ export default {
       zipProgress: { active: false, room: '', percent: 0, loadedMB: '0.0', totalMB: null },
       roomDeleting: null,
       entryDeleting: null,
+      backfillBusy: false,
       matchOpen: false, matchLoading: false, matchReport: null, matchErr: '',
       matchApplying: false, matchApplyResult: null, matchSelected: {},
       linkChoice: {}, linkBusy: false,
@@ -1010,6 +1020,33 @@ export default {
         this.flash('Link copied — view-only, no login required, every room and day.')
       } catch (e) {
         window.prompt('Copy this link:', url)
+      }
+    },
+
+    // Fills in the room for every entry currently sitting in the
+    // "Unassigned" bucket, matched by abstract code against
+    // PROGRAMME_ROOM_GUIDANCE (transcribed from the official conference
+    // programme PDF) — never touches an entry that already has a room.
+    async runBackfillRooms() {
+      if (this.backfillBusy) return
+      if (!confirm('Fill in rooms for every Unassigned entry, matched by code against the official programme? Entries that already have a room are never touched.')) return
+      this.backfillBusy = true
+      try {
+        const res = await axios.post(`${this.apiUrl}/programme/backfill-rooms`, null, {
+          params: { event_id: 1 },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        const { updated_count, not_found_count } = res.data
+        this.flash(
+          `Filled in ${updated_count} room${updated_count === 1 ? '' : 's'}.` +
+          (not_found_count ? ` ${not_found_count} entr${not_found_count === 1 ? 'y has' : 'ies have'} no matching code in the programme — still Unassigned.` : ''),
+          false,
+        )
+        await this.loadRooms()
+      } catch (e) {
+        this.flash(e.response?.data?.detail || 'Failed to fill in rooms.', true)
+      } finally {
+        this.backfillBusy = false
       }
     },
 
