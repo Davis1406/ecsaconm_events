@@ -28,9 +28,9 @@
     <h3 style="position:absolute; top:96px; left:330px; width:1565px; font-family:Montserrat, Arial, sans-serif; font-size:35px; font-weight:800; line-height:1.25; text-align:justify; color:#1a1a1a">EAST, CENTRAL AND SOUTHERN AFRICA COLLEGE OF NURSING AND MIDWIFERY<br><span v-html="'&nbsp;'.repeat(59)"></span>(ECSACONM)</h3>
     <div style="position:absolute; top:201px; left:552px; width:950px; height:3px; background:#fe5066"></div>
     <h1 style="position:absolute; top:244px; left:160px; width:1600px; font-family:'Alex Brush', 'Brush Script MT', serif; font-size:172px; font-weight:400; line-height:1; text-align:center; color:#7a1220">Certificate</h1>
-    <div style="position:absolute; top:460px; left:460px; width:140px; height:2px; background:#fe5066"></div>
-    <h2 style="position:absolute; top:428px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:50px; font-weight:700; line-height:1; letter-spacing:8px; text-align:center; color:#f4253f">OF PARTICIPATION</h2>
-    <div style="position:absolute; top:452px; left:1320px; width:140px; height:2px; background:#fe5066"></div>
+    <div style="position:absolute; top:478px; left:460px; width:140px; height:2px; background:#fe5066"></div>
+    <h2 style="position:absolute; top:446px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:50px; font-weight:700; line-height:1; letter-spacing:8px; text-align:center; color:#f4253f">OF PARTICIPATION</h2>
+    <div style="position:absolute; top:470px; left:1320px; width:140px; height:2px; background:#fe5066"></div>
     <p style="position:absolute; top:526px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:32px; font-weight:600; letter-spacing:3px; text-align:center; color:#555555">THE FOLLOWING AWARD IS GIVEN TO</p>
     <!-- Fixed height so the underline stays put when a long name is shrunk to fit (see fitName). -->
     <p ref="name" style="position:absolute; top:600px; left:610px; width:700px; height:84px; line-height:84px; padding:0 0 16px; white-space:nowrap; overflow:hidden; font-family:'Playfair Display', Georgia, serif; font-size:63px; font-weight:600; font-style:italic; text-align:center; color:#1a1a1a; border-bottom:3px solid #fe5066; box-sizing:content-box">{{ name }}</p>

@@ -80,3 +80,43 @@ export function tidyName(name) {
   if (!n || (n !== n.toUpperCase() && n !== n.toLowerCase())) return n
   return n.toLowerCase().replace(/(^|[\s\-'.])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase())
 }
+
+// Every webfont the certificate actually paints with, as CSS font shorthands
+// covering the family/weight each element asks for (the px size in a load()
+// descriptor is only a hint — matching is by family/weight/style).
+const CERT_FONT_FACES = [
+  "400 172px 'Alex Brush'",      // "Certificate"
+  "800 35px 'Montserrat'",       // college name
+  "700 50px 'Montserrat'",       // "OF PARTICIPATION"
+  "600 32px 'Montserrat'",       // "THE FOLLOWING AWARD IS GIVEN TO"
+  "400 29px 'Montserrat'",       // body copy
+  "700 29px 'Montserrat'",       // signature name
+  "600 21px 'Montserrat'",       // "PRESIDENT"
+  "600 63px 'Playfair Display'", // the recipient's name
+]
+
+// Force the certificate webfonts to be applied before anything rasterizes or
+// prints the sheet. The certificate is laid out in absolute px, so a fallback
+// font is not a cosmetic difference: the 172px "Certificate" sits only 12px
+// above "OF PARTICIPATION" in box terms, and a fallback with taller metrics
+// paints straight through it.
+//
+// document.fonts.load() resolves with an EMPTY array — and no error — when the
+// @font-face rule isn't in the document yet, so awaiting it blindly can
+// silently rasterize with fallback fonts. Hence the explicit result check.
+// Returns true when every face really loaded.
+export async function ensureCertificateFonts() {
+  const loaded = await Promise.all(
+    CERT_FONT_FACES.map(face => document.fonts.load(face).catch(() => []))
+  )
+  await document.fonts.ready
+  const missing = CERT_FONT_FACES.filter((face, i) => !loaded[i].length)
+  if (missing.length) {
+    console.warn(
+      '[certificates] webfonts did not load — the certificate will render with ' +
+      'fallback fonts and the headings may overlap. Missing:', missing
+    )
+    return false
+  }
+  return true
+}

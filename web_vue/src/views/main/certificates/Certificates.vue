@@ -332,7 +332,7 @@ import CertificateSheet from '@/components/CertificateSheet.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
-import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, certificateCategory, tidyName } from '@/utils/certificateTypes'
+import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, certificateCategory, tidyName, ensureCertificateFonts } from '@/utils/certificateTypes'
 
 const API_URL = import.meta.env.VITE_API_URL
 // A paid abstract presenter who doesn't appear anywhere in the programme book.
@@ -774,19 +774,9 @@ export default {
     // html2canvas reads the live DOM, so the certificate webfonts must be
     // actually applied before rasterizing — otherwise it falls back to system
     // fonts and the 172px "Certificate" overlaps "OF PARTICIPATION".
-    // document.fonts.ready alone can resolve before the @font-face-triggered
-    // requests are issued, so load them explicitly first.
-    async ensureCertFonts() {
-      const faces = [
-        "400 172px 'Alex Brush'",
-        "700 50px 'Montserrat'",
-        "400 29px 'Montserrat'",
-        "600 63px 'Playfair Display'",
-      ]
-      await Promise.all(
-        faces.map(f => document.fonts.load(f).catch(() => {}))
-      )
-      await document.fonts.ready
+    // Shared with the print tab; it verifies the faces really loaded.
+    ensureCertFonts() {
+      return ensureCertificateFonts()
     },
 
     // ── Email the certificate ────────────────────────────────

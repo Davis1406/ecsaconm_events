@@ -19,7 +19,7 @@
 
 <script>
 import CertificateSheet from '@/components/CertificateSheet.vue'
-import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY } from '@/utils/certificateTypes'
+import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, ensureCertificateFonts } from '@/utils/certificateTypes'
 
 export default {
   name: 'CertificatePrintView',
@@ -47,13 +47,7 @@ export default {
     // Load the certificate fonts explicitly — fonts.ready alone can resolve
     // before the @font-face requests are issued, which renders the preview
     // with fallback fonts and overlaps "Certificate" / "OF PARTICIPATION".
-    await Promise.all([
-      document.fonts.load("400 172px 'Alex Brush'"),
-      document.fonts.load("700 50px 'Montserrat'"),
-      document.fonts.load("400 29px 'Montserrat'"),
-      document.fonts.load("600 63px 'Playfair Display'"),
-    ]).catch(() => {})
-    await document.fonts.ready
+    await ensureCertificateFonts()
     ;(this.$refs.sheets || []).forEach(s => { s.fitName(); s.fitBody() })
     this.ready = true
     if (this.autoPrint && this.names.length) {
