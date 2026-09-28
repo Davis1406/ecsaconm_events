@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
+from models.models import Link
 from utils import mailer_util
 
 router = APIRouter()
@@ -22,15 +23,33 @@ def _image_subtype(filename: str) -> str:
     return "png" if ext == "png" else "jpeg"
 
 
+def _public_links_html(db: Session, event_id: int) -> str:
+    """The event's current public Links (same ones on the event page's
+    Links tab, e.g. photo gallery / presentations) as a 'Useful links' HTML
+    block — fetched fresh from the DB at send time rather than trusted from
+    the client, so it always reflects whatever's actually public right now."""
+    if not event_id:
+        return ""
+    rows = (
+        db.query(Link)
+        .filter(Link.event_id == event_id, Link.deleted_at == None, Link.access_level == "public")
+        .order_by(Link.id.asc())
+        .all()
+    )
+    return mailer_util.links_to_html([{"label": l.name, "url": l.link} for l in rows])
+
+
 DEFAULT_SUBJECT = "Your certificate — ECSACONM Events"
 
 
 @router.post("/send")
 async def send_certificate(
     current_user: user_dependency,
+    db: Session = Depends(get_db),
     auth_dependency: Auth = Depends(get_auth_dep),
     recipient_email: str = Form(...),
     recipient_name: str = Form(...),
+    event_id: int = Form(None),
     subject: str = Form(None),
     message: str = Form(None),
     image: UploadFile = File(...),
@@ -39,11 +58,13 @@ async def send_certificate(
     """Email one person their certificate — the message body shows the
     certificate (rendered client-side to both a preview image and a PDF,
     uploaded here) inline, optionally preceded by a short admin-typed
-    message. The file the recipient keeps/downloads is the PDF, not the
-    preview image (email clients can't render a PDF inline, so the image is
-    still what's shown in the body). Mirrors the gala-invitation image
-    email. `subject`/`message` are exactly what the admin previewed and
-    edited client-side — sent as-is, not re-templated here."""
+    message and followed by the event's current public Links (photo
+    gallery, presentations, etc. — same ones on the event page's Links tab).
+    The file the recipient keeps/downloads is the PDF, not the preview image
+    (email clients can't render a PDF inline, so the image is still what's
+    shown in the body). Mirrors the gala-invitation image email.
+    `subject`/`message` are exactly what the admin previewed and edited
+    client-side — sent as-is, not re-templated here."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
     if not recipient_email or not recipient_email.strip():
         raise HTTPException(status_code=400, detail="recipient_email is required")
@@ -63,6 +84,7 @@ async def send_certificate(
             email_type="certificate",
             sent_by_user_id=current_user["user_id"],
             message_html=mailer_util.text_to_html(message),
+            links_html=_public_links_html(db, event_id),
             attachment_bytes=pdf_bytes,
             attachment_filename=f"Certificate - {recipient_name}.pdf",
             attachment_content_type="application/pdf",
@@ -77,8 +99,10 @@ async def send_certificate(
 async def send_certificates_bulk(
     current_user: user_dependency,
     background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
     auth_dependency: Auth = Depends(get_auth_dep),
     manifest: str = Form(...),
+    event_id: int = Form(None),
     images: List[UploadFile] = File(...),
     pdfs: List[UploadFile] = File(...),
 ):
@@ -89,8 +113,9 @@ async def send_certificates_bulk(
     personalized client-side (e.g. {{name}} substituted) exactly as
     previewed — matched up against the uploaded `images`/`pdfs` by filename.
     Each recipient gets their own certificate shown inline in the email body
-    (same as /send) with their own PDF as the actual attachment, sent over a
-    single pooled SMTP connection via mailer_util.send_bulk_emails
+    (same as /send) with their own PDF as the actual attachment, followed by
+    the event's current public Links, sent over a single pooled SMTP
+    connection via mailer_util.send_bulk_emails
     (backgrounded, same pattern as send_gala_invitations, so a large batch
     doesn't block the request) rather than one connection per recipient.
     Entries with no email (e.g. hand-typed names not tied to a registration)
@@ -112,6 +137,7 @@ async def send_certificates_bulk(
     for f in pdfs:
         by_pdf_filename[f.filename] = await f.read()
 
+    links_html = _public_links_html(db, event_id)
     jobs = []
     skipped = 0
     for entry in entries:
@@ -134,6 +160,7 @@ async def send_certificates_bulk(
             "inline_image_filename": f"Certificate - {name}.{(filename or 'certificate.jpg').rsplit('.', 1)[-1]}",
             "inline_image_subtype": _image_subtype(filename),
             "inline_message_html": mailer_util.text_to_html(entry.get("message")),
+            "inline_links_html": links_html,
             "inline_attachment_bytes": pdf_bytes,
             "inline_attachment_filename": f"Certificate - {name}.pdf",
             "inline_attachment_content_type": "application/pdf",

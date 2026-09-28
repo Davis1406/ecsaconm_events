@@ -142,8 +142,9 @@
             <strong>Generate</strong> opens a print tab — choose <strong>Save as PDF</strong> and turn on
             <strong>Background graphics</strong> for one PDF with a page per person.
             <strong>Email</strong> opens a preview you can edit before sending — each selected person gets their own
-            certificate as a PDF at their registration email; people typed under "Additional names" have no email on
-            file and are skipped. ALL-CAPS / lowercase names are tidied to Title Case.
+            certificate as a PDF at their registration email, followed by the event's public Links (Links tab);
+            people typed under "Additional names" have no email on file and are skipped. ALL-CAPS / lowercase names
+            are tidied to Title Case.
           </p>
           <button type="button" @click="openEmailModal(emailableSelected)" :disabled="!emailableSelected.length || !!emailModal"
             class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-40"
@@ -220,6 +221,14 @@
               <p class="text-[11px] text-gray-400">
                 Delivered as a PDF attachment (shown above as a preview) — most inboxes will also display this image directly in the message.
               </p>
+              <div v-if="eventLinks.length" class="pt-2 border-t border-gray-100">
+                <div class="text-xs font-bold text-gray-600 mb-1">Useful links</div>
+                <ul class="text-sm space-y-0.5">
+                  <li v-for="l in eventLinks" :key="l.id">
+                    <a :href="l.link" target="_blank" class="hover:underline" style="color: rgb(0,150,180);">{{ l.name }}</a>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
 
@@ -281,6 +290,9 @@ export default {
       registrations: [],
       attendedRegIds: new Set(),
       programme: [],
+      // Public Links (event page's Links tab) — appended to every
+      // certificate email as a "Useful links" block.
+      eventLinks: [],
       search: '',
       attendedOnly: false,
       categoryFilter: [],
@@ -452,6 +464,7 @@ export default {
       this.attendedRegIds = new Set()
       this.programme = []
       this.attendeeCategoryFilter = []
+      this.eventLinks = []
       this.selections = { attendee: {}, presenter: {}, usher: {} }
       if (!this.selectedEventId) return
       this.isLoading = true
@@ -477,6 +490,14 @@ export default {
         try {
           this.programme = (await api.get(`/programme`, { params: { event_id: eventId, limit: 5000 } })).data?.data || []
         } catch (e) { /* no programme for this event */ }
+
+        // Public Links (event page's Links tab) — shown under the
+        // certificate in the email preview; the actual send re-fetches
+        // these fresh server-side rather than trusting this copy.
+        try {
+          const links = (await api.get(`/events/${eventId}`)).data?.links || []
+          this.eventLinks = links.filter(l => (l.access_level || 'public') === 'public')
+        } catch (e) { /* no links for this event */ }
       } catch (e) {
         console.error('Error loading certificate recipients:', e)
       } finally {
@@ -652,6 +673,7 @@ export default {
       const form = new FormData()
       form.append('recipient_email', p.email)
       form.append('recipient_name', p.name)
+      form.append('event_id', this.selectedEventId)
       form.append('subject', this.renderTemplate(subjectTpl, p.name))
       form.append('message', this.renderTemplate(messageTpl, p.name))
       form.append('image', jpegBlob, 'certificate.jpg')
@@ -683,6 +705,7 @@ export default {
           modal.progressDone++
         }
         form.append('manifest', JSON.stringify(manifest))
+        form.append('event_id', this.selectedEventId)
         const res = await this.api().post('/certificates/send-bulk', form)
         queued += res.data?.queued || 0
         skipped += res.data?.skipped || 0

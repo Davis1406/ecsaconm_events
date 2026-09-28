@@ -203,11 +203,36 @@ def text_to_html(text):
     return _html.escape(text).replace("\n", "<br>")
 
 
-def _image_invitation_body_html(cid="gala_invite_image", intro_html=""):
+def links_to_html(links):
+    """Turn a list of {label, url} (or {name, link}, matching the Link
+    model's own field names) into a small 'Useful links' block of real
+    <a> tags. Label/URL text is escaped; entries without an http(s) URL are
+    silently dropped (defends against a stray javascript: URL or similar).
+    Returns '' for an empty/falsy list, so callers can always include it."""
+    items = []
+    for entry in (links or []):
+        label = _html.escape(str((entry or {}).get("label") or (entry or {}).get("name") or "").strip())
+        url = str((entry or {}).get("url") or (entry or {}).get("link") or "").strip()
+        if not label or not url.lower().startswith(("http://", "https://")):
+            continue
+        safe_url = _html.escape(url, quote=True)
+        items.append(f'<li style="margin:2px 0;"><a href="{safe_url}" style="color:#0096b4;">{label}</a></li>')
+    if not items:
+        return ""
+    return (
+        '<div style="max-width:650px;margin:16px auto 0;font-family:Arial,Helvetica,sans-serif;'
+        'font-size:14px;color:#1f2937;">'
+        '<div style="font-weight:700;margin-bottom:4px;">Useful links</div>'
+        f'<ul style="margin:0;padding-left:18px;">{"".join(items)}</ul>'
+        '</div>'
+    )
+
+
+def _image_invitation_body_html(cid="gala_invite_image", intro_html="", links_html=""):
     """The email body: the inline image, optionally preceded by a short
-    intro message (already HTML-safe — see text_to_html()). Callers that
-    never pass intro_html (the gala invitation) keep the original
-    image-only body."""
+    intro message and followed by a links block (both already HTML-safe —
+    see text_to_html()/links_to_html()). Callers that never pass either
+    (the gala invitation) keep the original image-only body."""
     intro = (
         f'<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;'
         f'color:#1f2937;max-width:650px;margin:0 auto 16px;line-height:1.6;">{intro_html}</div>'
@@ -217,19 +242,21 @@ def _image_invitation_body_html(cid="gala_invite_image", intro_html=""):
         '<!DOCTYPE html><html><body style="margin:0;padding:0;">'
         f'{intro}'
         f'<img src="cid:{cid}" alt="Certificate" style="display:block;width:100%;max-width:650px;margin:0 auto;" />'
+        f'{links_html}'
         '</body></html>'
     )
 
 
 def send_image_invitation_email(recipient_email, subject, image_bytes, image_filename, image_subtype="jpeg",
                                  email_type="general", sent_by_user_id=None, reply_to_email=None,
-                                 message_html="", attachment_bytes=None, attachment_filename=None,
+                                 message_html="", links_html="", attachment_bytes=None, attachment_filename=None,
                                  attachment_content_type=None):
     """Send a one-off email whose body shows the given image inline —
-    optionally preceded by a short intro message (already HTML-safe, see
-    text_to_html()). The downloadable file attached alongside it is the same
-    image by default, or `attachment_bytes` (e.g. a PDF certificate) if
-    given. Used for trial sends and single certificate sends."""
+    optionally preceded by a short intro message and followed by a links
+    block (both already HTML-safe, see text_to_html()/links_to_html()). The
+    downloadable file attached alongside it is the same image by default, or
+    `attachment_bytes` (e.g. a PDF certificate) if given. Used for trial
+    sends and single certificate sends."""
     smtp_host = os.getenv("SMTP_HOST", "")
     smtp_port = os.getenv("SMTP_PORT", "")
     smtp_username = os.getenv("SMTP_USERNAME", "")
@@ -250,7 +277,9 @@ def send_image_invitation_email(recipient_email, subject, image_bytes, image_fil
 
     log_id = _create_email_log(recipient_email, subject, email_type,
                                 sent_by_user_id, reply_to_email, "[image invitation]")
-    final_body = _inject_tracking_pixel(_image_invitation_body_html(intro_html=message_html), log_id)
+    final_body = _inject_tracking_pixel(
+        _image_invitation_body_html(intro_html=message_html, links_html=links_html), log_id,
+    )
 
     try:
         from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
@@ -397,7 +426,9 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
     where every job's image differs) rather than one shared image. A job may
     also carry `inline_message_html` — an optional intro message (already
     HTML-safe, see text_to_html()) shown above the image, personalized per
-    recipient the same way. A job may also carry `inline_attachment_bytes`/
+    recipient the same way — and/or `inline_links_html` (see
+    links_to_html()), shown below the image, usually the same for every job
+    in a batch but not required to be. A job may also carry `inline_attachment_bytes`/
     `inline_attachment_filename`/`inline_attachment_content_type` — a
     separate downloadable file (e.g. a PDF certificate) attached in place of
     the second inline-image copy; the inline preview stays an image
@@ -538,8 +569,9 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                 job_inline_filename = job.get("inline_image_filename", inline_image_filename)
                 job_inline_subtype = job.get("inline_image_subtype", inline_image_subtype)
                 job_message_html = job.get("inline_message_html", "")
+                job_links_html = job.get("inline_links_html", "")
                 final_body = _inject_tracking_pixel(
-                    _image_invitation_body_html(intro_html=job_message_html), log_id,
+                    _image_invitation_body_html(intro_html=job_message_html, links_html=job_links_html), log_id,
                 )
                 message = _build_image_invitation_message(
                     from_name, from_email, recipient_email, subject, reply_to_email,
