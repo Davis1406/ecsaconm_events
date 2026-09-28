@@ -88,6 +88,7 @@
                   <input type="checkbox" :checked="allShownSelected" @change="toggleAllShown($event.target.checked)"
                     class="rounded border-gray-300" title="Select all shown" />
                 </th>
+                <th class="px-3 py-3 text-left w-10" title="Row number">#</th>
                 <th class="px-3 py-3 text-left whitespace-nowrap">Name on certificate</th>
                 <th class="px-3 py-3 text-left whitespace-nowrap">{{ type === 'presenter' ? 'Session' : 'Category' }}</th>
                 <th class="px-3 py-3 text-left">{{ type === 'presenter' ? 'Presentation' : 'Country' }}</th>
@@ -95,27 +96,30 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="p in filteredPeople" :key="p.key" class="border-b border-gray-50 hover:bg-gray-50">
+              <tr v-for="(p, idx) in filteredPeople" :key="p.key" class="border-b border-gray-50 hover:bg-gray-50">
                 <td class="px-3 py-2.5">
                   <input type="checkbox" :checked="!!selected[p.key]" @change="toggle(p.key, $event.target.checked)"
                     class="rounded border-gray-300" />
                 </td>
+                <td class="px-3 py-2.5 text-xs text-gray-400 tabular-nums">{{ idx + 1 }}</td>
                 <td class="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{{ p.name }}</td>
                 <td class="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap capitalize">{{ p.category }}</td>
                 <td class="px-3 py-2.5 text-gray-500 text-xs">{{ p.detail }}</td>
-                <td class="px-3 py-2.5 whitespace-nowrap">
-                  <button v-if="p.email" type="button" @click="openEmailModal([p])"
-                    :disabled="!!emailModal"
-                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition disabled:opacity-40"
-                    :class="rowMsg && rowMsg.key === p.key
-                      ? (rowMsg.ok ? 'border-green-200 text-green-600' : 'border-red-200 text-red-500')
-                      : 'border-gray-200 text-gray-600 hover:border-pink-300 hover:text-pink-500'"
-                    :title="p.email">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                    </svg>
-                    {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Preview & Send' }}
-                  </button>
+                <td class="px-3 py-2.5">
+                  <template v-if="p.email">
+                    <div class="text-xs text-gray-500 break-all mb-1">{{ p.email }}</div>
+                    <button type="button" @click="openEmailModal([p])"
+                      :disabled="!!emailModal"
+                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition disabled:opacity-40 whitespace-nowrap"
+                      :class="rowMsg && rowMsg.key === p.key
+                        ? (rowMsg.ok ? 'border-green-200 text-green-600' : 'border-red-200 text-red-500')
+                        : 'border-gray-200 text-gray-600 hover:border-pink-300 hover:text-pink-500'">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                      </svg>
+                      {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Preview & Send' }}
+                    </button>
+                  </template>
                   <span v-else class="text-xs text-gray-300 italic" title="No email on file">no email</span>
                 </td>
               </tr>
