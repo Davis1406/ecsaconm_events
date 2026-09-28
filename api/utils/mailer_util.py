@@ -150,10 +150,16 @@ def _inject_tracking_pixel(email_body, log_id):
 
 
 def _build_image_invitation_message(from_name, from_email, recipient_email, subject, reply_to_email,
-                                     image_bytes, image_filename, image_subtype, final_body_html):
-    """A message whose body is nothing but the given image — embedded inline
-    (via a cid: reference, so it renders directly in the email body) and
-    attached again as a separate downloadable file, per the same bytes."""
+                                     image_bytes, image_filename, image_subtype, final_body_html,
+                                     attachment_bytes=None, attachment_filename=None,
+                                     attachment_content_type=None):
+    """A message whose body shows the given image inline (via a cid:
+    reference, so it renders directly in the email body). By default the
+    same image bytes are attached again as a separate downloadable file; if
+    `attachment_bytes` is given instead (e.g. a PDF version of the same
+    certificate), that's attached in place of the second image copy — the
+    inline preview stays an image (PDFs don't render inline in email
+    clients) but the file the recipient actually keeps is the PDF."""
     outer = MIMEMultipart("mixed")
     outer["From"] = f"{from_name} <{from_email}>"
     outer["To"] = recipient_email
@@ -172,9 +178,19 @@ def _build_image_invitation_message(from_name, from_email, recipient_email, subj
     related.attach(inline_img)
     outer.attach(related)
 
-    attach_img = MIMEImage(image_bytes, _subtype=image_subtype)
-    attach_img.add_header("Content-Disposition", "attachment", filename=image_filename)
-    outer.attach(attach_img)
+    if attachment_bytes:
+        maintype, _, subtype = (attachment_content_type or "application/pdf").partition("/")
+        file_part = MIMEBase(maintype, subtype or "octet-stream")
+        file_part.set_payload(attachment_bytes)
+        encoders.encode_base64(file_part)
+        file_part.add_header(
+            "Content-Disposition", f'attachment; filename="{attachment_filename or "certificate.pdf"}"'
+        )
+        outer.attach(file_part)
+    else:
+        attach_img = MIMEImage(image_bytes, _subtype=image_subtype)
+        attach_img.add_header("Content-Disposition", "attachment", filename=image_filename)
+        outer.attach(attach_img)
     return outer
 
 
@@ -207,11 +223,13 @@ def _image_invitation_body_html(cid="gala_invite_image", intro_html=""):
 
 def send_image_invitation_email(recipient_email, subject, image_bytes, image_filename, image_subtype="jpeg",
                                  email_type="general", sent_by_user_id=None, reply_to_email=None,
-                                 message_html=""):
-    """Send a one-off email whose body is the given image — embedded inline
-    in the HTML and attached again as a file — optionally preceded by a
-    short intro message (already HTML-safe, see text_to_html()). Used for
-    trial sends and single certificate sends."""
+                                 message_html="", attachment_bytes=None, attachment_filename=None,
+                                 attachment_content_type=None):
+    """Send a one-off email whose body shows the given image inline —
+    optionally preceded by a short intro message (already HTML-safe, see
+    text_to_html()). The downloadable file attached alongside it is the same
+    image by default, or `attachment_bytes` (e.g. a PDF certificate) if
+    given. Used for trial sends and single certificate sends."""
     smtp_host = os.getenv("SMTP_HOST", "")
     smtp_port = os.getenv("SMTP_PORT", "")
     smtp_username = os.getenv("SMTP_USERNAME", "")
@@ -240,6 +258,8 @@ def send_image_invitation_email(recipient_email, subject, image_bytes, image_fil
         message = _build_image_invitation_message(
             from_name, from_email, recipient_email, subject, reply_to_email,
             image_bytes, image_filename, image_subtype, final_body,
+            attachment_bytes=attachment_bytes, attachment_filename=attachment_filename,
+            attachment_content_type=attachment_content_type,
         )
 
         envelope_to = _cc_recipients(recipient_email)
@@ -377,7 +397,11 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
     where every job's image differs) rather than one shared image. A job may
     also carry `inline_message_html` — an optional intro message (already
     HTML-safe, see text_to_html()) shown above the image, personalized per
-    recipient the same way.
+    recipient the same way. A job may also carry `inline_attachment_bytes`/
+    `inline_attachment_filename`/`inline_attachment_content_type` — a
+    separate downloadable file (e.g. a PDF certificate) attached in place of
+    the second inline-image copy; the inline preview stays an image
+    (email clients don't render PDFs inline) but the kept file is the PDF.
 
     Returns {"sent": int, "failed": int}.
     """
@@ -520,6 +544,9 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                 message = _build_image_invitation_message(
                     from_name, from_email, recipient_email, subject, reply_to_email,
                     job_inline_bytes, job_inline_filename, job_inline_subtype, final_body,
+                    attachment_bytes=job.get("inline_attachment_bytes"),
+                    attachment_filename=job.get("inline_attachment_filename"),
+                    attachment_content_type=job.get("inline_attachment_content_type"),
                 )
                 if msgs_on_connection >= max_msgs_per_connection:
                     try:

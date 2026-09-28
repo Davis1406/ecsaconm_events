@@ -142,8 +142,8 @@
             <strong>Generate</strong> opens a print tab — choose <strong>Save as PDF</strong> and turn on
             <strong>Background graphics</strong> for one PDF with a page per person.
             <strong>Email</strong> opens a preview you can edit before sending — each selected person gets their own
-            certificate at their registration email; people typed under "Additional names" have no email on file and
-            are skipped. ALL-CAPS / lowercase names are tidied to Title Case.
+            certificate as a PDF at their registration email; people typed under "Additional names" have no email on
+            file and are skipped. ALL-CAPS / lowercase names are tidied to Title Case.
           </p>
           <button type="button" @click="openEmailModal(emailableSelected)" :disabled="!emailableSelected.length || !!emailModal"
             class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-40"
@@ -217,6 +217,9 @@
                 <div v-if="emailModal.rendering" class="py-10"><SpinnerComponent /></div>
                 <img v-else-if="emailModal.previewUrl" :src="emailModal.previewUrl" class="max-w-full rounded shadow-sm" style="max-height: 320px;" alt="Certificate preview" />
               </div>
+              <p class="text-[11px] text-gray-400">
+                Delivered as a PDF attachment (shown above as a preview) — most inboxes will also display this image directly in the message.
+              </p>
             </div>
           </div>
 
@@ -567,9 +570,11 @@ export default {
       if (this.emailModal?.previewUrl) URL.revokeObjectURL(this.emailModal.previewUrl)
       this.emailModal = null
     },
-    // Re-renders the certificate image for whichever recipient is currently
-    // picked in "Previewing as" — the image is the expensive part, so this
-    // only runs on open and on recipient change, not on every keystroke.
+    // Re-renders the certificate preview image for whichever recipient is
+    // currently picked in "Previewing as" — rendering is the expensive
+    // part, so this only runs on open and on recipient change, not on every
+    // keystroke. Only the JPEG is needed here; the PDF (what's actually
+    // attached) is built at send time in doSendOne/doEmailBulk.
     async refreshPreview() {
       const m = this.emailModal
       if (!m) return
@@ -577,10 +582,10 @@ export default {
       if (!person) return
       m.rendering = true
       try {
-        const blob = await this.renderCertificateImage(person.name)
+        const { jpegBlob } = await this.renderCertificateAssets(person.name)
         if (this.emailModal !== m) return // modal was closed/replaced meanwhile
         if (m.previewUrl) URL.revokeObjectURL(m.previewUrl)
-        m.previewUrl = URL.createObjectURL(blob)
+        m.previewUrl = URL.createObjectURL(jpegBlob)
       } finally {
         if (this.emailModal === m) m.rendering = false
       }
@@ -611,8 +616,13 @@ export default {
 
     // ── Email the certificate ────────────────────────────────
     // Rasterizes the hidden CertificateSheet (same markup the print page
-    // uses) to a JPEG blob via html2canvas, at full 1920x1080 resolution.
-    async renderCertificateImage(name) {
+    // uses) via html2canvas, once, then derives both:
+    //  - jpegBlob: shown inline in the email body (what the recipient sees
+    //    without opening anything — email clients can't render a PDF inline)
+    //  - pdfBlob: a full-bleed single-page PDF at the certificate's exact
+    //    1920x1080 design size — the actual file attached/kept, same
+    //    approach as the per-room PDF export on the Rooms page.
+    async renderCertificateAssets(name) {
       this.renderJob = { name, type: this.types[this.type] }
       await this.$nextTick()
       await document.fonts.ready
@@ -625,18 +635,27 @@ export default {
         scale: 1, useCORS: true, backgroundColor: '#ffffff', logging: false,
         width: 1920, height: 1080,
       })
-      return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      const jpegBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+
+      const jsMod = await import('jspdf')
+      const JsPDF = jsMod.jsPDF || (jsMod.default && jsMod.default.jsPDF) || jsMod.default
+      const pdf = new JsPDF({ unit: 'px', format: [1920, 1080], orientation: 'landscape', hotfixes: ['px_scaling'] })
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 1920, 1080, undefined, 'FAST')
+      const pdfBlob = pdf.output('blob')
+
+      return { jpegBlob, pdfBlob }
     },
 
     async doSendOne(p, subjectTpl, messageTpl) {
       this.rowMsg = null
-      const blob = await this.renderCertificateImage(p.name)
+      const { jpegBlob, pdfBlob } = await this.renderCertificateAssets(p.name)
       const form = new FormData()
       form.append('recipient_email', p.email)
       form.append('recipient_name', p.name)
       form.append('subject', this.renderTemplate(subjectTpl, p.name))
       form.append('message', this.renderTemplate(messageTpl, p.name))
-      form.append('image', blob, 'certificate.jpg')
+      form.append('image', jpegBlob, 'certificate.jpg')
+      form.append('pdf', pdfBlob, 'certificate.pdf')
       await this.api().post('/certificates/send', form)
       this.rowMsg = { key: p.key, ok: true, text: 'Sent' }
     },
@@ -650,11 +669,14 @@ export default {
         const form = new FormData()
         const manifest = []
         for (const p of batch) {
-          const blob = await this.renderCertificateImage(p.name)
-          const filename = `${p.key.replace(/[^A-Za-z0-9_-]+/g, '_')}.jpg`
-          form.append('images', blob, filename)
+          const { jpegBlob, pdfBlob } = await this.renderCertificateAssets(p.name)
+          const base = p.key.replace(/[^A-Za-z0-9_-]+/g, '_')
+          const filename = `${base}.jpg`
+          const pdfFilename = `${base}.pdf`
+          form.append('images', jpegBlob, filename)
+          form.append('pdfs', pdfBlob, pdfFilename)
           manifest.push({
-            filename, email: p.email, name: p.name,
+            filename, pdf_filename: pdfFilename, email: p.email, name: p.name,
             subject: this.renderTemplate(subjectTpl, p.name),
             message: this.renderTemplate(messageTpl, p.name),
           })

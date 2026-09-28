@@ -34,20 +34,24 @@ async def send_certificate(
     subject: str = Form(None),
     message: str = Form(None),
     image: UploadFile = File(...),
+    pdf: UploadFile = File(...),
 ):
-    """Email one person their certificate — the message body is the
-    certificate image (rendered client-side, uploaded here), embedded inline
-    and attached again as a file, optionally preceded by a short admin-typed
-    message. Mirrors the gala-invitation image email. `subject`/`message`
-    are exactly what the admin previewed and edited client-side — sent
-    as-is, not re-templated here."""
+    """Email one person their certificate — the message body shows the
+    certificate (rendered client-side to both a preview image and a PDF,
+    uploaded here) inline, optionally preceded by a short admin-typed
+    message. The file the recipient keeps/downloads is the PDF, not the
+    preview image (email clients can't render a PDF inline, so the image is
+    still what's shown in the body). Mirrors the gala-invitation image
+    email. `subject`/`message` are exactly what the admin previewed and
+    edited client-side — sent as-is, not re-templated here."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
     if not recipient_email or not recipient_email.strip():
         raise HTTPException(status_code=400, detail="recipient_email is required")
 
     image_bytes = await image.read()
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="Empty certificate image")
+    pdf_bytes = await pdf.read()
+    if not image_bytes or not pdf_bytes:
+        raise HTTPException(status_code=400, detail="Empty certificate image or PDF")
 
     try:
         mailer_util.send_image_invitation_email(
@@ -59,6 +63,9 @@ async def send_certificate(
             email_type="certificate",
             sent_by_user_id=current_user["user_id"],
             message_html=mailer_util.text_to_html(message),
+            attachment_bytes=pdf_bytes,
+            attachment_filename=f"Certificate - {recipient_name}.pdf",
+            attachment_content_type="application/pdf",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send certificate email: {e}")
@@ -73,20 +80,22 @@ async def send_certificates_bulk(
     auth_dependency: Auth = Depends(get_auth_dep),
     manifest: str = Form(...),
     images: List[UploadFile] = File(...),
+    pdfs: List[UploadFile] = File(...),
 ):
     """Email a batch of personalised certificates in one go.
 
-    `manifest` is a JSON array of {filename, email, name, subject, message}
-    — one entry per recipient, subject/message already personalized
-    client-side (e.g. {{name}} substituted) exactly as previewed — matched
-    up against the uploaded `images` by filename. Each recipient gets their
-    own certificate image embedded inline in the email body (same as
-    /send), sent over a single pooled SMTP connection via
-    mailer_util.send_bulk_emails (backgrounded, same pattern as
-    send_gala_invitations, so a large batch doesn't block the request) rather
-    than one connection per recipient. Entries with no email (e.g. hand-typed
-    names not tied to a registration) should already be filtered out
-    client-side, but are skipped defensively here too.
+    `manifest` is a JSON array of {filename, pdf_filename, email, name,
+    subject, message} — one entry per recipient, subject/message already
+    personalized client-side (e.g. {{name}} substituted) exactly as
+    previewed — matched up against the uploaded `images`/`pdfs` by filename.
+    Each recipient gets their own certificate shown inline in the email body
+    (same as /send) with their own PDF as the actual attachment, sent over a
+    single pooled SMTP connection via mailer_util.send_bulk_emails
+    (backgrounded, same pattern as send_gala_invitations, so a large batch
+    doesn't block the request) rather than one connection per recipient.
+    Entries with no email (e.g. hand-typed names not tied to a registration)
+    should already be filtered out client-side, but are skipped defensively
+    here too.
     """
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
     try:
@@ -99,15 +108,20 @@ async def send_certificates_bulk(
     by_filename = {}
     for img in images:
         by_filename[img.filename] = await img.read()
+    by_pdf_filename = {}
+    for f in pdfs:
+        by_pdf_filename[f.filename] = await f.read()
 
     jobs = []
     skipped = 0
     for entry in entries:
         filename = entry.get("filename")
+        pdf_filename = entry.get("pdf_filename")
         email = (entry.get("email") or "").strip()
         name = entry.get("name") or ""
         image_bytes = by_filename.get(filename)
-        if not email or not image_bytes:
+        pdf_bytes = by_pdf_filename.get(pdf_filename)
+        if not email or not image_bytes or not pdf_bytes:
             skipped += 1
             continue
         jobs.append({
@@ -120,6 +134,9 @@ async def send_certificates_bulk(
             "inline_image_filename": f"Certificate - {name}.{(filename or 'certificate.jpg').rsplit('.', 1)[-1]}",
             "inline_image_subtype": _image_subtype(filename),
             "inline_message_html": mailer_util.text_to_html(entry.get("message")),
+            "inline_attachment_bytes": pdf_bytes,
+            "inline_attachment_filename": f"Certificate - {name}.pdf",
+            "inline_attachment_content_type": "application/pdf",
         })
 
     if jobs:
