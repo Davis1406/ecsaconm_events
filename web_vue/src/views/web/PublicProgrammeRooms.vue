@@ -173,7 +173,7 @@ export default {
       loading: true,
       loadError: '',
       activeRoom: 'All Rooms',
-      activeDay: 'All Days',
+      activeDay: 'Day 1',
       showPastDays: false,
       entryCategory: 'oral',
       categoryOptions: [
@@ -282,6 +282,12 @@ export default {
         this.eventStartDate = res.data.event_start_date || null
         this.eventEndDate = res.data.event_end_date || null
         this.loadError = ''
+        // Defaults to Day 1, but if the conference has already happened,
+        // Day 1 is a "past day" and hidden by default — without this it'd
+        // silently render an empty page instead of showing anything.
+        if (this.activeDay === 'Day 1' && this.isDayPast('Day 1')) {
+          this.showPastDays = true
+        }
       } catch (e) {
         this.loadError = e.response?.data?.detail || 'Failed to load the programme.'
       } finally {

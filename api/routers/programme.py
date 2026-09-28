@@ -261,6 +261,31 @@ def _load_reg_rows(db: Session, event_id: int):
     return out
 
 
+# Plenary "activity" values that are protocol/ceremony agenda items rather
+# than an actual talk, keynote or panel discussion — a welcome address or an
+# MOU signing has no content to view, so it clutters the Plenary tab (and,
+# for entries like the Day-1 opening where the DG's name is entered twice
+# under two near-duplicate spellings for two different ceremony moments,
+# reads as noise). Matched on the exact activity text (case-insensitive) so
+# a mixed entry like "Presentations / President's Remarks / Graduation
+# Ceremony" — which DOES include real content — is never caught by this.
+CEREMONIAL_PLENARY_ACTIVITIES = {
+    "welcome address",
+    "procession by chapters",
+    "greetings — official opening",
+    "remarks — official opening",
+    "official opening speech",
+    "graduation ceremony",
+    "mou signing",
+}
+
+
+def _is_ceremonial_plenary(entry: ProgrammeEntry) -> bool:
+    if entry.category != "plenary":
+        return False
+    return (entry.activity or "").strip().lower() in CEREMONIAL_PLENARY_ACTIVITIES
+
+
 def _effective_presentation_file(entry: ProgrammeEntry):
     """The slide file to serve for this entry: the one uploaded directly
     against it (via the Rooms admin page) if there is one, else the file the
@@ -453,6 +478,8 @@ def programme_rooms(
     rooms = {}   # (day, room) -> {total, with_slide, entries: [...]}
     order = {}
     for e in entries:
+        if _is_ceremonial_plenary(e):
+            continue
         name = e.presenter_name or ""
         key = _norm(name)
         if name and key not in cache:
@@ -499,6 +526,8 @@ def public_programme_rooms(
     ).all()
     rooms = {}   # (day, room) -> {total, with_slide, entries: [...]}
     for e in entries:
+        if _is_ceremonial_plenary(e):
+            continue
         day = e.day or "Unassigned"
         room_label = e.room or "Unassigned"
         bucket = rooms.setdefault((day, room_label), {
