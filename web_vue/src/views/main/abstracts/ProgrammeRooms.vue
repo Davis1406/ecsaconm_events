@@ -699,26 +699,33 @@
             <div v-else class="rounded-lg border border-gray-200 divide-y divide-gray-100">
               <div v-for="(row, i) in bulkRows" :key="i" class="px-4 py-3 flex flex-col gap-2">
                 <div class="flex items-start gap-3">
-                  <input type="checkbox" v-model="row.include" :disabled="bulkBusy" class="mt-1.5 accent-cp-secondary flex-shrink-0" />
+                  <input type="checkbox" v-model="row.include" :disabled="bulkBusy || row.tooLarge" class="mt-1.5 accent-cp-secondary flex-shrink-0" />
                   <div class="flex-1 min-w-0">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span class="font-semibold text-sm truncate">{{ row.name }}</span>
+                      <span class="font-semibold text-sm truncate" :class="row.tooLarge ? 'text-gray-400' : ''">{{ row.name }}</span>
                       <span class="text-[11px] text-gray-400">{{ row.sizeLabel }}</span>
-                      <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" :class="bulkConfidenceClass(row.confidence)">
+                      <span v-if="row.tooLarge" class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase bg-red-100 text-red-700">Too large</span>
+                      <span v-else class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" :class="bulkConfidenceClass(row.confidence)">
                         {{ bulkConfidenceLabel(row.confidence) }}
                       </span>
                       <span v-if="row.status === 'uploading'" class="text-[11px] font-semibold text-blue-600">Uploading… {{ row.progress }}%</span>
                       <span v-if="row.status === 'done'" class="text-[11px] font-semibold text-green-600">✓ Uploaded</span>
                       <span v-if="row.status === 'error'" class="text-[11px] font-semibold text-red-600">{{ row.error }}</span>
                     </div>
-                    <input v-model="row.pickText" @input="resolveBulkPick(row)" list="bulkEntryOptions"
-                      :disabled="bulkBusy || row.status === 'done'"
-                      placeholder="Type presenter name, code, or title to search the programme…"
-                      class="field-input !py-1.5 !text-xs mt-1 w-full disabled:bg-gray-50 disabled:text-gray-400" />
-                    <div v-if="row.status === 'uploading'" class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
-                      <div class="h-full rounded-full transition-all duration-150" :style="{ width: row.progress + '%', backgroundColor: 'rgb(120,80,200)' }"></div>
-                    </div>
-                    <p v-if="row.include && !row.entryId" class="text-[11px] text-amber-600 mt-1">No entry chosen yet — pick one above or untick to skip this file.</p>
+                    <p v-if="row.tooLarge" class="text-[11px] text-red-600 mt-1">
+                      Over 95MB — our CDN (Cloudflare) rejects uploads past ~100MB no matter how long you wait, this can't go through this tool.
+                      Upload it to YouTube (unlisted) or Google Drive, then paste the link on this entry's <strong>Video link</strong> field (pencil icon on the room card) instead.
+                    </p>
+                    <template v-else>
+                      <input v-model="row.pickText" @input="resolveBulkPick(row)" list="bulkEntryOptions"
+                        :disabled="bulkBusy || row.status === 'done'"
+                        placeholder="Type presenter name, code, or title to search the programme…"
+                        class="field-input !py-1.5 !text-xs mt-1 w-full disabled:bg-gray-50 disabled:text-gray-400" />
+                      <div v-if="row.status === 'uploading'" class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
+                        <div class="h-full rounded-full transition-all duration-150" :style="{ width: row.progress + '%', backgroundColor: 'rgb(120,80,200)' }"></div>
+                      </div>
+                      <p v-if="row.include && !row.entryId" class="text-[11px] text-amber-600 mt-1">No entry chosen yet — pick one above or untick to skip this file.</p>
+                    </template>
                   </div>
                   <button v-if="row.status !== 'done'" @click="removeBulkRow(row)" :disabled="bulkBusy" title="Remove"
                     class="text-gray-300 hover:text-red-500 flex-shrink-0 disabled:opacity-40">
@@ -796,6 +803,13 @@ const BULK_STOPWORDS = new Set([
   'mrs', 'ms', 'phd', 'rn', 'rm', 'msc', 'bsc', 'copy', 'new',
 ])
 const BULK_CODE_RE = /\b(HAE|RIN|LAP|TECH|CLIM|ID)-?0*(\d{1,4})\b/i
+// Production runs behind Cloudflare's proxy, which hard-caps request bodies
+// at 100MB (confirmed directly: a 150MB test upload got an instant 413 from
+// Cloudflare itself, never even reaching nginx) — no server-side setting can
+// raise this. A file over this line will never succeed through this tool no
+// matter how long it "uploads" for, so it's refused client-side up front
+// with a pointer to the Video link field instead of hanging.
+const BULK_MAX_UPLOAD_BYTES = 95 * 1024 * 1024
 
 function bulkNorm(s) {
   return (s || '')
@@ -1809,6 +1823,7 @@ export default {
       if (!files.length) return
       const rows = files.map(file => {
         const { entry, confidence, reason } = bulkBestMatch(file.name, this.bulkTargets)
+        const tooLarge = file.size > BULK_MAX_UPLOAD_BYTES
         return {
           file,
           name: file.name,
@@ -1818,10 +1833,13 @@ export default {
           pickText: entry ? bulkEntryLabel(entry) : '',
           confidence,
           reason,
+          tooLarge,
           // Only auto-include files we're at least reasonably sure about —
           // "low"/"none" still show up (so nothing silently gets skipped)
-          // but need the admin to actively confirm a target first.
-          include: confidence === 'high' || confidence === 'medium',
+          // but need the admin to actively confirm a target first. A file
+          // over the Cloudflare cap can never succeed here regardless of
+          // match confidence, so it's never auto-included.
+          include: !tooLarge && (confidence === 'high' || confidence === 'medium'),
           status: 'pending', // pending | uploading | done | error
           error: '',
           progress: 0, // 0-100, this file's own upload percentage
@@ -1863,7 +1881,7 @@ export default {
       return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
     },
     async runBulkUpload() {
-      const rows = this.bulkRows.filter(r => r.include && r.entryId && r.status !== 'done')
+      const rows = this.bulkRows.filter(r => r.include && r.entryId && !r.tooLarge && r.status !== 'done')
       if (!rows.length) return
       this.bulkBusy = true
       this.bulkErr = ''
@@ -1889,6 +1907,11 @@ export default {
               Authorization: `Bearer ${this.accessToken}`,
               'Content-Type': 'multipart/form-data',
             },
+            // Safety net only — every row here is already under the 95MB
+            // Cloudflare ceiling, so this should never legitimately be hit;
+            // it just stops a genuinely dead connection from freezing the
+            // rest of the batch indefinitely.
+            timeout: 10 * 60 * 1000,
             onUploadProgress: (evt) => {
               const rowTotal = evt.total || row.file.size || 1
               row.progress = Math.min(100, Math.round((evt.loaded / rowTotal) * 100))
@@ -1908,7 +1931,13 @@ export default {
           this.updateAllEntries({ id: row.entryId, presentation_file: res.data.presentation_file, presentation_uploaded_at: new Date().toISOString() })
         } catch (e) {
           row.status = 'error'
-          row.error = e.response?.data?.detail || 'Upload failed.'
+          if (e.code === 'ECONNABORTED') {
+            row.error = 'Timed out — connection stalled. Check your internet and retry.'
+          } else if (e.response?.status === 413) {
+            row.error = 'Rejected as too large by the server/CDN.'
+          } else {
+            row.error = e.response?.data?.detail || 'Upload failed.'
+          }
         } finally {
           this.bulkProgress.done++
           bytesDoneBeforeCurrent += row.file.size || 0
