@@ -580,6 +580,12 @@ def presenters_with_slides(
     data = []
     for c in candidates:
         info = assigned_info.get(c["abstract_id"], [])
+        # "assigned" means placed in an actual room — a programme entry that
+        # exists but whose room is still unset (shows as the "Unassigned"
+        # room bucket on the Rooms page) still needs assigning, so it must
+        # not count as assigned here, or it silently disappears from the
+        # Assign-to-Room pick-list with no way to place it.
+        assigned = any((e.get("room") or "").strip() for e in info)
         data.append({
             "abstract_id": c["abstract_id"],
             "title": c["title"],
@@ -588,7 +594,7 @@ def presenters_with_slides(
             "presentation_uploaded_at": c["presentation_uploaded_at"],
             "presentation_type": c["presentation_type"],
             "has_presentation": True,
-            "assigned": bool(info),
+            "assigned": assigned,
             "entries": info,
         })
     data.sort(key=lambda d: (d["presenter"] or "").lower())
