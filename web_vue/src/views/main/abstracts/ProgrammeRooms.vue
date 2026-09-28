@@ -698,44 +698,100 @@
               No files chosen yet.
             </div>
 
-            <div v-else class="rounded-lg border border-gray-200 divide-y divide-gray-100">
-              <div v-for="(row, i) in bulkRows" :key="i" class="px-4 py-3 flex flex-col gap-2">
-                <div class="flex items-start gap-3">
-                  <input type="checkbox" v-model="row.include" :disabled="bulkBusy || row.tooLarge" class="mt-1.5 accent-cp-secondary flex-shrink-0" />
-                  <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span class="font-semibold text-sm truncate" :class="row.tooLarge ? 'text-gray-400' : ''">{{ row.name }}</span>
-                      <span class="text-[11px] text-gray-400">{{ row.sizeLabel }}</span>
-                      <span v-if="row.tooLarge" class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase bg-red-100 text-red-700">Too large</span>
-                      <span v-else class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" :class="bulkConfidenceClass(row.confidence)">
-                        {{ bulkConfidenceLabel(row.confidence) }}
-                      </span>
-                      <span v-if="row.status === 'uploading'" class="text-[11px] font-semibold text-blue-600">Uploading… {{ row.progress }}%</span>
-                      <span v-if="row.status === 'done'" class="text-[11px] font-semibold text-green-600">✓ Uploaded</span>
-                      <span v-if="row.status === 'error'" class="text-[11px] font-semibold text-red-600">{{ row.error }}</span>
-                    </div>
-                    <p v-if="row.tooLarge" class="text-[11px] text-red-600 mt-1">
-                      Over 95MB — our CDN (Cloudflare) rejects uploads past ~100MB no matter how long you wait, this can't go through this tool.
-                      Upload it to YouTube (unlisted) or Google Drive, then paste the link on this entry's <strong>Video link</strong> field (pencil icon on the room card) instead.
-                    </p>
-                    <template v-else>
-                      <input v-model="row.pickText" @input="resolveBulkPick(row)" list="bulkEntryOptions"
-                        :disabled="bulkBusy || row.status === 'done'"
-                        placeholder="Type presenter name, code, or title to search the programme…"
-                        class="field-input !py-1.5 !text-xs mt-1 w-full disabled:bg-gray-50 disabled:text-gray-400" />
-                      <div v-if="row.status === 'uploading'" class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
-                        <div class="h-full rounded-full transition-all duration-150" :style="{ width: row.progress + '%', backgroundColor: 'rgb(120,80,200)' }"></div>
+            <template v-else>
+              <!-- Not uploaded yet — the entry this file matched to has no
+              slide/video on it at all, this is a fresh upload. -->
+              <div class="text-xs font-bold text-amber-700 uppercase tracking-wide">Not uploaded yet ({{ bulkRowsPending.length }})</div>
+              <div v-if="bulkRowsPending.length === 0" class="py-4 text-center text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-lg">
+                Every selected file already matched something with existing content — see below.
+              </div>
+              <div v-else class="rounded-lg border border-gray-200 divide-y divide-gray-100">
+                <div v-for="row in bulkRowsPending" :key="row._uid" class="px-4 py-3 flex flex-col gap-2">
+                  <div class="flex items-start gap-3">
+                    <input type="checkbox" v-model="row.include" :disabled="bulkBusy || row.tooLarge" class="mt-1.5 accent-cp-secondary flex-shrink-0" />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span class="font-semibold text-sm truncate" :class="row.tooLarge ? 'text-gray-400' : ''">{{ row.name }}</span>
+                        <span class="text-[11px] text-gray-400">{{ row.sizeLabel }}</span>
+                        <span v-if="row.tooLarge" class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase bg-red-100 text-red-700">Too large</span>
+                        <span v-else class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" :class="bulkConfidenceClass(row.confidence)">
+                          {{ bulkConfidenceLabel(row.confidence) }}
+                        </span>
+                        <span v-if="row.status === 'uploading'" class="text-[11px] font-semibold text-blue-600">Uploading… {{ row.progress }}%</span>
+                        <span v-if="row.status === 'done'" class="text-[11px] font-semibold text-green-600">✓ Uploaded</span>
+                        <span v-if="row.status === 'error'" class="text-[11px] font-semibold text-red-600">{{ row.error }}</span>
                       </div>
-                      <p v-if="row.include && !row.entryId" class="text-[11px] text-amber-600 mt-1">No entry chosen yet — pick one above or untick to skip this file.</p>
-                    </template>
+                      <p v-if="row.tooLarge" class="text-[11px] text-red-600 mt-1">
+                        Over 95MB — our CDN (Cloudflare) rejects uploads past ~100MB no matter how long you wait, this can't go through this tool.
+                        Upload it to YouTube (unlisted) or Google Drive, then paste the link on this entry's <strong>Video link</strong> field (pencil icon on the room card) instead.
+                      </p>
+                      <template v-else>
+                        <input v-model="row.pickText" @input="resolveBulkPick(row)" list="bulkEntryOptions"
+                          :disabled="bulkBusy || row.status === 'done'"
+                          placeholder="Type presenter name, code, or title to search the programme…"
+                          class="field-input !py-1.5 !text-xs mt-1 w-full disabled:bg-gray-50 disabled:text-gray-400" />
+                        <div v-if="row.status === 'uploading'" class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
+                          <div class="h-full rounded-full transition-all duration-150" :style="{ width: row.progress + '%', backgroundColor: 'rgb(120,80,200)' }"></div>
+                        </div>
+                        <p v-if="row.include && !row.entryId" class="text-[11px] text-amber-600 mt-1">No entry chosen yet — pick one above or untick to skip this file.</p>
+                      </template>
+                    </div>
+                    <button v-if="row.status !== 'done'" @click="removeBulkRow(row)" :disabled="bulkBusy" title="Remove"
+                      class="text-gray-300 hover:text-red-500 flex-shrink-0 disabled:opacity-40">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
                   </div>
-                  <button v-if="row.status !== 'done'" @click="removeBulkRow(row)" :disabled="bulkBusy" title="Remove"
-                    class="text-gray-300 hover:text-red-500 flex-shrink-0 disabled:opacity-40">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                  </button>
                 </div>
               </div>
-            </div>
+
+              <!-- Already uploaded — the matched entry already has a file or
+              video link. Unticked by default so nothing gets silently
+              replaced; tick a row here to deliberately overwrite it. -->
+              <button type="button" @click="bulkShowAlreadyUploaded = !bulkShowAlreadyUploaded"
+                class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-green-50 hover:bg-green-100 transition mt-1">
+                <span class="text-xs font-bold text-green-700">Already uploaded — will replace ({{ bulkRowsAlreadyUploaded.length }})</span>
+                <svg class="w-4 h-4 text-green-600 transition-transform" :class="bulkShowAlreadyUploaded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+              <div v-if="bulkShowAlreadyUploaded && bulkRowsAlreadyUploaded.length" class="rounded-lg border border-gray-200 divide-y divide-gray-100">
+                <div v-for="row in bulkRowsAlreadyUploaded" :key="row._uid" class="px-4 py-3 flex flex-col gap-2">
+                  <div class="flex items-start gap-3">
+                    <input type="checkbox" v-model="row.include" :disabled="bulkBusy || row.tooLarge" class="mt-1.5 accent-cp-secondary flex-shrink-0" />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span class="font-semibold text-sm truncate" :class="row.tooLarge ? 'text-gray-400' : ''">{{ row.name }}</span>
+                        <span class="text-[11px] text-gray-400">{{ row.sizeLabel }}</span>
+                        <span v-if="row.tooLarge" class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase bg-red-100 text-red-700">Too large</span>
+                        <span v-else class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" :class="bulkConfidenceClass(row.confidence)">
+                          {{ bulkConfidenceLabel(row.confidence) }}
+                        </span>
+                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase bg-green-100 text-green-700">
+                          Has {{ row.entry && row.entry.has_presentation ? 'file' : 'video' }}
+                        </span>
+                        <span v-if="row.status === 'uploading'" class="text-[11px] font-semibold text-blue-600">Uploading… {{ row.progress }}%</span>
+                        <span v-if="row.status === 'done'" class="text-[11px] font-semibold text-green-600">✓ Uploaded</span>
+                        <span v-if="row.status === 'error'" class="text-[11px] font-semibold text-red-600">{{ row.error }}</span>
+                      </div>
+                      <template v-if="!row.tooLarge">
+                        <input v-model="row.pickText" @input="resolveBulkPick(row)" list="bulkEntryOptions"
+                          :disabled="bulkBusy || row.status === 'done'"
+                          placeholder="Type presenter name, code, or title to search the programme…"
+                          class="field-input !py-1.5 !text-xs mt-1 w-full disabled:bg-gray-50 disabled:text-gray-400" />
+                        <div v-if="row.status === 'uploading'" class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
+                          <div class="h-full rounded-full transition-all duration-150" :style="{ width: row.progress + '%', backgroundColor: 'rgb(120,80,200)' }"></div>
+                        </div>
+                      </template>
+                    </div>
+                    <button v-if="row.status !== 'done'" @click="removeBulkRow(row)" :disabled="bulkBusy" title="Remove"
+                      class="text-gray-300 hover:text-red-500 flex-shrink-0 disabled:opacity-40">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+
             <datalist id="bulkEntryOptions">
               <option v-for="o in bulkDatalistOptions" :key="o.id" :value="o.label" />
             </datalist>
@@ -744,42 +800,6 @@
               {{ bulkUnresolvedCount }} selected file{{ bulkUnresolvedCount !== 1 ? 's' : '' }} still need{{ bulkUnresolvedCount === 1 ? 's' : '' }} a matching entry before they can upload.
             </div>
             <div v-if="bulkErr" class="px-3 py-2 rounded-md bg-red-50 text-red-600 text-sm">{{ bulkErr }}</div>
-
-            <!-- Programme-wide status — separate from whatever's in the file
-            picker above, so the admin can see overall progress at a glance. -->
-            <div class="border-t border-gray-100 pt-3 space-y-2">
-              <button type="button" @click="bulkShowNotUploaded = !bulkShowNotUploaded"
-                class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 transition">
-                <span class="text-xs font-bold text-amber-700">Not uploaded yet ({{ bulkNotUploadedTargets.length }})</span>
-                <svg class="w-4 h-4 text-amber-600 transition-transform" :class="bulkShowNotUploaded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                </svg>
-              </button>
-              <div v-if="bulkShowNotUploaded" class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
-                <div v-if="bulkNotUploadedTargets.length === 0" class="px-4 py-4 text-center text-xs text-gray-400 italic">Everything has a file or video link. 🎉</div>
-                <div v-for="t in bulkNotUploadedTargets" :key="t.id" class="px-3 py-2 text-xs text-gray-600">
-                  {{ t.label }}
-                </div>
-              </div>
-
-              <button type="button" @click="bulkShowUploaded = !bulkShowUploaded"
-                class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-green-50 hover:bg-green-100 transition">
-                <span class="text-xs font-bold text-green-700">Already uploaded ({{ bulkUploadedTargets.length }})</span>
-                <svg class="w-4 h-4 text-green-600 transition-transform" :class="bulkShowUploaded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                </svg>
-              </button>
-              <div v-if="bulkShowUploaded" class="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
-                <div v-if="bulkUploadedTargets.length === 0" class="px-4 py-4 text-center text-xs text-gray-400 italic">Nothing uploaded yet.</div>
-                <div v-for="t in bulkUploadedTargets" :key="t.id" class="px-3 py-2 text-xs text-gray-600 flex items-center justify-between gap-2">
-                  <span class="truncate">{{ t.label }}</span>
-                  <span class="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase"
-                    :class="t.has_presentation ? 'bg-teal-100 text-teal-700' : 'bg-purple-100 text-purple-700'">
-                    {{ t.has_presentation ? 'File' : 'Video' }}
-                  </span>
-                </div>
-              </div>
-            </div>
           </template>
         </div>
 
@@ -848,6 +868,7 @@ const BULK_CODE_RE = /\b(HAE|RIN|LAP|TECH|CLIM|ID)-?0*(\d{1,4})\b/i
 // matter how long it "uploads" for, so it's refused client-side up front
 // with a pointer to the Video link field instead of hanging.
 const BULK_MAX_UPLOAD_BYTES = 95 * 1024 * 1024
+let bulkRowUidSeq = 0
 
 function bulkNorm(s) {
   return (s || '')
@@ -952,7 +973,7 @@ export default {
       bulkOpen: false, bulkTargetsLoading: false, bulkTargets: [], bulkTargetsErr: '',
       bulkRows: [], bulkBusy: false, bulkProgress: { done: 0, total: 0 }, bulkErr: '',
       bulkAcceptedExtensions: '.pdf,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp,.mp4,.mov,.m4v,.webm',
-      bulkShowUploaded: false, bulkShowNotUploaded: true,
+      bulkShowAlreadyUploaded: false,
     }
   },
 
@@ -1116,16 +1137,15 @@ export default {
     bulkUnresolvedCount() {
       return this.bulkRows.filter(r => r.include && !r.entryId).length
     },
-    // Status of the whole programme, independent of whatever's in the file
-    // picker right now — lets the admin see overall progress (and who's
-    // still missing something) without leaving the modal. Reactive to
-    // uploads that just completed, since runBulkUpload patches bulkTargets
-    // in place as each one finishes.
-    bulkUploadedTargets() {
-      return this.bulkTargets.filter(t => t.has_presentation || t.video_url).map(t => ({ ...t, label: bulkEntryLabel(t) }))
+    // Split the SELECTED files (not the whole programme) by whether the
+    // entry each one matched to already has something on it — so picking a
+    // folder that overlaps with earlier uploads doesn't silently re-upload/
+    // overwrite anything the admin didn't mean to touch.
+    bulkRowsAlreadyUploaded() {
+      return this.bulkRows.filter(r => r.entry && (r.entry.has_presentation || r.entry.video_url))
     },
-    bulkNotUploadedTargets() {
-      return this.bulkTargets.filter(t => !t.has_presentation && !t.video_url).map(t => ({ ...t, label: bulkEntryLabel(t) }))
+    bulkRowsPending() {
+      return this.bulkRows.filter(r => !(r.entry && (r.entry.has_presentation || r.entry.video_url)))
     },
   },
 
@@ -1875,7 +1895,9 @@ export default {
       const rows = files.map(file => {
         const { entry, confidence, reason } = bulkBestMatch(file.name, this.bulkTargets)
         const tooLarge = file.size > BULK_MAX_UPLOAD_BYTES
+        const alreadyHas = !!(entry && (entry.has_presentation || entry.video_url))
         return {
+          _uid: ++bulkRowUidSeq,
           file,
           name: file.name,
           sizeLabel: this.formatFileSize(file.size),
@@ -1889,8 +1911,11 @@ export default {
           // "low"/"none" still show up (so nothing silently gets skipped)
           // but need the admin to actively confirm a target first. A file
           // over the Cloudflare cap can never succeed here regardless of
-          // match confidence, so it's never auto-included.
-          include: !tooLarge && (confidence === 'high' || confidence === 'medium'),
+          // match confidence, so it's never auto-included. Same for a match
+          // whose entry already has a file/video — that's a deliberate
+          // replace, not a default action, so it starts unticked even at
+          // high confidence (shows under "Already uploaded" instead).
+          include: !tooLarge && !alreadyHas && (confidence === 'high' || confidence === 'medium'),
           status: 'pending', // pending | uploading | done | error
           error: '',
           progress: 0, // 0-100, this file's own upload percentage
@@ -1913,7 +1938,10 @@ export default {
       const entry = this.bulkTargets.find(t => t.id === id) || null
       row.entryId = entry ? entry.id : null
       row.entry = entry
-      if (entry) row.include = true
+      // Same safety default as the initial auto-match: don't silently tick
+      // a row that would replace something already uploaded — the admin
+      // picked this entry on purpose, but replacing needs a deliberate tick.
+      if (entry) row.include = !(entry.has_presentation || entry.video_url)
     },
     bulkConfidenceLabel(c) {
       return { high: 'Code match', medium: 'Name match', low: 'Weak match', none: 'No match' }[c] || ''
