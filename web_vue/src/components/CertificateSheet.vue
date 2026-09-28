@@ -89,23 +89,15 @@ export default {
       const b = this.type.body
       return typeof b === 'function' ? b(this.eventName) : b
     },
-    // What a scan of the certificate's QR shows: a confirmable statement that
-    // this person attended the event and received the certificate, plus the
-    // ECSACONM contact block. Plain text (not a URL) so any scanner renders it.
+    // What a scan of the certificate's QR opens: the public certificate
+    // verification page (/certificate-verification) showing a green-tick
+    // confirmation with the same details the certificate carries. Rendered
+    // client-side, so the origin is whatever host this SPA is served from.
     qrValue() {
-      const name = this.name || ''
-      const event = this.eventName || 'the ECSACONM conference'
-      return [
-        'ECSACONM Certificate Verification',
-        '',
-        `This is to confirm ${name} attended ${event}, from 14th to 18th September 2026 at Golden Tulip Airport Hotel, Zanzibar, and was awarded this certificate.`,
-        '',
-        'For further enquiries please contact:',
-        'Address: Plot No. 157, Oloirien Njiro Road, P.O. Box 1009, Arusha, Tanzania',
-        'Tel: +255-27-254 9362, +255-27-254 9365 / 9366',
-        'Fax: +255-27-254 9392',
-        'Email: info@ecsaconm.org (General enquiries)',
-      ].join('\n')
+      const name = encodeURIComponent(this.name || '')
+      const event = encodeURIComponent(this.eventName || 'the ECSACONM conference')
+      const origin = window.location.origin + window.location.pathname
+      return `${origin}#/certificate-verification?name=${name}&event=${event}`
     },
   },
   methods: {

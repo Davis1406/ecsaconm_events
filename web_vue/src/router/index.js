@@ -21,6 +21,7 @@ const routeComponents = {
   WebEventView: () => import("@/views/web/WebEvent.vue"),
   RoomProgrammeView: () => import("@/views/web/RoomProgramme.vue"),
   PublicProgrammeRoomsView: () => import("@/views/web/PublicProgrammeRooms.vue"),
+  CertificateVerificationView: () => import("@/views/web/CertificateVerification.vue"),
   UserEventStatusView: () => import("@/views/web/UserEventStatus.vue"),
   AttendanceView: () => import("@/views/web/Attendance.vue"),
   OnsiteRegistrationView: () => import("@/views/web/OnsiteRegistration.vue"),
@@ -170,6 +171,14 @@ const routes = [
         path: "/programme-rooms-public",
         name: "ProgrammeRoomsPublic",
         component: routeComponents.PublicProgrammeRoomsView,
+      },
+      {
+        // Public, no-login page that a certificate's QR code opens — shows a
+        // green-tick verification with the holder's name and event from the
+        // QR's query params.
+        path: "/certificate-verification",
+        name: "CertificateVerification",
+        component: routeComponents.CertificateVerificationView,
       },
       {
         path: "/user-event-status/:userId/:eventId",
