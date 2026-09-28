@@ -43,6 +43,15 @@ export default {
   async mounted() {
     this.fit()
     window.addEventListener('resize', this.fit)
+    // Load the certificate fonts explicitly — fonts.ready alone can resolve
+    // before the @font-face requests are issued, which renders the preview
+    // with fallback fonts and overlaps "Certificate" / "OF PARTICIPATION".
+    await Promise.all([
+      document.fonts.load("400 172px 'Alex Brush'"),
+      document.fonts.load("700 50px 'Montserrat'"),
+      document.fonts.load("400 29px 'Montserrat'"),
+      document.fonts.load("600 63px 'Playfair Display'"),
+    ]).catch(() => {})
     await document.fonts.ready
     ;(this.$refs.sheets || []).forEach(s => s.fitName())
     this.ready = true
@@ -71,14 +80,8 @@ export default {
 </script>
 
 <style>
-@font-face { font-family: 'Alex Brush'; src: url('../../../assets/certificate/fonts/AlexBrush-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; }
-@font-face { font-family: 'Montserrat'; src: url('../../../assets/certificate/fonts/Montserrat-400.woff2') format('woff2'); font-weight: 400; font-style: normal; }
-@font-face { font-family: 'Montserrat'; src: url('../../../assets/certificate/fonts/Montserrat-500.woff2') format('woff2'); font-weight: 500; font-style: normal; }
-@font-face { font-family: 'Montserrat'; src: url('../../../assets/certificate/fonts/Montserrat-600.woff2') format('woff2'); font-weight: 600; font-style: normal; }
-@font-face { font-family: 'Montserrat'; src: url('../../../assets/certificate/fonts/Montserrat-700.woff2') format('woff2'); font-weight: 700; font-style: normal; }
-@font-face { font-family: 'Montserrat'; src: url('../../../assets/certificate/fonts/Montserrat-800.woff2') format('woff2'); font-weight: 800; font-style: normal; }
-@font-face { font-family: 'Playfair Display'; src: url('../../../assets/certificate/fonts/PlayfairDisplay-600italic.woff2') format('woff2'); font-weight: 600; font-style: italic; }
-
+/* Certificate @font-face rules live in CertificateSheet.vue so the email-preview
+   render in Certificates.vue gets them too. */
 .cert-print, .cert-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 @page { size: 1920px 1080px; margin: 0; }

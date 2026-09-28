@@ -50,83 +50,138 @@
     </div>
 
     <template v-else>
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <!-- Toolbar -->
-        <div class="px-5 py-4 border-b border-gray-50 flex flex-wrap items-center gap-3">
-          <input v-model="search" type="text" placeholder="Search name…"
-            class="flex-1 sm:max-w-xs border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
-          <label v-if="type === 'attendee'" class="inline-flex items-center gap-2 text-xs text-gray-600 font-medium">
-            <input type="checkbox" v-model="attendedOnly" class="rounded border-gray-300" />
-            Only participants scanned as attended
+        <div class="px-4 py-3 border-b border-gray-200 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div class="relative">
+            <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
+            </svg>
+            <input v-model="search" type="text" placeholder="Search name or email"
+              class="w-56 pl-8 pr-3 py-1.5 text-[13px] border border-gray-200 rounded-md bg-white text-gray-700
+                     placeholder:text-gray-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15" />
+          </div>
+
+          <label v-if="type === 'attendee'"
+            class="inline-flex items-center gap-1.5 text-[12px] text-gray-500 font-medium select-none cursor-pointer">
+            <input type="checkbox" v-model="attendedOnly" class="rounded border-gray-300 text-brand focus:ring-brand/30" />
+            Scanned as attended
           </label>
-          <template v-if="type === 'attendee'">
-            <button v-for="c in attendeeCategories" :key="c.name" type="button" @click="toggleAttendeeCategory(c.name)"
-              class="px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition"
-              :class="attendeeCategoryFilter.includes(c.name) ? 'text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'"
-              :style="attendeeCategoryFilter.includes(c.name) ? { backgroundColor: 'rgb(254,80,103)' } : {}">
-              {{ c.name }} ({{ c.count }})
+
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button type="button" @click="emailOnly = !emailOnly" :aria-pressed="emailOnly"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium border transition"
+              :class="emailOnly
+                ? 'text-white border-transparent'
+                : 'text-gray-500 border-gray-200 bg-white hover:border-gray-300 hover:text-gray-700'"
+              :style="emailOnly ? { backgroundColor: 'rgb(254,80,103)' } : {}">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+              Has email
+              <span class="tabular-nums opacity-70">{{ withEmailCount }}</span>
             </button>
-          </template>
-          <template v-if="type === 'presenter'">
-            <button v-for="c in presenterCategories" :key="c" type="button" @click="toggleCategory(c)"
-              class="px-2.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition"
-              :class="categoryFilter.includes(c) ? 'text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'"
-              :style="categoryFilter.includes(c) ? { backgroundColor: 'rgb(254,80,103)' } : {}">
-              {{ presenterCategoryLabel(c) }}
-            </button>
-          </template>
-          <span class="text-xs text-gray-400 font-medium sm:ml-auto">
-            {{ selectedCount }} selected · {{ filteredPeople.length }} shown
-          </span>
+
+            <template v-if="type === 'attendee'">
+              <button v-for="c in attendeeCategories" :key="c.name" type="button" @click="toggleAttendeeCategory(c.name)"
+                :aria-pressed="attendeeCategoryFilter.includes(c.name)"
+                class="px-2.5 py-1 rounded-md text-[12px] font-medium border transition capitalize"
+                :class="attendeeCategoryFilter.includes(c.name)
+                  ? 'text-white border-transparent'
+                  : 'text-gray-500 border-gray-200 bg-white hover:border-gray-300 hover:text-gray-700'"
+                :style="attendeeCategoryFilter.includes(c.name) ? { backgroundColor: 'rgb(254,80,103)' } : {}">
+                {{ c.name }} <span class="tabular-nums opacity-70">{{ c.count }}</span>
+              </button>
+            </template>
+
+            <template v-if="type === 'presenter'">
+              <button v-for="c in presenterCategories" :key="c.name" type="button" @click="toggleCategory(c.name)"
+                :aria-pressed="categoryFilter.includes(c.name)"
+                class="px-2.5 py-1 rounded-md text-[12px] font-medium border transition capitalize"
+                :class="categoryFilter.includes(c.name)
+                  ? 'text-white border-transparent'
+                  : 'text-gray-500 border-gray-200 bg-white hover:border-gray-300 hover:text-gray-700'"
+                :style="categoryFilter.includes(c.name) ? { backgroundColor: 'rgb(254,80,103)' } : {}">
+                {{ presenterCategoryLabel(c.name) }}
+                <span class="tabular-nums opacity-70">{{ c.count }}</span>
+              </button>
+            </template>
+          </div>
+
+          <div class="ml-auto flex items-baseline gap-1.5 text-[12px] tabular-nums">
+            <span class="text-gray-400">{{ filteredPeople.length }} shown</span>
+            <span v-if="selectedCount" class="text-gray-900 font-semibold">· {{ selectedCount }} selected</span>
+          </div>
         </div>
 
         <div class="overflow-x-auto max-h-[60vh] overflow-y-auto">
-          <table class="min-w-full text-sm">
-            <thead class="sticky top-0">
-              <tr class="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
-                <th class="px-3 py-3 text-left w-8">
+          <table class="w-full min-w-[760px] text-[13px]">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-white text-[11px] font-semibold uppercase tracking-[0.07em] text-gray-400 border-b border-gray-200">
+                <th class="pl-4 pr-2 py-2.5 text-left w-9">
                   <input type="checkbox" :checked="allShownSelected" @change="toggleAllShown($event.target.checked)"
-                    class="rounded border-gray-300" title="Select all shown" />
+                    class="rounded border-gray-300 text-brand focus:ring-brand/30" title="Select all shown" />
                 </th>
-                <th class="px-3 py-3 text-left w-10" title="Row number">#</th>
-                <th class="px-3 py-3 text-left whitespace-nowrap">Name on certificate</th>
-                <th class="px-3 py-3 text-left whitespace-nowrap">{{ type === 'presenter' ? 'Session' : 'Category' }}</th>
-                <th class="px-3 py-3 text-left">{{ type === 'presenter' ? 'Presentation' : 'Country' }}</th>
-                <th class="px-3 py-3 text-left whitespace-nowrap">Email</th>
+                <th class="px-2 py-2.5 text-left w-10" title="Row number">#</th>
+                <th class="px-2 py-2.5 text-left">Name on certificate</th>
+                <th class="px-2 py-2.5 text-left">Email</th>
+                <th v-if="type !== 'presenter'" class="px-2 py-2.5 text-left whitespace-nowrap">Category</th>
+                <th class="px-2 py-2.5 text-left">{{ type === 'presenter' ? 'Presentation' : 'Country' }}</th>
+                <th class="pl-2 pr-4 py-2.5 text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
-            <tbody>
-              <tr v-for="(p, idx) in filteredPeople" :key="p.key" class="border-b border-gray-50 hover:bg-gray-50">
-                <td class="px-3 py-2.5">
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="(p, idx) in filteredPeople" :key="p.key"
+                class="group transition-colors hover:bg-brand/[0.035]"
+                :class="selected[p.key] ? 'bg-brand/[0.05] shadow-[inset_2px_0_0_rgb(254,80,103)]' : ''">
+                <td class="pl-4 pr-2 py-2">
                   <input type="checkbox" :checked="!!selected[p.key]" @change="toggle(p.key, $event.target.checked)"
-                    class="rounded border-gray-300" />
+                    class="rounded border-gray-300 text-brand focus:ring-brand/30" />
                 </td>
-                <td class="px-3 py-2.5 text-xs text-gray-400 tabular-nums">{{ idx + 1 }}</td>
-                <td class="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{{ p.name }}</td>
-                <td class="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap capitalize">{{ p.category }}</td>
-                <td class="px-3 py-2.5 text-gray-500 text-xs">{{ p.detail }}</td>
-                <td class="px-3 py-2.5">
-                  <template v-if="p.email">
-                    <div class="text-xs text-gray-500 break-all mb-1">{{ p.email }}</div>
-                    <button type="button" @click="openEmailModal([p])"
-                      :disabled="!!emailModal"
-                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition disabled:opacity-40 whitespace-nowrap"
-                      :class="rowMsg && rowMsg.key === p.key
-                        ? (rowMsg.ok ? 'border-green-200 text-green-600' : 'border-red-200 text-red-500')
-                        : 'border-gray-200 text-gray-600 hover:border-pink-300 hover:text-pink-500'">
-                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                      </svg>
-                      {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Preview & Send' }}
-                    </button>
-                  </template>
-                  <span v-else class="text-xs text-gray-300 italic" title="No email on file">no email</span>
+                <td class="px-2 py-2 text-[11.5px] text-gray-300 tabular-nums">{{ idx + 1 }}</td>
+                <td class="px-2 py-2 font-medium text-gray-900 whitespace-nowrap">{{ p.name }}</td>
+                <td class="px-2 py-2">
+                  <a v-if="p.email" :href="`mailto:${p.email}`"
+                    class="text-[12.5px] text-gray-500 hover:text-brand transition-colors break-all">
+                    {{ p.email }}
+                  </a>
+                  <span v-else class="text-[12.5px] text-gray-300">—</span>
+                </td>
+                <td v-if="type !== 'presenter'" class="px-2 py-2 whitespace-nowrap">
+                  <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                    {{ p.category }}
+                  </span>
+                </td>
+                <td class="px-2 py-2 text-[12.5px] text-gray-500">
+                  <!-- Falls back to the session/category text when a presenter has
+                       no presentation title (e.g. abstract-only, no programme slot). -->
+                  <span v-if="p.detail || p.category">{{ p.detail || p.category }}</span>
+                  <span v-else class="text-gray-300">—</span>
+                </td>
+                <td class="pl-2 pr-4 py-2 text-right whitespace-nowrap">
+                  <button v-if="p.email" type="button" @click="openEmailModal([p])"
+                    :disabled="!!emailModal"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-semibold transition
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+                    :class="rowMsg && rowMsg.key === p.key
+                      ? (rowMsg.ok
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : 'border-red-200 bg-red-50 text-red-600')
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-brand/50 hover:text-brand hover:bg-brand/5'">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Preview & Send' }}
+                  </button>
+                  <span v-else class="text-[12px] text-gray-300 italic">Not emailable</span>
                 </td>
               </tr>
             </tbody>
           </table>
           <div v-if="filteredPeople.length === 0" class="py-16 text-center">
-            <p class="text-gray-400 text-sm italic">No one matches — you can still type names below.</p>
+            <p class="text-gray-400 text-sm">No one matches the current filters</p>
+            <p class="text-gray-300 text-xs mt-1">Clear the filters above, or type names under "Additional names" below</p>
           </div>
         </div>
       </div>
@@ -318,6 +373,9 @@ export default {
       attendedOnly: false,
       categoryFilter: [],
       attendeeCategoryFilter: [],
+      // Narrows the table to people who actually have an email on file — the
+      // ones Email can act on. Applies to every tab.
+      emailOnly: false,
       // person key -> true; kept per type so switching tabs doesn't lose ticks
       selections: { attendee: {}, presenter: {}, usher: {} },
       extraNames: '',
@@ -468,12 +526,31 @@ export default {
       })
       return Object.keys(counts).sort().map(name => ({ name, count: counts[name] }))
     },
+    // Filter chips for the Presenters tab. A presenter can sit in more than
+    // one category, so these counts are "rows this chip would show" and won't
+    // necessarily add up to the tab total.
     presenterCategories() {
-      return [...new Set(this.programme.map(e => e.category).filter(Boolean))].sort()
+      const counts = new Map()
+      this.presenters.forEach(p => p.categories.forEach(c => {
+        counts.set(c, (counts.get(c) || 0) + 1)
+      }))
+      return [...counts.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([name, count]) => ({ name, count }))
     },
     filteredPeople() {
       const term = this.search.trim().toLowerCase()
-      return term ? this.people.filter(p => p.name.toLowerCase().includes(term)) : this.people
+      return this.people.filter(p => {
+        if (this.emailOnly && !p.email) return false
+        if (!term) return true
+        return p.name.toLowerCase().includes(term)
+          || (p.email || '').toLowerCase().includes(term)
+      })
+    },
+    // People on the current tab that have an email — drives the "only with
+    // email" chip so the count is visible before you turn it on.
+    withEmailCount() {
+      return this.people.filter(p => !!p.email).length
     },
     allShownSelected() {
       return this.filteredPeople.length > 0 && this.filteredPeople.every(p => this.selected[p.key])
@@ -577,6 +654,8 @@ export default {
       this.attendedRegIds = new Set()
       this.programme = []
       this.attendeeCategoryFilter = []
+      this.categoryFilter = []
+      this.emailOnly = false
       this.eventLinks = []
       this.selections = { attendee: {}, presenter: {}, usher: {} }
       if (!this.selectedEventId) return
@@ -621,6 +700,10 @@ export default {
     setType(key) {
       this.type = key
       this.search = ''
+      // Category chips are per-tab, so a chip left ticked on the tab you're
+      // leaving would silently filter the tab you're arriving on.
+      this.categoryFilter = []
+      this.attendeeCategoryFilter = []
     },
     roleLabel(r) {
       return certificateCategory(r.participation_role)
@@ -674,13 +757,31 @@ export default {
       this.openPrint({ type: this.type, names: ['Full Name'], autoPrint: false })
     },
 
+    // html2canvas reads the live DOM, so the certificate webfonts must be
+    // actually applied before rasterizing — otherwise it falls back to system
+    // fonts and the 172px "Certificate" overlaps "OF PARTICIPATION".
+    // document.fonts.ready alone can resolve before the @font-face-triggered
+    // requests are issued, so load them explicitly first.
+    async ensureCertFonts() {
+      const faces = [
+        "400 172px 'Alex Brush'",
+        "700 50px 'Montserrat'",
+        "400 29px 'Montserrat'",
+        "600 63px 'Playfair Display'",
+      ]
+      await Promise.all(
+        faces.map(f => document.fonts.load(f).catch(() => {}))
+      )
+      await document.fonts.ready
+    },
+
     // ── Email the certificate ────────────────────────────────
     // Rasterizes the hidden CertificateSheet (same markup the print page
     // uses) to a JPEG blob via html2canvas, at full 1920x1080 resolution.
     async renderCertificateImage(name) {
       this.renderJob = { name, type: this.types[this.type] }
       await this.$nextTick()
-      await document.fonts.ready
+      await this.ensureCertFonts()
       const sheet = this.$refs.renderSheet
       if (sheet && sheet.fitName) sheet.fitName()
       await this.$nextTick()
@@ -781,7 +882,7 @@ export default {
     async renderCertificateAssets(name) {
       this.renderJob = { name, type: this.types[this.type] }
       await this.$nextTick()
-      await document.fonts.ready
+      await this.ensureCertFonts()
       const sheet = this.$refs.renderSheet
       if (sheet && sheet.fitName) sheet.fitName()
       await this.$nextTick()

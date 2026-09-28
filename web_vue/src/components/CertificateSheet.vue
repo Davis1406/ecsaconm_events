@@ -1,6 +1,6 @@
 <template>
   <!-- 1920x1080 certificate, positioned exactly as the designer's HTML source.
-       Fonts (@font-face) are declared by CertificatePrint.vue. -->
+       Fonts (@font-face) are declared in this component's global style block. -->
   <section class="cert" style="position:relative; width:1920px; height:1080px; overflow:hidden; background:#ffffff">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" style="position:absolute; top:0; left:0; width:260px; height:260px">
       <defs>
@@ -85,6 +85,21 @@ export default {
   },
 }
 </script>
+
+<style>
+/* Certificate webfonts, declared here (not in a page component) so every page
+   that renders a CertificateSheet gets them — the print route *and* the
+   off-screen sheet Certificates.vue rasterizes for the email preview. Without
+   these the 172px "Certificate" falls back to a system font, its line box
+   overflows, and it collides with "OF PARTICIPATION". */
+@font-face { font-family: 'Alex Brush'; src: url('../assets/certificate/fonts/AlexBrush-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/certificate/fonts/Montserrat-400.woff2') format('woff2'); font-weight: 400; font-style: normal; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/certificate/fonts/Montserrat-500.woff2') format('woff2'); font-weight: 500; font-style: normal; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/certificate/fonts/Montserrat-600.woff2') format('woff2'); font-weight: 600; font-style: normal; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/certificate/fonts/Montserrat-700.woff2') format('woff2'); font-weight: 700; font-style: normal; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/certificate/fonts/Montserrat-800.woff2') format('woff2'); font-weight: 800; font-style: normal; }
+@font-face { font-family: 'Playfair Display'; src: url('../assets/certificate/fonts/PlayfairDisplay-600italic.woff2') format('woff2'); font-weight: 600; font-style: italic; }
+</style>
 
 <style scoped>
 /* The app root sets tracking-wide; the design uses normal spacing. */
