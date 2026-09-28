@@ -141,7 +141,17 @@
                 </td>
                 <td class="px-2 py-2 text-[11.5px] text-gray-300 tabular-nums">{{ idx + 1 }}</td>
                 <td class="px-2 py-2 font-medium text-gray-900">
-                  <div class="whitespace-nowrap">{{ p.name }}</div>
+                  <div class="whitespace-nowrap flex items-center gap-1.5">
+                    <span v-if="p.paid !== undefined"
+                      class="inline-flex items-center rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide leading-none"
+                      :class="p.paid
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-amber-100 text-amber-700'"
+                      :title="p.paid ? 'Registration paid' : 'Registration not paid'">
+                      {{ p.paid ? 'Paid' : 'Unpaid' }}
+                    </span>
+                    <span class="truncate">{{ p.name }}</span>
+                  </div>
                   <!-- Presenters have no Email column (the table gets wide), so the
                        address sits under the name instead. -->
                   <a v-if="type === 'presenter' && p.email" :href="`mailto:${p.email}`"
@@ -276,19 +286,24 @@
             <p class="text-[11px] text-gray-400 mt-1">Leave blank to send just the certificate, no message text.</p>
           </div>
 
-          <!-- Live preview — exactly what will be emailed -->
-          <div class="rounded-xl border border-gray-200 overflow-hidden">
-            <div class="px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wide">Email preview</div>
-            <div class="p-4 space-y-3 bg-white">
-              <div class="text-sm"><span class="text-gray-400">Subject: </span><span class="font-semibold text-gray-800">{{ resolvedPreview.subject }}</span></div>
-              <div v-if="resolvedPreview.message" class="text-sm text-gray-700 whitespace-pre-line">{{ resolvedPreview.message }}</div>
-              <div class="flex justify-center py-4 bg-gray-50 rounded-lg">
-                <div v-if="emailModal.rendering" class="py-10"><SpinnerComponent /></div>
-                <img v-else-if="emailModal.previewUrl" :src="emailModal.previewUrl" class="max-w-full rounded shadow-sm" style="max-height: 320px;" alt="Certificate preview" />
-              </div>
-              <p class="text-[11px] text-gray-400">
-                Delivered as a PDF attachment (shown above as a preview) — most inboxes will also display this image directly in the message.
-              </p>
+<!-- Live preview — the real certificate sheet, scaled exactly
+                   like the print page (#/certificates/print), so what you see
+                   here is structurally identical to what gets printed/emailed. -->
+              <div class="rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wide">Email preview</div>
+                <div class="p-4 space-y-3 bg-white">
+                  <div class="text-sm"><span class="text-gray-400">Subject: </span><span class="font-semibold text-gray-800">{{ resolvedPreview.subject }}</span></div>
+                  <div v-if="resolvedPreview.message" class="text-sm text-gray-700 whitespace-pre-line">{{ resolvedPreview.message }}</div>
+                  <div class="flex justify-center py-4 bg-gray-100 rounded-lg overflow-hidden">
+                    <div v-if="emailModal.rendering" class="py-10"><SpinnerComponent /></div>
+                    <div v-else class="cert-preview-scaled" :style="previewScaleStyle">
+                      <CertificateSheet ref="previewSheet" :name="previewName" :type="types[type]"
+                        :event-name="selectedEventName" uid="email-preview" />
+                    </div>
+                  </div>
+                  <p class="text-[11px] text-gray-400">
+                    Delivered as a PDF attachment (rendered above as the live certificate) — most inboxes will also display this image directly in the message.
+                  </p>
               <div v-if="eventLinks.length" class="pt-2 border-t border-gray-100">
                 <div class="text-xs font-bold text-gray-600 mb-1">Useful links</div>
                 <ul class="text-sm space-y-0.5">
@@ -412,7 +427,7 @@ export default {
       return {
         attendee: 'Other paid delegates — registered, paid (secretariat always counts as paid), and not a presenter, usher or secretariat member. Member State, Other Africa, Participant and Exhibitor registrations are all grouped as one "Delegate" category. Use the category buttons to narrow the list; tick "only scanned as attended" to limit it to people whose QR badge was scanned.',
         presenter: 'Everyone named in the conference programme (Presentations by Room and the plenary schedule) plus every paid abstract presenter, one row per person, cross-matched to their registration for an email.',
-        usher: 'Ushers and secretariat/support staff — registered with either role, same certificate for both.',
+        usher: 'Ushers, secretariat/support staff and the media team — registered with either role, same certificate for all three. Media keep their own "Media" label.',
       }[this.type]
     },
     // Lookup sets used to keep a presenter out of the delegate list, so they
@@ -444,6 +459,7 @@ export default {
         category: this.roleLabel(r),
         detail: r.country || '',
         email: r.email || '',
+        paid: !!r.paid,
       })).sort((a, b) => a.name.localeCompare(b.name))
     },
     presenters() {
@@ -463,13 +479,14 @@ export default {
         if (!p) {
           byKey[person.key] = {
             key: person.key, name: person.name, email: person.email,
-            categories: new Set(), sessions: [], titles: [],
+            categories: new Set(), sessions: [], titles: [], paid: !!person.paid,
           }
           return byKey[person.key]
         }
         // An abstract-presenter registration is the authoritative email for
         // this person if the programme slot had none.
         if (!p.email && person.email) p.email = person.email
+        if (person.paid) p.paid = true
         return p
       }
 
@@ -479,7 +496,7 @@ export default {
         const email = (e.matched_email || '').trim().toLowerCase()
         const p = addSlot({
           key: email ? `email-${email}` : `prog-${name.toLowerCase()}`,
-          name, email,
+          name, email, paid: !!e.paid,
         })
         p.categories.add(e.category)
         p.sessions.push([e.day, e.session, e.category].filter(Boolean).join(' · '))
@@ -498,7 +515,7 @@ export default {
           const existingKey = email && byKey[`email-${email}`]
             ? `email-${email}`
             : `prog-${name.toLowerCase()}`
-          addSlot({ key: existingKey, name, email })
+          addSlot({ key: existingKey, name, email, paid: true })
         })
 
       return Object.values(byKey)
@@ -514,6 +531,7 @@ export default {
             categories,
             detail: p.titles.join(' | '),
             email: p.email,
+            paid: !!p.paid,
           }
         })
         .filter(p => !this.categoryFilter.length || this.categoryFilter.some(c => p.categories.has(c)))
@@ -595,6 +613,24 @@ export default {
     selectedEventName() {
       const ev = this.events.find(e => String(e.id) === String(this.selectedEventId))
       return ev ? ev.event : ''
+    },
+    // The recipient currently picked in "Previewing as" — drives the live
+    // certificate sheet in the modal, exactly as CertificatePrint renders it.
+    previewName() {
+      const m = this.emailModal
+      if (!m) return ''
+      const person = m.recipients.find(p => p.key === m.previewKey) || m.recipients[0]
+      return person ? person.name : ''
+    },
+    // Same scaling the print page uses, sized to the modal's content width
+    // (max-w-2xl) rather than the full window.
+    previewScaleStyle() {
+      const s = Math.min(1, 600 / 1920)
+      return {
+        width: `${1920 * s}px`,
+        height: `${1080 * s}px`,
+        '--s': s,
+      }
     },
     // Subject/message with {{name}} resolved for whichever recipient is
     // currently selected in the "Previewing as" picker — recalculates as
@@ -730,12 +766,13 @@ export default {
         tidyName([reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ')).toLowerCase()
       )
     },
-    // Support staff — ushers and secretariat get the same certificate, so
-    // they're one group for this purpose even though they're two different
-    // participation_role values.
+    // Support staff — ushers, secretariat and the media team get the same
+    // certificate, so they're one group for this purpose even though they're
+    // three different participation_role values. Media keep their own role
+    // (and "Media" label) — they're grouped here for the certificate only.
     isSupportRole(r) {
       const role = (r.participation_role || '').toLowerCase()
-      return role === 'usher' || role === 'secretariat'
+      return role === 'usher' || role === 'secretariat' || role === 'media'
     },
     toggleAttendeeCategory(c) {
       const i = this.attendeeCategoryFilter.indexOf(c)
@@ -818,7 +855,6 @@ export default {
         subject: DEFAULT_EMAIL_SUBJECT,
         message: DEFAULT_EMAIL_MESSAGE,
         previewKey: recipients[0].key,
-        previewUrl: '',
         rendering: false,
         sending: false,
         progressDone: 0,
@@ -828,25 +864,21 @@ export default {
       this.refreshPreview()
     },
     closeEmailModal() {
-      if (this.emailModal?.previewUrl) URL.revokeObjectURL(this.emailModal.previewUrl)
       this.emailModal = null
     },
-    // Re-renders the certificate preview image for whichever recipient is
-    // currently picked in "Previewing as" — rendering is the expensive
-    // part, so this only runs on open and on recipient change, not on every
-    // keystroke. Only the JPEG is needed here; the PDF (what's actually
-    // attached) is built at send time in doSendOne/doEmailBulk.
+    // Fits the live certificate sheet in the modal — the same markup the
+    // print page (#/certificates/print) renders. Rasterizing is no longer
+    // needed for the preview; the PDF (what's actually attached) is still
+    // built at send time in doSendOne/doEmailBulk.
     async refreshPreview() {
       const m = this.emailModal
       if (!m) return
-      const person = m.recipients.find(p => p.key === m.previewKey) || m.recipients[0]
-      if (!person) return
       m.rendering = true
       try {
-        const { jpegBlob } = await this.renderCertificateAssets(person.name)
-        if (this.emailModal !== m) return // modal was closed/replaced meanwhile
-        if (m.previewUrl) URL.revokeObjectURL(m.previewUrl)
-        m.previewUrl = URL.createObjectURL(jpegBlob)
+        await this.ensureCertFonts()
+        await this.$nextTick()
+        const sheet = this.$refs.previewSheet
+        if (sheet && sheet.fitName) { sheet.fitName(); sheet.fitBody() }
       } finally {
         if (this.emailModal === m) m.rendering = false
       }
@@ -955,3 +987,21 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+/* Scale the live certificate sheet in the email preview the same way the
+   print page does (#/certificates/print): the sheet stays 1920x1080 and is
+   shrunk with a CSS transform, so the on-screen preview is pixel-identical
+   to what gets printed/emailed. */
+.cert-preview-scaled {
+  overflow: hidden;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.cert-preview-scaled > .cert {
+  width: 1920px;
+  height: 1080px;
+  transform: scale(var(--s, 0.3125));
+  transform-origin: top left;
+}
+</style>

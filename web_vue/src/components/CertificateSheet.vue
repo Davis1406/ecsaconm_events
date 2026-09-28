@@ -40,6 +40,7 @@
       <template v-for="(line, i) in bodyLines" :key="i"><br v-if="i">{{ line }}</template>
     </p>
     <div style="position:absolute; top:900px; left:790px; width:340px; height:2px; background:#2b2b2b"></div>
+    <img :src="signature" alt="President's signature" style="position:absolute; top:838px; left:812px; width:300px; height:55px; object-fit:contain">
     <p style="position:absolute; top:914px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:700; text-align:center; color:#1a1a1a">Dr. Glory Msibi</p>
     <p style="position:absolute; top:950px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:21px; font-weight:600; letter-spacing:3px; text-align:center; color:#666666">PRESIDENT</p>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" style="position:absolute; top:840px; left:110px; width:160px; height:160px">
@@ -59,6 +60,7 @@
 <script>
 import logo from '@/assets/certificate/logo.png'
 import watermark from '@/assets/certificate/watermark.png'
+import signature from '@/assets/certificate/signature.png'
 
 export default {
   name: 'CertificateSheet',
@@ -72,7 +74,7 @@ export default {
     uid: { type: [String, Number], required: true },
   },
   data() {
-    return { logo, watermark }
+    return { logo, watermark, signature }
   },
   computed: {
     bodyLines() {
@@ -92,13 +94,13 @@ export default {
         el.style.fontSize = (--size) + 'px'
       }
     },
-    // The body sits at y=724 and the signature rule at y=900, so it has 176px
-    // to live in — three lines at 29px/1.5 is 130.5px. A longer event name can
-    // wrap onto a 4th line and collide with the signature, so shrink to fit.
+    // The body sits at y=724 and the signature image at y=838, so it has
+    // ~114px to live in — two lines at 29px/1.5 is 87px. A longer event name
+    // can wrap onto a 3rd line and hit the signature, so shrink to fit.
     fitBody() {
       const el = this.$refs.body
       if (!el) return
-      const max = 176
+      const max = 112
       let size = 29
       el.style.fontSize = size + 'px'
       while (el.scrollHeight > max && size > 20) {

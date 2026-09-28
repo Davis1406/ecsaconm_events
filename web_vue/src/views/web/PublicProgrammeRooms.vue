@@ -345,10 +345,9 @@ const DAY_ORDER = ['Day 1', 'Day 2', 'Day 3', 'Day 1-3', 'Unassigned']
 const ALL_ROOMS = 'All Rooms'
 const ALL_DAYS = 'All Days'
 
-// Count nouns per category tab, so "1 poster" never reads "1 posters".
+// Count nouns per category tab, so "1 plenary" never reads "1 plenaries".
 const CATEGORY_NOUN = {
   oral: { one: 'presentation', many: 'presentations' },
-  poster: { one: 'poster', many: 'posters' },
   plenary: { one: 'plenary', many: 'plenaries' },
 }
 
@@ -373,7 +372,6 @@ export default {
       entryCategory: 'oral',
       categoryOptions: [
         { key: 'oral', label: 'Abstracts' },
-        { key: 'poster', label: 'Posters' },
         { key: 'plenary', label: 'Plenary' },
       ],
       zipBusy: false,
@@ -415,19 +413,26 @@ export default {
     },
 
     categoryCounts() {
-      const out = { oral: 0, poster: 0, plenary: 0 }
+      const out = { oral: 0, plenary: 0 }
       for (const d of this.roomsData) {
         for (const e of d.entries) if (out[e.category] !== undefined) out[e.category] += 1
       }
       return out
     },
 
-    // The pool the day/room chips and the visible tree are built from. A search
+// The pool the day/room chips and the visible tree are built from. A search
     // deliberately widens to every category: someone looking for a presenter
     // by name shouldn't have to know our taxonomy files them under "Poster".
+    // Posters are excluded entirely — the category was removed from this page.
     universeRoomsData() {
       if (!this.query.trim()) return this.categoryRoomsData
-      return this.roomsData.filter(d => d.entries.length > 0)
+      return this.roomsData
+        .map(d => ({
+          ...d,
+          entries: d.entries.filter(e => e.category !== 'poster'),
+          total: d.entries.filter(e => e.category !== 'poster').length,
+        }))
+        .filter(d => d.entries.length > 0)
     },
 
     // Every day that has content in the active pool, with its per-day total.
