@@ -3,6 +3,7 @@ import smtplib
 import logging
 import time
 import uuid
+import html as _html
 from collections import deque
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -177,19 +178,40 @@ def _build_image_invitation_message(from_name, from_email, recipient_email, subj
     return outer
 
 
-def _image_invitation_body_html(cid="gala_invite_image"):
-    """The entire email body: just the inline image, no other words."""
+def text_to_html(text):
+    """Escape plain text typed by an admin (e.g. a custom certificate-email
+    message) and turn newlines into <br> so it's safe to drop into an HTML
+    email body."""
+    if not text:
+        return ""
+    return _html.escape(text).replace("\n", "<br>")
+
+
+def _image_invitation_body_html(cid="gala_invite_image", intro_html=""):
+    """The email body: the inline image, optionally preceded by a short
+    intro message (already HTML-safe — see text_to_html()). Callers that
+    never pass intro_html (the gala invitation) keep the original
+    image-only body."""
+    intro = (
+        f'<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;'
+        f'color:#1f2937;max-width:650px;margin:0 auto 16px;line-height:1.6;">{intro_html}</div>'
+        if intro_html else ''
+    )
     return (
         '<!DOCTYPE html><html><body style="margin:0;padding:0;">'
-        f'<img src="cid:{cid}" alt="Invitation" style="display:block;width:100%;max-width:650px;margin:0 auto;" />'
+        f'{intro}'
+        f'<img src="cid:{cid}" alt="Certificate" style="display:block;width:100%;max-width:650px;margin:0 auto;" />'
         '</body></html>'
     )
 
 
 def send_image_invitation_email(recipient_email, subject, image_bytes, image_filename, image_subtype="jpeg",
-                                 email_type="general", sent_by_user_id=None, reply_to_email=None):
-    """Send a one-off email whose entire body is the given image — embedded
-    inline in the HTML and attached again as a file. Used for trial sends."""
+                                 email_type="general", sent_by_user_id=None, reply_to_email=None,
+                                 message_html=""):
+    """Send a one-off email whose body is the given image — embedded inline
+    in the HTML and attached again as a file — optionally preceded by a
+    short intro message (already HTML-safe, see text_to_html()). Used for
+    trial sends and single certificate sends."""
     smtp_host = os.getenv("SMTP_HOST", "")
     smtp_port = os.getenv("SMTP_PORT", "")
     smtp_username = os.getenv("SMTP_USERNAME", "")
@@ -210,7 +232,7 @@ def send_image_invitation_email(recipient_email, subject, image_bytes, image_fil
 
     log_id = _create_email_log(recipient_email, subject, email_type,
                                 sent_by_user_id, reply_to_email, "[image invitation]")
-    final_body = _inject_tracking_pixel(_image_invitation_body_html(), log_id)
+    final_body = _inject_tracking_pixel(_image_invitation_body_html(intro_html=message_html), log_id)
 
     try:
         from_name = os.getenv("SMTP_FROM_NAME", "ECSACONM Events")
@@ -352,7 +374,10 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
     also) carry its own `inline_image_bytes`/`inline_image_filename`/
     `inline_image_subtype` keys, which take priority over the batch-level
     ones — used for personalized-per-recipient images (e.g. certificates,
-    where every job's image differs) rather than one shared image.
+    where every job's image differs) rather than one shared image. A job may
+    also carry `inline_message_html` — an optional intro message (already
+    HTML-safe, see text_to_html()) shown above the image, personalized per
+    recipient the same way.
 
     Returns {"sent": int, "failed": int}.
     """
@@ -488,7 +513,10 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
             if job_inline_bytes:
                 job_inline_filename = job.get("inline_image_filename", inline_image_filename)
                 job_inline_subtype = job.get("inline_image_subtype", inline_image_subtype)
-                final_body = _inject_tracking_pixel(_image_invitation_body_html(), log_id)
+                job_message_html = job.get("inline_message_html", "")
+                final_body = _inject_tracking_pixel(
+                    _image_invitation_body_html(intro_html=job_message_html), log_id,
+                )
                 message = _build_image_invitation_message(
                     from_name, from_email, recipient_email, subject, reply_to_email,
                     job_inline_bytes, job_inline_filename, job_inline_subtype, final_body,

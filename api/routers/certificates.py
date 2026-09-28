@@ -32,11 +32,15 @@ async def send_certificate(
     recipient_email: str = Form(...),
     recipient_name: str = Form(...),
     subject: str = Form(None),
+    message: str = Form(None),
     image: UploadFile = File(...),
 ):
-    """Email one person their certificate — the entire message body is the
+    """Email one person their certificate — the message body is the
     certificate image (rendered client-side, uploaded here), embedded inline
-    and attached again as a file. Mirrors the gala-invitation image email."""
+    and attached again as a file, optionally preceded by a short admin-typed
+    message. Mirrors the gala-invitation image email. `subject`/`message`
+    are exactly what the admin previewed and edited client-side — sent
+    as-is, not re-templated here."""
     auth_dependency.secure_access("ADMIN_DASHBOARD", current_user["user_id"])
     if not recipient_email or not recipient_email.strip():
         raise HTTPException(status_code=400, detail="recipient_email is required")
@@ -54,6 +58,7 @@ async def send_certificate(
             image_subtype=_image_subtype(image.filename),
             email_type="certificate",
             sent_by_user_id=current_user["user_id"],
+            message_html=mailer_util.text_to_html(message),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send certificate email: {e}")
@@ -71,10 +76,12 @@ async def send_certificates_bulk(
 ):
     """Email a batch of personalised certificates in one go.
 
-    `manifest` is a JSON array of {filename, email, name} — one entry per
-    recipient — matched up against the uploaded `images` by filename. Each
-    recipient gets their own certificate image embedded inline in the email
-    body (same as /send), sent over a single pooled SMTP connection via
+    `manifest` is a JSON array of {filename, email, name, subject, message}
+    — one entry per recipient, subject/message already personalized
+    client-side (e.g. {{name}} substituted) exactly as previewed — matched
+    up against the uploaded `images` by filename. Each recipient gets their
+    own certificate image embedded inline in the email body (same as
+    /send), sent over a single pooled SMTP connection via
     mailer_util.send_bulk_emails (backgrounded, same pattern as
     send_gala_invitations, so a large batch doesn't block the request) rather
     than one connection per recipient. Entries with no email (e.g. hand-typed
@@ -112,6 +119,7 @@ async def send_certificates_bulk(
             "inline_image_bytes": image_bytes,
             "inline_image_filename": f"Certificate - {name}.{(filename or 'certificate.jpg').rsplit('.', 1)[-1]}",
             "inline_image_subtype": _image_subtype(filename),
+            "inline_message_html": mailer_util.text_to_html(entry.get("message")),
         })
 
     if jobs:

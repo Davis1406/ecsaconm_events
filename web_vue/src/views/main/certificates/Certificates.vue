@@ -104,21 +104,17 @@
                 <td class="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap capitalize">{{ p.category }}</td>
                 <td class="px-3 py-2.5 text-gray-500 text-xs">{{ p.detail }}</td>
                 <td class="px-3 py-2.5 whitespace-nowrap">
-                  <button v-if="p.email" type="button" @click="sendOne(p)"
-                    :disabled="sendingKey === p.key || emailBusy"
+                  <button v-if="p.email" type="button" @click="openEmailModal([p])"
+                    :disabled="!!emailModal"
                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition disabled:opacity-40"
                     :class="rowMsg && rowMsg.key === p.key
                       ? (rowMsg.ok ? 'border-green-200 text-green-600' : 'border-red-200 text-red-500')
                       : 'border-gray-200 text-gray-600 hover:border-pink-300 hover:text-pink-500'"
                     :title="p.email">
-                    <svg v-if="sendingKey === p.key" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                    </svg>
-                    <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
-                    {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Send' }}
+                    {{ rowMsg && rowMsg.key === p.key ? rowMsg.text : 'Preview & Send' }}
                   </button>
                   <span v-else class="text-xs text-gray-300 italic" title="No email on file">no email</span>
                 </td>
@@ -139,32 +135,24 @@
             placeholder="Anyone not in the list above — one full name per line, exactly as it should appear"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"></textarea>
         </div>
-        <div v-if="emailError" class="p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{{ emailError }}</div>
         <div v-if="emailSuccess" class="p-3 rounded-xl text-sm text-green-700 bg-green-50 border border-green-200">{{ emailSuccess }}</div>
-        <div v-if="emailProgress" class="p-3 rounded-xl text-sm text-gray-600 bg-gray-50 border border-gray-200">
-          {{ emailProgress.phase }} certificate{{ emailProgress.total === 1 ? '' : 's' }}… {{ emailProgress.done }} of {{ emailProgress.total }}
-        </div>
 
         <div class="flex flex-wrap items-center gap-3">
           <p class="text-xs text-gray-400 flex-1">
             <strong>Generate</strong> opens a print tab — choose <strong>Save as PDF</strong> and turn on
             <strong>Background graphics</strong> for one PDF with a page per person.
-            <strong>Email</strong> sends each selected person their own certificate at their registration email
-            (embedded in the message) — people typed under "Additional names" have no email on file and are skipped.
-            ALL-CAPS / lowercase names are tidied to Title Case.
+            <strong>Email</strong> opens a preview you can edit before sending — each selected person gets their own
+            certificate at their registration email; people typed under "Additional names" have no email on file and
+            are skipped. ALL-CAPS / lowercase names are tidied to Title Case.
           </p>
-          <button type="button" @click="emailSelected" :disabled="!emailableSelected.length || emailBusy || sendingKey"
+          <button type="button" @click="openEmailModal(emailableSelected)" :disabled="!emailableSelected.length || !!emailModal"
             class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold border-2 transition disabled:opacity-40"
             style="border-color: rgb(254,80,103); color: rgb(254,80,103);">
-            <svg v-if="emailBusy" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-            </svg>
-            <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
             </svg>
-            {{ emailBusy ? 'Sending…' : `Email ${emailableSelected.length} Certificate${emailableSelected.length === 1 ? '' : 's'}` }}
+            Email {{ emailableSelected.length }} Certificate{{ emailableSelected.length === 1 ? '' : 's' }}
           </button>
           <button type="button" @click="generate" :disabled="!finalNames.length"
             class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
@@ -182,6 +170,72 @@
       </div>
     </template>
 
+    <!-- Preview & edit email modal (both per-row Send and bulk Email open this) -->
+    <div v-if="emailModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @click.self="closeEmailModal">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+          <div>
+            <div class="font-bold text-gray-800">Preview &amp; Edit Certificate Email</div>
+            <p class="text-xs text-gray-500 mt-0.5">
+              {{ emailModal.recipients.length === 1 ? `To ${emailModal.recipients[0].email}` : `${emailModal.recipients.length} recipients` }}
+              — use <code class="bg-gray-100 px-1 rounded">{{ mergeTagExample }}</code> in Subject/Message to personalize each one.
+            </p>
+          </div>
+          <button type="button" @click="closeEmailModal" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <div v-if="emailModal.recipients.length > 1">
+            <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1.5">Previewing as</label>
+            <select v-model="emailModal.previewKey" @change="refreshPreview"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none bg-white">
+              <option v-for="p in emailModal.recipients" :key="p.key" :value="p.key">{{ p.name }} — {{ p.email }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1.5">Subject</label>
+            <input v-model="emailModal.subject" type="text"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1.5">Message (shown above the certificate)</label>
+            <textarea v-model="emailModal.message" rows="5"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"></textarea>
+            <p class="text-[11px] text-gray-400 mt-1">Leave blank to send just the certificate, no message text.</p>
+          </div>
+
+          <!-- Live preview — exactly what will be emailed -->
+          <div class="rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wide">Email preview</div>
+            <div class="p-4 space-y-3 bg-white">
+              <div class="text-sm"><span class="text-gray-400">Subject: </span><span class="font-semibold text-gray-800">{{ resolvedPreview.subject }}</span></div>
+              <div v-if="resolvedPreview.message" class="text-sm text-gray-700 whitespace-pre-line">{{ resolvedPreview.message }}</div>
+              <div class="flex justify-center py-4 bg-gray-50 rounded-lg">
+                <div v-if="emailModal.rendering" class="py-10"><SpinnerComponent /></div>
+                <img v-else-if="emailModal.previewUrl" :src="emailModal.previewUrl" class="max-w-full rounded shadow-sm" style="max-height: 320px;" alt="Certificate preview" />
+              </div>
+            </div>
+          </div>
+
+          <div v-if="emailModal.error" class="p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">{{ emailModal.error }}</div>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
+          <button type="button" @click="closeEmailModal" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Cancel</button>
+          <button type="button" @click="confirmSendEmail" :disabled="emailModal.sending || emailModal.rendering"
+            class="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
+            style="background-color: rgb(254,80,103);">
+            {{ emailModal.sending
+              ? (emailModal.recipients.length > 1 ? `Sending ${emailModal.progressDone}/${emailModal.progressTotal}…` : 'Sending…')
+              : (emailModal.recipients.length > 1 ? `Send ${emailModal.recipients.length} Emails` : 'Send Email') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Off-screen certificate used to render each recipient's image before
     upload (Send/Email) — parked far off-window so it's never visible. -->
     <div style="position: fixed; left: -99999px; top: 0; pointer-events: none;" aria-hidden="true">
@@ -194,6 +248,7 @@
 import axios from 'axios'
 import HeaderView from '@/includes/Header.vue'
 import CertificateSheet from '@/components/CertificateSheet.vue'
+import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
 import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, tidyName } from '@/utils/certificateTypes'
@@ -203,10 +258,12 @@ const API_URL = import.meta.env.VITE_API_URL
 // page) then uploaded — batch emailing hands them to the server a handful
 // at a time rather than one giant request.
 const EMAIL_BATCH_SIZE = 15
+const DEFAULT_EMAIL_SUBJECT = 'Your certificate — {{name}}'
+const DEFAULT_EMAIL_MESSAGE = 'Dear {{name}},\n\nThank you for taking part in the conference. Please find your certificate of participation below.\n\nWarm regards,\nECSACONM Secretariat'
 
 export default {
   name: 'CertificatesView',
-  components: { HeaderView, CertificateSheet },
+  components: { HeaderView, CertificateSheet, SpinnerComponent },
   setup() {
     const authStore = useAuthStore()
     return { authStore }
@@ -231,12 +288,15 @@ export default {
       // off-screen certificate used to rasterize each recipient's image
       // before upload — see renderCertificateImage()
       renderJob: { name: '', type: CERTIFICATE_TYPES.attendee },
-      sendingKey: null,
       rowMsg: null,
-      emailBusy: false,
-      emailError: '',
       emailSuccess: '',
-      emailProgress: null,
+      // Preview & edit modal — opened by both the per-row Send button and
+      // the bulk Email button (see openEmailModal()). null when closed.
+      emailModal: null,
+      // Referenced in the modal hint text — kept out of the template
+      // literal because Vue's mustache parser can't handle a nested {{ }}
+      // inside an interpolation.
+      mergeTagExample: '{{name}}',
     }
   },
   computed: {
@@ -342,6 +402,20 @@ export default {
       const selectedNoEmail = this.people.filter(p => this.selected[p.key] && !p.email).length
       const extraCount = this.extraNames.split('\n').map(n => tidyName(n)).filter(Boolean).length
       return selectedNoEmail + extraCount
+    },
+    // Subject/message with {{name}} resolved for whichever recipient is
+    // currently selected in the "Previewing as" picker — recalculates as
+    // the admin types, no re-render needed (only the certificate image
+    // itself requires a re-render, see refreshPreview()).
+    resolvedPreview() {
+      const m = this.emailModal
+      if (!m) return { subject: '', message: '' }
+      const person = m.recipients.find(p => p.key === m.previewKey) || m.recipients[0]
+      const name = person ? person.name : ''
+      return {
+        subject: this.renderTemplate(m.subject, name),
+        message: this.renderTemplate(m.message, name),
+      }
     },
   },
   mounted() {
@@ -462,62 +536,136 @@ export default {
       return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
     },
 
-    async sendOne(p) {
-      if (!p.email || this.sendingKey || this.emailBusy) return
-      this.sendingKey = p.key
+    // {{name}} → the given name, everywhere it appears in a subject/message
+    // template. Kept intentionally simple (one merge tag) rather than a
+    // full template engine.
+    renderTemplate(str, name) {
+      return (str || '').split('{{name}}').join(name)
+    },
+
+    // Opens the preview/edit modal for one person (row Send) or several
+    // (bulk Email) — nothing is sent until the admin reviews and confirms.
+    openEmailModal(recipients) {
+      if (!recipients.length || this.emailModal) return
       this.rowMsg = null
+      this.emailSuccess = ''
+      this.emailModal = {
+        recipients,
+        subject: DEFAULT_EMAIL_SUBJECT,
+        message: DEFAULT_EMAIL_MESSAGE,
+        previewKey: recipients[0].key,
+        previewUrl: '',
+        rendering: false,
+        sending: false,
+        progressDone: 0,
+        progressTotal: recipients.length,
+        error: '',
+      }
+      this.refreshPreview()
+    },
+    closeEmailModal() {
+      if (this.emailModal?.previewUrl) URL.revokeObjectURL(this.emailModal.previewUrl)
+      this.emailModal = null
+    },
+    // Re-renders the certificate image for whichever recipient is currently
+    // picked in "Previewing as" — the image is the expensive part, so this
+    // only runs on open and on recipient change, not on every keystroke.
+    async refreshPreview() {
+      const m = this.emailModal
+      if (!m) return
+      const person = m.recipients.find(p => p.key === m.previewKey) || m.recipients[0]
+      if (!person) return
+      m.rendering = true
       try {
-        const blob = await this.renderCertificateImage(p.name)
-        const form = new FormData()
-        form.append('recipient_email', p.email)
-        form.append('recipient_name', p.name)
-        form.append('subject', `Your certificate — ${p.name}`)
-        form.append('image', blob, 'certificate.jpg')
-        await this.api().post('/certificates/send', form)
-        this.rowMsg = { key: p.key, ok: true, text: 'Sent' }
-      } catch (e) {
-        this.rowMsg = { key: p.key, ok: false, text: e.response?.data?.detail || 'Failed to send' }
+        const blob = await this.renderCertificateImage(person.name)
+        if (this.emailModal !== m) return // modal was closed/replaced meanwhile
+        if (m.previewUrl) URL.revokeObjectURL(m.previewUrl)
+        m.previewUrl = URL.createObjectURL(blob)
       } finally {
-        this.sendingKey = null
+        if (this.emailModal === m) m.rendering = false
       }
     },
 
-    async emailSelected() {
-      const recipients = this.emailableSelected
-      if (!recipients.length || this.emailBusy || this.sendingKey) return
-      this.emailBusy = true
-      this.emailError = ''
-      this.emailSuccess = ''
-      this.emailProgress = { phase: 'Rendering', done: 0, total: recipients.length }
+    async confirmSendEmail() {
+      const m = this.emailModal
+      if (!m || m.sending) return
+      m.sending = true
+      m.error = ''
+      try {
+        if (m.recipients.length === 1) {
+          const p = m.recipients[0]
+          await this.doSendOne(p, m.subject, m.message)
+          this.emailSuccess = `Sent to ${p.email}.`
+        } else {
+          const { queued, skipped } = await this.doEmailBulk(m, m.subject, m.message)
+          this.emailSuccess = `Queued ${queued} certificate email${queued === 1 ? '' : 's'}.` +
+            (skipped ? ` ${skipped} skipped (no image/email matched).` : '')
+        }
+        this.closeEmailModal()
+      } catch (e) {
+        m.error = e.response?.data?.detail || 'Failed to send.'
+      } finally {
+        if (this.emailModal === m) m.sending = false
+      }
+    },
+
+    // ── Email the certificate ────────────────────────────────
+    // Rasterizes the hidden CertificateSheet (same markup the print page
+    // uses) to a JPEG blob via html2canvas, at full 1920x1080 resolution.
+    async renderCertificateImage(name) {
+      this.renderJob = { name, type: this.types[this.type] }
+      await this.$nextTick()
+      await document.fonts.ready
+      const sheet = this.$refs.renderSheet
+      if (sheet && sheet.fitName) sheet.fitName()
+      await this.$nextTick()
+      const hcMod = await import('html2canvas')
+      const html2canvas = hcMod.default || hcMod
+      const canvas = await html2canvas(sheet.$el, {
+        scale: 1, useCORS: true, backgroundColor: '#ffffff', logging: false,
+        width: 1920, height: 1080,
+      })
+      return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    },
+
+    async doSendOne(p, subjectTpl, messageTpl) {
+      this.rowMsg = null
+      const blob = await this.renderCertificateImage(p.name)
+      const form = new FormData()
+      form.append('recipient_email', p.email)
+      form.append('recipient_name', p.name)
+      form.append('subject', this.renderTemplate(subjectTpl, p.name))
+      form.append('message', this.renderTemplate(messageTpl, p.name))
+      form.append('image', blob, 'certificate.jpg')
+      await this.api().post('/certificates/send', form)
+      this.rowMsg = { key: p.key, ok: true, text: 'Sent' }
+    },
+
+    async doEmailBulk(modal, subjectTpl, messageTpl) {
+      const recipients = modal.recipients
       let queued = 0
       let skipped = 0
-      try {
-        for (let start = 0; start < recipients.length; start += EMAIL_BATCH_SIZE) {
-          const batch = recipients.slice(start, start + EMAIL_BATCH_SIZE)
-          const form = new FormData()
-          const manifest = []
-          for (const p of batch) {
-            const blob = await this.renderCertificateImage(p.name)
-            const filename = `${p.key.replace(/[^A-Za-z0-9_-]+/g, '_')}.jpg`
-            form.append('images', blob, filename)
-            manifest.push({ filename, email: p.email, name: p.name })
-            this.emailProgress.done++
-          }
-          form.append('manifest', JSON.stringify(manifest))
-          this.emailProgress.phase = 'Sending'
-          const res = await this.api().post('/certificates/send-bulk', form)
-          queued += res.data?.queued || 0
-          skipped += res.data?.skipped || 0
-          this.emailProgress.phase = 'Rendering'
+      for (let start = 0; start < recipients.length; start += EMAIL_BATCH_SIZE) {
+        const batch = recipients.slice(start, start + EMAIL_BATCH_SIZE)
+        const form = new FormData()
+        const manifest = []
+        for (const p of batch) {
+          const blob = await this.renderCertificateImage(p.name)
+          const filename = `${p.key.replace(/[^A-Za-z0-9_-]+/g, '_')}.jpg`
+          form.append('images', blob, filename)
+          manifest.push({
+            filename, email: p.email, name: p.name,
+            subject: this.renderTemplate(subjectTpl, p.name),
+            message: this.renderTemplate(messageTpl, p.name),
+          })
+          modal.progressDone++
         }
-        this.emailSuccess = `Queued ${queued} certificate email${queued === 1 ? '' : 's'}.` +
-          (skipped ? ` ${skipped} skipped (no image/email matched).` : '')
-      } catch (e) {
-        this.emailError = e.response?.data?.detail || 'Failed to send certificate emails.'
-      } finally {
-        this.emailBusy = false
-        this.emailProgress = null
+        form.append('manifest', JSON.stringify(manifest))
+        const res = await this.api().post('/certificates/send-bulk', form)
+        queued += res.data?.queued || 0
+        skipped += res.data?.skipped || 0
       }
+      return { queued, skipped }
     },
   },
 }
