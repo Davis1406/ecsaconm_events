@@ -193,90 +193,79 @@
                   </div>
                 </div>
 
-                <!-- session groups -->
+                <!-- entries — no session grouping, slides-first order -->
                 <div class="flex-1">
-                  <div v-for="grp in room.groups" :key="grp.key" class="border-b border-gray-100 last:border-b-0">
-                    <div v-if="grp.session" class="px-4 pt-2.5 pb-1.5 flex items-center gap-2 bg-gray-50/60">
-                      <span class="text-[10px] font-bold uppercase tracking-wider text-gray-500">Session</span>
-                      <span class="text-[11px] font-bold text-gray-900 bg-white border border-gray-200 rounded px-1.5 py-0.5 tabular-nums">
-                        {{ grp.session }}
-                      </span>
-                      <span class="text-[11px] text-gray-400 tabular-nums">{{ grp.entries.length }}</span>
-                    </div>
+                  <div class="divide-y divide-gray-50">
+                    <div v-for="e in room.entries" :key="e.id"
+                      class="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/70 transition-colors">
 
-                    <div class="divide-y divide-gray-50">
-                      <div v-for="e in grp.entries" :key="e.id"
-                        class="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/70 transition-colors">
+                      <!-- slide / file availability dot -->
+                      <span class="mt-[7px] w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        :class="e.has_presentation ? 'bg-emerald-500' : 'bg-gray-200'"
+                        :title="e.has_presentation ? 'File uploaded' : 'No file uploaded yet'" />
 
-                        <!-- slide / file availability dot -->
-                        <span class="mt-[7px] w-1.5 h-1.5 rounded-full flex-shrink-0"
-                          :class="e.has_presentation ? 'bg-emerald-500' : 'bg-gray-200'"
-                          :title="e.has_presentation ? 'File uploaded' : 'No file uploaded yet'" />
+                      <div class="flex-1 min-w-0">
+                        <!-- title first: that's what people scan for -->
+                        <div class="text-[15px] font-medium leading-snug text-gray-900">
+                          <template v-for="(seg, i) in splitHighlight(e.title || e.activity || '')" :key="i">
+                            <mark v-if="seg.hit" class="bg-yellow-200 text-gray-900 rounded-sm px-0.5">{{ seg.t }}</mark>
+                            <template v-else>{{ seg.t }}</template>
+                          </template>
+                        </div>
 
-                        <div class="flex-1 min-w-0">
-                          <!-- title first: that's what people scan for -->
-                          <div class="text-[15px] font-medium leading-snug text-gray-900">
-                            <template v-for="(seg, i) in splitHighlight(e.title || e.activity || '')" :key="i">
+                        <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span class="text-sm text-gray-600">
+                            <template v-for="(seg, i) in splitHighlight(e.presenter_name || '—')" :key="i">
                               <mark v-if="seg.hit" class="bg-yellow-200 text-gray-900 rounded-sm px-0.5">{{ seg.t }}</mark>
                               <template v-else>{{ seg.t }}</template>
                             </template>
-                          </div>
-
-                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span class="text-sm text-gray-600">
-                              <template v-for="(seg, i) in splitHighlight(e.presenter_name || '—')" :key="i">
-                                <mark v-if="seg.hit" class="bg-yellow-200 text-gray-900 rounded-sm px-0.5">{{ seg.t }}</mark>
-                                <template v-else>{{ seg.t }}</template>
-                              </template>
-                            </span>
-                            <span v-if="e.code"
-                              class="text-[10px] font-mono font-semibold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
-                              {{ e.code }}
-                            </span>
-                            <span v-if="e.is_substitution" class="badge-sub"
-                              :title="e.original_presenter ? `Replacing ${e.original_presenter}` : 'Substitution'">
-                              SUB
-                            </span>
-                            <span v-if="e.original_presenter && e.is_substitution" class="text-xs text-gray-400">
-                              for {{ e.original_presenter }}
-                            </span>
-                            <span v-if="e.category === 'poster'" class="badge-poster">Poster</span>
-                            <span v-if="e.category === 'plenary' && e.role" class="text-xs italic text-gray-500">{{ e.role }}</span>
-                          </div>
+                          </span>
+                          <span v-if="e.code"
+                            class="text-[10px] font-mono font-semibold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
+                            {{ e.code }}
+                          </span>
+                          <span v-if="e.is_substitution" class="badge-sub"
+                            :title="e.original_presenter ? `Replacing ${e.original_presenter}` : 'Substitution'">
+                            SUB
+                          </span>
+                          <span v-if="e.original_presenter && e.is_substitution" class="text-xs text-gray-400">
+                            for {{ e.original_presenter }}
+                          </span>
+                          <span v-if="e.category === 'plenary' && e.role" class="text-xs italic text-gray-500">{{ e.role }}</span>
                         </div>
+                      </div>
 
-                        <!-- actions -->
-                        <div class="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
-                          <template v-if="e.has_presentation">
-                            <button v-if="isPreviewable(e.presentation_ext)" type="button" @click="openPreview(e)"
-                              title="Open in a new preview window"
-                              class="act act-preview">
-                              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                              <span class="hidden sm:inline">Preview</span>
-                            </button>
-                            <button type="button" @click="downloadSingle(e)" title="Download this file"
-                              class="act act-download">
-                              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                              </svg>
-                              <span class="hidden sm:inline">Download</span>
-                            </button>
-                          </template>
-                          <a v-if="e.video_url" :href="e.video_url" target="_blank" rel="noopener" title="Watch the recording"
-                            class="act act-video">
+                      <!-- actions -->
+                      <div class="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+                        <template v-if="e.has_presentation">
+                          <button v-if="isPreviewable(e.presentation_ext)" type="button" @click="openPreview(e)"
+                            title="Open in a new preview window"
+                            class="act act-preview">
                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                               <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
-                            <span class="hidden sm:inline">Watch</span>
-                          </a>
-                        </div>
+                            <span class="hidden sm:inline">Preview</span>
+                          </button>
+                          <button type="button" @click="downloadSingle(e)" title="Download this file"
+                            class="act act-download">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                              <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span class="hidden sm:inline">Download</span>
+                          </button>
+                        </template>
+                        <a v-if="e.video_url" :href="e.video_url" target="_blank" rel="noopener" title="Watch the recording"
+                          class="act act-video">
+                          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          <span class="hidden sm:inline">Watch</span>
+                        </a>
                       </div>
                     </div>
                   </div>
@@ -471,7 +460,8 @@ export default {
       return [ALL_ROOMS, ...[...rooms].sort((a, b) => a.localeCompare(b))]
     },
 
-    // The final, visible day → room → session → entry tree.
+    // The final, visible day → room → entry tree. Entries are ordered with
+    // slides first (the ready-to-watch talks float to the top), then by code.
     roomDays() {
       const q = this.query.trim().toLowerCase()
       const searching = q.length > 0
@@ -484,7 +474,12 @@ export default {
         if (!searching && this.activeRoom !== ALL_ROOMS && d.room !== this.activeRoom) continue
         if (!searching && this.activeDay !== ALL_DAYS && d.day !== this.activeDay) continue
 
-        const entries = searching ? d.entries.filter(e => this.matches(e, q)) : d.entries
+        const entries = (searching ? d.entries.filter(e => this.matches(e, q)) : d.entries)
+          .slice()
+          .sort((a, b) => {
+            if (!!a.has_presentation !== !!b.has_presentation) return b.has_presentation ? 1 : -1
+            return (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })
+          })
         if (!entries.length) continue
 
         grouped[d.day] = grouped[d.day] || []
@@ -493,7 +488,6 @@ export default {
           entries,
           total: entries.length,
           with_slide: entries.filter(e => e.has_presentation).length,
-          groups: this.groupEntries(entries),
         })
       }
 
@@ -648,23 +642,6 @@ export default {
       return dayDate < today
     },
 
-    // Group a room's entries into session blocks. The API already sorts by
-    // (session, code, title), so first-appearance order is the right order;
-    // entries with no session stay unlabelled at the top of the room.
-    groupEntries(entries) {
-      const groups = []
-      for (const e of entries) {
-        const key = e.session || ''
-        let g = groups.find(x => x.key === key)
-        if (!g) {
-          g = { key, session: e.session || '', entries: [] }
-          groups.push(g)
-        }
-        g.entries.push(e)
-      }
-      return groups
-    },
-
     async load() {
       this.loading = true
       try {
@@ -731,9 +708,6 @@ export default {
 <style scoped>
 .badge-sub {
   @apply inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-purple-100 text-purple-700;
-}
-.badge-poster {
-  @apply inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700;
 }
 .act {
   @apply inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition whitespace-nowrap;

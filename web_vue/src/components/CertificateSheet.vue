@@ -43,6 +43,13 @@
     <img :src="signature" alt="President's signature" style="position:absolute; top:838px; left:812px; width:300px; height:55px; object-fit:contain">
     <p style="position:absolute; top:914px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:700; text-align:center; color:#1a1a1a">Dr. Glory Msibi</p>
     <p style="position:absolute; top:950px; left:790px; width:340px; font-family:Montserrat, Arial, sans-serif; font-size:21px; font-weight:600; letter-spacing:3px; text-align:center; color:#666666">PRESIDENT</p>
+    <!-- Verification QR — scanning it shows the confirmation message below.
+         Sized for the 1920x1080 canvas; the printed/emailed page carries the
+         same px dimensions, so it stays readable at A4/landscape. -->
+    <div style="position:absolute; top:420px; left:120px; width:170px; height:170px; background:#ffffff; padding:10px; box-sizing:border-box; border:1px solid #e5e7eb; border-radius:6px">
+      <QRCodeVue :value="qrValue" :size="150" foreground="#0f172a" background="#ffffff" />
+    </div>
+    <p style="position:absolute; top:596px; left:120px; width:170px; font-family:Montserrat, Arial, sans-serif; font-size:14px; font-weight:600; letter-spacing:0.5px; text-align:center; color:#666666">SCAN TO VERIFY</p>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" style="position:absolute; top:840px; left:110px; width:160px; height:160px">
       <defs>
         <linearGradient :id="`badgeGrad${uid}`" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -58,12 +65,14 @@
 </template>
 
 <script>
+import QRCodeVue from 'qrcode.vue'
 import logo from '@/assets/certificate/logo.png'
 import watermark from '@/assets/certificate/watermark.png'
 import signature from '@/assets/certificate/signature.png'
 
 export default {
   name: 'CertificateSheet',
+  components: { QRCodeVue },
   props: {
     name: { type: String, required: true },
     type: { type: Object, required: true },
@@ -80,6 +89,24 @@ export default {
     bodyLines() {
       const b = this.type.body
       return typeof b === 'function' ? b(this.eventName) : b
+    },
+    // What a scan of the certificate's QR shows: a confirmable statement that
+    // this person attended the event and received the certificate, plus the
+    // ECSACONM contact block. Plain text (not a URL) so any scanner renders it.
+    qrValue() {
+      const name = this.name || ''
+      const event = this.eventName || 'the ECSACONM conference'
+      return [
+        'ECSACONM Certificate Verification',
+        '',
+        `This is to confirm ${name} attended ${event}, from 14th to 18th September 2026 at Golden Tulip Airport Hotel, Zanzibar, and was awarded this certificate.`,
+        '',
+        'For further enquiries please contact:',
+        'Address: Plot No. 157, Oloirien Njiro Road, P.O. Box 1009, Arusha, Tanzania',
+        'Tel: +255-27-254 9362, +255-27-254 9365 / 9366',
+        'Fax: +255-27-254 9392',
+        'Email: info@ecsaconm.org (General enquiries)',
+      ].join('\n')
     },
   },
   methods: {
