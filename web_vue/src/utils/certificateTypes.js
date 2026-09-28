@@ -9,7 +9,7 @@ const EVENT_LINES = [
 
 export const CERTIFICATE_TYPES = {
   attendee: {
-    label: 'Attendees',
+    label: 'Other Delegates',
     cpd: 5,
     body: ['Having attended the 17th ECSACONM Biennial Scientific Conference', ...EVENT_LINES],
   },
@@ -19,7 +19,7 @@ export const CERTIFICATE_TYPES = {
     body: ['Having presented in the 17th ECSACONM Biennial Scientific Conference', ...EVENT_LINES],
   },
   usher: {
-    label: 'Ushers / Support Staff',
+    label: 'Ushers & Secretariat',
     cpd: 0,
     body: [
       'Having served as an usher/support staff at the 17th ECSACONM Biennial Scientific',

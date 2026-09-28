@@ -38,7 +38,7 @@
     <!-- No event selected -->
     <div v-if="!selectedEventId" class="bg-white rounded-2xl shadow-sm py-20 flex flex-col items-center justify-center text-center px-6">
       <p class="text-gray-500 text-base font-medium mb-1">Select an event to generate certificates</p>
-      <p class="text-gray-400 text-sm">Attendees, presenters and ushers are loaded from the event</p>
+      <p class="text-gray-400 text-sm">Presenters (plenary, oral &amp; poster), ushers/secretariat, and other paid delegates are loaded from the event</p>
     </div>
 
     <!-- Spinner -->
@@ -320,17 +320,23 @@ export default {
     },
     sourceHint() {
       return {
-        attendee: 'Participants who have paid (secretariat counts as paid), in every category except ushers. Use the category buttons to narrow the list; tick "only scanned as attended" to limit it to people whose QR badge was scanned.',
-        presenter: 'Presenters named in the conference programme (plenary, oral and poster), one row per person.',
-        usher: 'Participants registered with the Usher role.',
+        attendee: 'Other paid delegates — registered, paid (secretariat always counts as paid), and not a presenter, usher or secretariat member. Use the category buttons to narrow the list; tick "only scanned as attended" to limit it to people whose QR badge was scanned.',
+        presenter: 'Everyone named in the conference programme — plenary, oral and poster alike (Presentations by Room and the plenary schedule) — one row per person, cross-matched to their registration for an email.',
+        usher: 'Ushers and secretariat/support staff — registered with either role, same certificate for both.',
       }[this.type]
     },
     people() {
       if (this.type === 'presenter') return this.presenters
+      // A presenter shouldn't also show up (and get double-emailed) under
+      // "other delegates" just because they also have a paid registration —
+      // matched by name against the programme-derived presenter list.
+      const presenterNames = new Set(this.presenters.map(p => p.name.toLowerCase()))
       const regs = this.registrations.filter(r => {
-        const isUsher = (r.participation_role || '').toLowerCase() === 'usher'
-        if (this.type === 'usher') return isUsher
-        if (isUsher || !r.paid) return false
+        const isSupport = this.isSupportRole(r)
+        if (this.type === 'usher') return isSupport
+        if (isSupport || !r.paid) return false
+        const name = tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' '))
+        if (presenterNames.has(name.toLowerCase())) return false
         const cats = this.attendeeCategoryFilter
         if (cats.length && !cats.includes(this.roleLabel(r))) return false
         return !this.attendedOnly || this.attendedRegIds.has(r.id)
@@ -375,9 +381,12 @@ export default {
         .sort((a, b) => a.name.localeCompare(b.name))
     },
     attendeeCategories() {
+      const presenterNames = new Set(this.presenters.map(p => p.name.toLowerCase()))
       const counts = {}
       this.registrations.forEach(r => {
-        if ((r.participation_role || '').toLowerCase() === 'usher' || !r.paid) return
+        if (this.isSupportRole(r) || !r.paid) return
+        const fullName = tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' '))
+        if (presenterNames.has(fullName.toLowerCase())) return
         const name = this.roleLabel(r)
         counts[name] = (counts[name] || 0) + 1
       })
@@ -510,6 +519,13 @@ export default {
     },
     roleLabel(r) {
       return (r.participation_role || 'delegate').replace(/_/g, ' ')
+    },
+    // Support staff — ushers and secretariat get the same certificate, so
+    // they're one group for this purpose even though they're two different
+    // participation_role values.
+    isSupportRole(r) {
+      const role = (r.participation_role || '').toLowerCase()
+      return role === 'usher' || role === 'secretariat'
     },
     toggleAttendeeCategory(c) {
       const i = this.attendeeCategoryFilter.indexOf(c)
