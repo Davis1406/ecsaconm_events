@@ -39,11 +39,21 @@ CLIENT_ORIGIN = os.getenv("CLIENT_ORIGIN", "https://events.ecsaconm.org")
 # to Sent) mailbox. Override via ADMIN_CC_EMAIL in .env if needed.
 ADMIN_CC_EMAIL = os.getenv("ADMIN_CC_EMAIL", "admission@cosecsa.org")
 
+# Email types sent WITHOUT the admin CC. Certificates go out in the hundreds —
+# CC'ing each one doubled the load on the host's 500-recipients/hour cap and
+# flooded the admin mailbox; the Sent Emails log is the record for these.
+NO_CC_EMAIL_TYPES = {"certificate"}
 
-def _cc_recipients(recipient_email):
+
+def _wants_cc(email_type=None):
+    return email_type not in NO_CC_EMAIL_TYPES
+
+
+def _cc_recipients(recipient_email, email_type=None):
     """Recipients list for the SMTP envelope: the addressee plus the admin
-    CC, deduped so we don't double-send when they happen to be the same."""
-    if recipient_email.strip().lower() == ADMIN_CC_EMAIL.strip().lower():
+    CC, deduped so we don't double-send when they happen to be the same.
+    Types in NO_CC_EMAIL_TYPES go to the addressee only."""
+    if not _wants_cc(email_type) or recipient_email.strip().lower() == ADMIN_CC_EMAIL.strip().lower():
         return [recipient_email]
     return [recipient_email, ADMIN_CC_EMAIL]
 
@@ -154,7 +164,7 @@ def _inject_tracking_pixel(email_body, log_id):
 def _build_image_invitation_message(from_name, from_email, recipient_email, subject, reply_to_email,
                                      image_bytes, image_filename, image_subtype, final_body_html,
                                      attachment_bytes=None, attachment_filename=None,
-                                     attachment_content_type=None):
+                                     attachment_content_type=None, cc=True):
     """A message whose body shows the given image inline (via a cid:
     reference, so it renders directly in the email body). By default the
     same image bytes are attached again as a separate downloadable file; if
@@ -165,7 +175,8 @@ def _build_image_invitation_message(from_name, from_email, recipient_email, subj
     outer = MIMEMultipart("mixed")
     outer["From"] = f"{from_name} <{from_email}>"
     outer["To"] = recipient_email
-    outer["Cc"] = ADMIN_CC_EMAIL
+    if cc:
+        outer["Cc"] = ADMIN_CC_EMAIL
     outer["Subject"] = subject
     outer["Date"] = formatdate(localtime=True)
     outer["Message-ID"] = make_msgid(domain="ecsaconm.org")
@@ -330,10 +341,10 @@ def send_image_invitation_email(recipient_email, subject, image_bytes, image_fil
             from_name, from_email, recipient_email, subject, reply_to_email,
             image_bytes, image_filename, image_subtype, final_body,
             attachment_bytes=attachment_bytes, attachment_filename=attachment_filename,
-            attachment_content_type=attachment_content_type,
+            attachment_content_type=attachment_content_type, cc=_wants_cc(email_type),
         )
 
-        envelope_to = _cc_recipients(recipient_email)
+        envelope_to = _cc_recipients(recipient_email, email_type)
         if smtp_port == 465:
             with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
                 server.login(smtp_username, smtp_password)
@@ -437,18 +448,18 @@ def _load_recent_send_times(window_seconds=3600):
     db = SessionLocal()
     try:
         rows = (
-            db.query(EmailLog.sent_at, EmailLog.recipient_email)
+            db.query(EmailLog.sent_at, EmailLog.recipient_email, EmailLog.email_type)
             .filter(EmailLog.status == "sent", EmailLog.sent_at >= cutoff)
             .all()
         )
         times = []
-        for dt, recipient in rows:
+        for dt, recipient, email_type in rows:
             if dt is None:
                 continue
             # Naive DB timestamps are UTC (server default func.now()); treat
             # them as such regardless of the process timezone.
             ts = calendar.timegm(dt.timetuple()) if dt.tzinfo is None else dt.timestamp()
-            times.extend([ts] * len(_cc_recipients(recipient or "")))
+            times.extend([ts] * len(_cc_recipients(recipient or "", email_type)))
         times.sort()
         return times
     finally:
@@ -617,7 +628,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                 break
             # Respect the rolling-hour quota before doing any work for this job.
             # Cost = envelope recipients (addressee + admin CC), the host's unit.
-            quota_cost = len(_cc_recipients(job["recipient_email"]))
+            quota_cost = len(_cc_recipients(job["recipient_email"], job.get("email_type", "general")))
             _await_quota_slot(quota_cost)
 
             recipient_email = job["recipient_email"]
@@ -649,6 +660,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                     attachment_bytes=job.get("inline_attachment_bytes"),
                     attachment_filename=job.get("inline_attachment_filename"),
                     attachment_content_type=job.get("inline_attachment_content_type"),
+                    cc=_wants_cc(email_type),
                 )
                 if msgs_on_connection >= max_msgs_per_connection:
                     try:
@@ -657,7 +669,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                         pass
                     server = _open_connection()
                     msgs_on_connection = 0
-                envelope_to = _cc_recipients(recipient_email)
+                envelope_to = _cc_recipients(recipient_email, email_type)
                 try:
                     server.sendmail(smtp_username, envelope_to, message.as_string())
                     msgs_on_connection += 1
@@ -706,7 +718,8 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
             message = MIMEMultipart("mixed") if attachment_bytes else MIMEMultipart("alternative")
             message["From"] = f"{from_name} <{from_email}>"
             message["To"] = recipient_email
-            message["Cc"] = ADMIN_CC_EMAIL
+            if _wants_cc(email_type):
+                message["Cc"] = ADMIN_CC_EMAIL
             message["Subject"] = subject
             message["Date"] = formatdate(localtime=True)
             message["Message-ID"] = make_msgid(domain="ecsaconm.org")
@@ -725,7 +738,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                 message.attach(file_part)
             else:
                 message.attach(MIMEText(final_body, "html", "utf-8"))
-            envelope_to = _cc_recipients(recipient_email)
+            envelope_to = _cc_recipients(recipient_email, email_type)
 
             if msgs_on_connection >= max_msgs_per_connection:
                 try:
