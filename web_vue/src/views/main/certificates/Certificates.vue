@@ -379,6 +379,25 @@
             <p class="text-[11px] text-gray-400 mt-1">Separate addresses with commas. Leave blank for no CC.</p>
           </div>
 
+          <div v-if="emailModal.appreciation">
+            <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1.5">Attach a letter (PDF, optional)</label>
+            <div v-if="emailModal.letterFile" class="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2">
+              <svg class="w-5 h-5 flex-shrink-0" style="color: rgb(220,50,75);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+              </svg>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-gray-800 truncate">{{ emailModal.letterFile.name }}</div>
+                <div class="text-[11px] text-gray-400">{{ Math.max(1, Math.round(emailModal.letterFile.size / 1024)) }} KB</div>
+              </div>
+              <button type="button" @click="clearLetter" :disabled="emailModal.sending" class="text-xs font-semibold text-gray-500 hover:text-gray-800">Remove</button>
+            </div>
+            <label v-else class="flex items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 px-3 py-3 text-sm text-gray-500 cursor-pointer hover:border-gray-400">
+              <input type="file" accept="application/pdf,.pdf" class="hidden" @change="onLetterPicked" />
+              Choose a PDF letter to send with the certificate
+            </label>
+            <p v-if="emailModal.letterError" class="text-[11px] text-red-600 mt-1">{{ emailModal.letterError }}</p>
+          </div>
+
           <div>
             <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1.5">Subject</label>
             <input v-model="emailModal.subject" type="text"
@@ -410,7 +429,12 @@
                     Delivered as a PDF attachment (rendered above as the live certificate) — most inboxes will also display this image directly in the message.
                   </p>
               <!-- Mirrors mailer_util.links_to_html() — keep the two in step. -->
-              <div v-if="eventLinks.length" class="pt-3 border-t border-gray-100">
+              <div v-if="emailModal.appreciation" class="pt-3 border-t border-gray-100 text-xs text-gray-500">
+                <span class="font-semibold text-gray-600">Attachments:</span>
+                Certificate of Appreciation – {{ previewName }}.pdf<span v-if="emailModal.letterFile">, {{ emailModal.letterFile.name }}</span>
+                <div class="text-[11px] text-gray-400 mt-0.5">No conference links are added to appreciation emails.</div>
+              </div>
+              <div v-else-if="eventLinks.length" class="pt-3 border-t border-gray-100">
                 <div class="text-xs font-bold uppercase mb-2.5" style="letter-spacing: 1.5px; color: rgb(220,50,75);">Useful links</div>
                 <div class="space-y-2.5">
                   <div v-for="l in eventLinks" :key="l.id"
@@ -497,7 +521,7 @@ import CertificateSheet from '@/components/CertificateSheet.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
-import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, APPRECIATION_TYPE, APPRECIATION_RECIPIENTS, certificateCategory, tidyName, ensureCertificateFonts } from '@/utils/certificateTypes'
+import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, APPRECIATION_TYPE, APPRECIATION_RECIPIENTS, DEFAULT_EVENT_NAME, certificateCategory, tidyName, ensureCertificateFonts } from '@/utils/certificateTypes'
 
 const API_URL = import.meta.env.VITE_API_URL
 // A paid abstract presenter who doesn't appear anywhere in the programme book.
@@ -514,6 +538,18 @@ const DEFAULT_EMAIL_SUBJECT = 'Your Certificate of Participation — {{name}}'
 
 // Defaults for the Certificate of Appreciation dialog (editable before sending).
 const APPRECIATION_EMAIL_SUBJECT = 'Certificate of Appreciation — {{name}}'
+// Swapped in automatically when a letter is attached (and back when removed),
+// unless the admin has already edited the message.
+const APPRECIATION_EMAIL_MESSAGE_LETTER = [
+  'Dear {{name}},',
+  '',
+  'On behalf of the East, Central and Southern Africa College of Nursing and Midwifery (ECSACONM), please find attached our letter of appreciation, together with a Certificate of Appreciation in recognition of your dedication and invaluable support to the College in hosting the {{event}} in Zanzibar.',
+  '',
+  'Your support contributed greatly to the success of the conference, and we are sincerely grateful.',
+  '',
+  'Warm regards,',
+  'ECSACONM Secretariat',
+].join('\n')
 const APPRECIATION_EMAIL_MESSAGE = [
   'Dear {{name}},',
   '',
@@ -1070,7 +1106,7 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
     renderTemplate(str, name) {
       return (str || '')
         .split('{{name}}').join(name)
-        .split('{{event}}').join(this.selectedEventName)
+        .split('{{event}}').join(this.selectedEventName || DEFAULT_EVENT_NAME)
     },
 
     // Opens the preview/edit modal for one person (row Send) or several
@@ -1102,10 +1138,35 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       Object.assign(this.emailModal, {
         appreciation: true,
         cc: (r.cc || []).join(', '),
+        letterFile: null,
+        letterError: '',
         subject: APPRECIATION_EMAIL_SUBJECT,
         message: APPRECIATION_EMAIL_MESSAGE,
       })
       this.refreshPreview()
+    },
+    onLetterPicked(evt) {
+      const m = this.emailModal
+      const file = evt.target.files && evt.target.files[0]
+      evt.target.value = ''
+      if (!m || !file) return
+      m.letterError = ''
+      if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+        m.letterError = 'Please choose a PDF file.'
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        m.letterError = 'The letter must be under 10 MB.'
+        return
+      }
+      m.letterFile = file
+      if (m.message === APPRECIATION_EMAIL_MESSAGE) m.message = APPRECIATION_EMAIL_MESSAGE_LETTER
+    },
+    clearLetter() {
+      const m = this.emailModal
+      if (!m) return
+      m.letterFile = null
+      if (m.message === APPRECIATION_EMAIL_MESSAGE_LETTER) m.message = APPRECIATION_EMAIL_MESSAGE
     },
     closeEmailModal() {
       if (this.emailModal && this.emailModal.sending) return
@@ -1384,6 +1445,7 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       if (appreciation) {
         form.append('cc', m.cc || '')
         form.append('kind', 'appreciation')
+        if (m.letterFile) form.append('attachment', m.letterFile, m.letterFile.name)
       }
       await this.api().post('/certificates/send', form)
       this.rowMsg = { key: p.key, ok: true, text: 'Sent' }

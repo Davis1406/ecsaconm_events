@@ -103,6 +103,7 @@ async def send_certificate(
     pdf: UploadFile = File(...),
     cc: str = Form(None),
     kind: str = Form(None),
+    attachment: UploadFile = File(None),
 ):
     """Email one person their certificate — the message body shows the
     certificate (rendered client-side to both a preview image and a PDF,
@@ -135,7 +136,23 @@ async def send_certificate(
             cc_list.append(addr)
     if len(cc_list) > 5:
         raise HTTPException(status_code=400, detail="At most 5 CC addresses.")
-    label = "Certificate of Appreciation" if kind == "appreciation" else "Certificate"
+    appreciation = kind == "appreciation"
+    label = "Certificate of Appreciation" if appreciation else "Certificate"
+
+    # Optional extra file (a thank-you letter) — appreciation sends only, PDF, max 10MB.
+    extra_attachments = []
+    if attachment is not None and attachment.filename:
+        if not appreciation:
+            raise HTTPException(status_code=400, detail="Extra attachments are only for Certificates of Appreciation.")
+        data = await attachment.read()
+        if not data.startswith(b"%PDF"):
+            raise HTTPException(status_code=400, detail="The attached letter must be a PDF.")
+        if len(data) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="The attached letter must be under 10 MB.")
+        name = re.sub(r'[\\/:*?"<>|\r\n]+', " ", attachment.filename).strip() or "Letter.pdf"
+        if not name.lower().endswith(".pdf"):
+            name += ".pdf"
+        extra_attachments.append((data, name, "application/pdf"))
 
     try:
         mailer_util.send_image_invitation_email(
@@ -147,7 +164,9 @@ async def send_certificate(
             email_type="certificate",
             sent_by_user_id=current_user["user_id"],
             message_html=mailer_util.text_to_html(message),
-            links_html=_links_html(
+            # Appreciation emails go to officials — no conference links
+            # (photos / presentations) under the certificate.
+            links_html="" if appreciation else _links_html(
                 _public_links(db, event_id),
                 _user_ids_by_email(db, [recipient_email]).get(recipient_email.strip().lower()),
             ),
@@ -155,6 +174,7 @@ async def send_certificate(
             attachment_filename=f"{label} - {recipient_name}.pdf",
             attachment_content_type="application/pdf",
             extra_cc=cc_list,
+            extra_attachments=extra_attachments,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send certificate email: {e}")

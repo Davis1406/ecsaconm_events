@@ -164,7 +164,8 @@ def _inject_tracking_pixel(email_body, log_id):
 def _build_image_invitation_message(from_name, from_email, recipient_email, subject, reply_to_email,
                                      image_bytes, image_filename, image_subtype, final_body_html,
                                      attachment_bytes=None, attachment_filename=None,
-                                     attachment_content_type=None, cc=True, extra_cc=None):
+                                     attachment_content_type=None, cc=True, extra_cc=None,
+                                     extra_attachments=None):
     """A message whose body shows the given image inline (via a cid:
     reference, so it renders directly in the email body). By default the
     same image bytes are attached again as a separate downloadable file; if
@@ -205,6 +206,15 @@ def _build_image_invitation_message(from_name, from_email, recipient_email, subj
         attach_img = MIMEImage(image_bytes, _subtype=image_subtype)
         attach_img.add_header("Content-Disposition", "attachment", filename=image_filename)
         outer.attach(attach_img)
+    # Further files sent alongside (e.g. a thank-you letter with a
+    # Certificate of Appreciation): list of (bytes, filename, content_type).
+    for data, filename, content_type in (extra_attachments or []):
+        maintype, _, subtype = (content_type or "application/pdf").partition("/")
+        part = MIMEBase(maintype, subtype or "octet-stream")
+        part.set_payload(data)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", "attachment", filename=filename or "attachment.pdf")
+        outer.attach(part)
     return outer
 
 
@@ -304,7 +314,7 @@ def _image_invitation_body_html(cid="gala_invite_image", intro_html="", links_ht
 def send_image_invitation_email(recipient_email, subject, image_bytes, image_filename, image_subtype="jpeg",
                                  email_type="general", sent_by_user_id=None, reply_to_email=None,
                                  message_html="", links_html="", attachment_bytes=None, attachment_filename=None,
-                                 attachment_content_type=None, extra_cc=None):
+                                 attachment_content_type=None, extra_cc=None, extra_attachments=None):
     """Send a one-off email whose body shows the given image inline —
     optionally preceded by a short intro message and followed by a links
     block (both already HTML-safe, see text_to_html()/links_to_html()). The
@@ -343,7 +353,7 @@ def send_image_invitation_email(recipient_email, subject, image_bytes, image_fil
             image_bytes, image_filename, image_subtype, final_body,
             attachment_bytes=attachment_bytes, attachment_filename=attachment_filename,
             attachment_content_type=attachment_content_type, cc=_wants_cc(email_type),
-            extra_cc=extra_cc,
+            extra_cc=extra_cc, extra_attachments=extra_attachments,
         )
 
         # Explicit per-send CCs (e.g. a Certificate of Appreciation copied to
