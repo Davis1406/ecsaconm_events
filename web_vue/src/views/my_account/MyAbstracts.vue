@@ -2,8 +2,10 @@
   <div class="flex flex-col space-y-6 flex-1">
     <div class="text-2xl font-bold text-gray-800">My Abstracts</div>
 
-    <!-- Abstract Book -->
-    <div v-if="isPaidPresenter" class="bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <!-- Abstract Book — shown to every participant (the certificate email
+         points all recipients here); /abstracts/abstract-book/view is open to
+         any logged-in user. -->
+    <div class="bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
         <h3 class="font-semibold text-gray-800 mb-1">Conference Abstract Book</h3>
         <p class="text-sm text-gray-500">Preview or download the full book of accepted abstracts.</p>

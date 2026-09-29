@@ -458,6 +458,8 @@ const DEFAULT_EMAIL_MESSAGE = [
   '  ❖ Search by presenter name, title or abstract code using the search box',
   '  ❖ Preview or download the slides (with a preview available for most uploads)',
   '',
+  'An online copy of the Conference Abstract Book is also available in your portal. Log in at https://events.ecsaconm.org, go to My Account → My Abstracts, and click View Abstract Book to preview or download it.',
+  '',
   'If you do not see your abstract listed under the sessions, or your presentation is unavailable, kindly share it with us at admission@cosecsa.org or info@ecsaconm.org so we can add it and make it available to other delegates for wider dissemination.',
   '',
   'Warm regards,',
