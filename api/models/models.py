@@ -1245,3 +1245,30 @@ class SystemSetting(Base):
 
     def __repr__(self):
         return f"<SystemSetting key={self.key}>"
+
+
+class PageView(Base):
+    """One open of a tracked public page (currently the public Conference
+    presentations page). `visitor_id` is a random id the browser keeps in
+    localStorage, so repeat opens from one device count as one visitor;
+    `user_id` is set only when the open is attributable to a person — the
+    signed per-recipient `ref` on the link in their certificate email, or a
+    logged-in session. `source` records where the open came from (e.g.
+    "certificate_email")."""
+    __tablename__ = "page_view"
+
+    id = Column(Integer, primary_key=True, index=True)
+    page = Column(String(100), nullable=False)
+    event_id = Column(Integer, nullable=True)
+    visitor_id = Column(String(64), nullable=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    source = Column(String(50), nullable=True)
+    user_agent = Column(String(300), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (Index("ix_page_view_page_event_created", "page", "event_id", "created_at"),)
+
+    def __repr__(self):
+        return f"<PageView id={self.id} page={self.page} visitor={self.visitor_id}>"

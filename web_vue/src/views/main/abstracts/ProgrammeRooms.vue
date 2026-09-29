@@ -7,6 +7,51 @@
       {{ flashMsg }}
     </div>
 
+    <!-- Opens of the public Conference presentations page (page_view table).
+         People are only named when they came via their certificate-email link. -->
+    <div v-if="isAdmin && pageStats" class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div class="text-sm font-bold text-gray-800">Public page opens</div>
+          <div class="text-[11px] text-gray-400">
+            Conference presentations page{{ pageStats.tracking_since ? ` · tracking since ${fmtOpenTime(pageStats.tracking_since)}` : ' · no opens recorded yet' }}
+          </div>
+        </div>
+        <button type="button" @click="loadPageStats" class="text-xs font-semibold text-gray-500 hover:text-gray-800">Refresh</button>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        <div v-for="t in [
+            { label: 'Opens', value: pageStats.opens },
+            { label: 'Unique devices', value: pageStats.unique_visitors },
+            { label: 'From certificate email', value: pageStats.from_email },
+            { label: 'Identified people', value: pageStats.identified_people },
+          ]" :key="t.label" class="rounded-xl bg-gray-50 px-3 py-2.5">
+          <div class="text-2xl font-bold" style="color: rgb(254,80,103);">{{ t.value }}</div>
+          <div class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{{ t.label }}</div>
+        </div>
+      </div>
+      <div v-if="pageStats.people.length" class="mt-3">
+        <button type="button" @click="showOpeners = !showOpeners" class="text-xs font-semibold" style="color: rgb(220,50,75);">
+          {{ showOpeners ? 'Hide' : 'Show' }} who opened it ({{ pageStats.people.length }})
+        </button>
+        <div v-if="showOpeners" class="mt-2 max-h-72 overflow-y-auto border border-gray-100 rounded-lg">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 text-gray-500 sticky top-0">
+              <tr><th class="text-left px-3 py-1.5">Name</th><th class="text-left px-3 py-1.5">Email</th><th class="text-right px-3 py-1.5">Opens</th><th class="text-right px-3 py-1.5">Last opened</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in pageStats.people" :key="p.user_id" class="border-t border-gray-100">
+                <td class="px-3 py-1.5 text-gray-800">{{ p.name }}</td>
+                <td class="px-3 py-1.5 text-gray-500">{{ p.email }}</td>
+                <td class="px-3 py-1.5 text-right">{{ p.opens }}</td>
+                <td class="px-3 py-1.5 text-right text-gray-500">{{ fmtOpenTime(p.last_opened) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Rooms view -->
       <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
         <div class="flex flex-col lg:flex-row lg:items-center gap-3">
@@ -1002,6 +1047,8 @@ export default {
 
   data() {
     return {
+      pageStats: null,
+      showOpeners: false,
       roomsData: [],
       loading: false,
       search: '',
@@ -1270,6 +1317,7 @@ export default {
 
   mounted() {
     this.loadRooms()
+    if (this.isAdmin) this.loadPageStats()
     window.addEventListener('keydown', this.onKeydown)
   },
   beforeUnmount() {
@@ -1277,6 +1325,21 @@ export default {
   },
 
   methods: {
+    async loadPageStats() {
+      try {
+        const res = await axios.get(`${this.apiUrl}/page-views/stats`, {
+          params: { page: 'programme-rooms-public', event_id: 1 },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        })
+        this.pageStats = res.data
+      } catch (e) { /* stats are optional — never block the rooms page */ }
+    },
+    // API timestamps are UTC without a zone suffix; show them in local time.
+    fmtOpenTime(ts) {
+      if (!ts) return ''
+      const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(ts) ? ts : ts + 'Z')
+      return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    },
     onKeydown(e) {
       if (e.key === '/' && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target?.tagName || '')) {
         e.preventDefault()

@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from dependencies.auth_dependency import Auth, get_current_user
-from models.models import EmailLog, Link
+from sqlalchemy import func
+
+from models.models import EmailLog, Link, User
 from utils import mailer_util
+from utils.page_ref import with_ref
 
 router = APIRouter()
 
@@ -23,20 +26,38 @@ def _image_subtype(filename: str) -> str:
     return "png" if ext == "png" else "jpeg"
 
 
-def _public_links_html(db: Session, event_id: int) -> str:
+def _public_links(db: Session, event_id: int) -> list:
     """The event's current public Links (same ones on the event page's
-    Links tab, e.g. photo gallery / presentations) as a 'Useful links' HTML
-    block — fetched fresh from the DB at send time rather than trusted from
-    the client, so it always reflects whatever's actually public right now."""
+    Links tab, e.g. photo gallery / presentations) — fetched fresh from the
+    DB at send time rather than trusted from the client, so it always
+    reflects whatever's actually public right now."""
     if not event_id:
-        return ""
-    rows = (
+        return []
+    return (
         db.query(Link)
         .filter(Link.event_id == event_id, Link.deleted_at == None, Link.access_level == "public")
         .order_by(Link.id.asc())
         .all()
     )
-    return mailer_util.links_to_html([{"label": l.name, "url": l.link} for l in rows])
+
+
+def _links_html(links: list, user_id=None) -> str:
+    """'Useful links' block for one recipient. The public programme link gets
+    their signed ref (utils/page_ref.py) so page-view stats can show who
+    opened it from their email; other links are unchanged."""
+    return mailer_util.links_to_html([{"label": l.name, "url": with_ref(l.link, user_id)} for l in links])
+
+
+def _user_ids_by_email(db: Session, emails) -> dict:
+    wanted = {(e or "").strip().lower() for e in emails if e and e.strip()}
+    if not wanted:
+        return {}
+    rows = (
+        db.query(User.id, User.email)
+        .filter(User.deleted_at == None, func.lower(User.email).in_(wanted))
+        .all()
+    )
+    return {email.strip().lower(): uid for uid, email in rows}
 
 
 DEFAULT_SUBJECT = "Your certificate — ECSACONM Events"
@@ -107,7 +128,10 @@ async def send_certificate(
             email_type="certificate",
             sent_by_user_id=current_user["user_id"],
             message_html=mailer_util.text_to_html(message),
-            links_html=_public_links_html(db, event_id),
+            links_html=_links_html(
+                _public_links(db, event_id),
+                _user_ids_by_email(db, [recipient_email]).get(recipient_email.strip().lower()),
+            ),
             attachment_bytes=pdf_bytes,
             attachment_filename=f"Certificate - {recipient_name}.pdf",
             attachment_content_type="application/pdf",
@@ -160,7 +184,8 @@ async def send_certificates_bulk(
     for f in pdfs:
         by_pdf_filename[f.filename] = await f.read()
 
-    links_html = _public_links_html(db, event_id)
+    links = _public_links(db, event_id)
+    user_ids = _user_ids_by_email(db, [e.get("email") for e in entries])
     jobs = []
     skipped = 0
     for entry in entries:
@@ -183,7 +208,7 @@ async def send_certificates_bulk(
             "inline_image_filename": f"Certificate - {name}.{(filename or 'certificate.jpg').rsplit('.', 1)[-1]}",
             "inline_image_subtype": _image_subtype(filename),
             "inline_message_html": mailer_util.text_to_html(entry.get("message")),
-            "inline_links_html": links_html,
+            "inline_links_html": _links_html(links, user_ids.get(email.lower())),
             "inline_attachment_bytes": pdf_bytes,
             "inline_attachment_filename": f"Certificate - {name}.pdf",
             "inline_attachment_content_type": "application/pdf",

@@ -602,6 +602,8 @@ export default {
   },
 
   mounted() {
+    // One page-view record per open (ref/src come from the certificate-email link).
+    this.trackOpen()
     this.readUrl()
     window.addEventListener('scroll', this.onScroll, { passive: true })
     window.addEventListener('keydown', this.onKeydown)
@@ -699,6 +701,30 @@ export default {
       const dayDate = new Date(start.getTime() + (parseInt(m[1], 10) - 1) * 86400000)
       const today = new Date(); today.setHours(0, 0, 0, 0)
       return dayDate < today
+    },
+
+    // Records one open for the admin's page-view stats (POST /page-views/).
+    // visitor_id is a random per-browser id so repeat opens count as one
+    // visitor; ref/src come from the certificate-email link. Fire-and-forget:
+    // tracking must never affect the page.
+    trackOpen() {
+      let visitorId = null
+      try {
+        visitorId = localStorage.getItem('ecsa_visitor_id')
+        if (!visitorId) {
+          visitorId = (crypto.randomUUID && crypto.randomUUID()) ||
+            `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+          localStorage.setItem('ecsa_visitor_id', visitorId)
+        }
+      } catch (e) { /* storage blocked — still count the open, just not uniquely */ }
+      const q = this.$route.query
+      axios.post(`${this.apiUrl}/page-views/`, {
+        page: 'programme-rooms-public',
+        event_id: Number(this.eventId) || null,
+        visitor_id: visitorId,
+        ref: q.ref ? String(q.ref) : null,
+        source: q.src === 'email' ? 'email' : 'direct',
+      }).catch(() => {})
     },
 
     async load() {
