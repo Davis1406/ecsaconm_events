@@ -109,6 +109,34 @@
               <span class="tabular-nums opacity-70">{{ unpaidCount }}</span>
             </button>
 
+            <!-- Email status (from GET /certificates/sent). "Not sent" is the
+                 resend list: failed + never attempted. -->
+            <button type="button" @click="sentFilter = sentFilter === 'unsent' ? '' : 'unsent'" :aria-pressed="sentFilter === 'unsent'"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium border transition"
+              :class="sentFilter === 'unsent'
+                ? 'text-white border-transparent'
+                : 'text-gray-500 border-gray-200 bg-white hover:border-gray-300 hover:text-gray-700'"
+              :style="sentFilter === 'unsent' ? { backgroundColor: 'rgb(220,50,75)' } : {}">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0l-9.75 6.75L2.25 6.75"/>
+              </svg>
+              Not sent
+              <span class="tabular-nums opacity-70">{{ notSentCount }}</span>
+            </button>
+
+            <button type="button" @click="sentFilter = sentFilter === 'sent' ? '' : 'sent'" :aria-pressed="sentFilter === 'sent'"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium border transition"
+              :class="sentFilter === 'sent'
+                ? 'text-white border-transparent'
+                : 'text-gray-500 border-gray-200 bg-white hover:border-gray-300 hover:text-gray-700'"
+              :style="sentFilter === 'sent' ? { backgroundColor: 'rgb(71,85,105)' } : {}">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+              Sent
+              <span class="tabular-nums opacity-70">{{ sentCount }}</span>
+            </button>
+
             <template v-if="type === 'attendee'">
               <button v-for="c in attendeeCategories" :key="c.name" type="button" @click="toggleAttendeeCategory(c.name)"
                 :aria-pressed="attendeeCategoryFilter.includes(c.name)"
@@ -490,6 +518,8 @@ export default {
       // certificate email as a "Useful links" block.
       eventLinks: [],
       search: '',
+      // '' | 'sent' | 'unsent' — the Sent / Not sent chips.
+      sentFilter: '',
       attendedOnly: false,
       categoryFilter: [],
       attendeeCategoryFilter: [],
@@ -685,6 +715,8 @@ export default {
         if (this.emailOnly && !p.email) return false
         if (this.paidFilter === 'paid' && !p.paid) return false
         if (this.paidFilter === 'unpaid' && p.paid) return false
+        if (this.sentFilter === 'sent' && !p.sent) return false
+        if (this.sentFilter === 'unsent' && p.sent) return false
         if (!term) return true
         return p.name.toLowerCase().includes(term)
           || (p.email || '').toLowerCase().includes(term)
@@ -700,6 +732,12 @@ export default {
     },
     unpaidCount() {
       return this.people.filter(p => !p.paid).length
+    },
+    sentCount() {
+      return this.people.filter(p => p.sent).length
+    },
+    notSentCount() {
+      return this.people.filter(p => !p.sent).length
     },
     allShownSelected() {
       return this.filteredPeople.length > 0 && this.filteredPeople.every(p => this.selected[p.key])
