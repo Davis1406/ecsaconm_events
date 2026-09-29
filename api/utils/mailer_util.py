@@ -36,14 +36,20 @@ CLIENT_ORIGIN = os.getenv("CLIENT_ORIGIN", "https://events.ecsaconm.org")
 # Every outgoing email is CC'd here so there's a visible record of what the
 # system has sent, independent of the SMTP account's own (unpopulated, since
 # sends go out over raw SMTP rather than through a client that IMAP-appends
-# to Sent) mailbox. Override via ADMIN_CC_EMAIL in .env if needed.
-ADMIN_CC_EMAIL = os.getenv("ADMIN_CC_EMAIL", "admission@cosecsa.org")
+# to Sent) mailbox. Comma/semicolon-separated list — the admin requested the
+# CCs be lemmym@ecsahc.org and info@ecsaconm.org. Override via ADMIN_CC_EMAIL
+# in .env if needed.
+ADMIN_CC_EMAILS = [
+    a.strip()
+    for a in re.split(r"[,;\s]+", os.getenv("ADMIN_CC_EMAIL", "lemmym@ecsahc.org, info@ecsaconm.org"))
+    if a.strip()
+]
 
 # Email types sent WITHOUT the admin CC. The admin explicitly wants a copy of
 # every certificate email again (they were worried delivery was broken), so the
 # set is empty for now. If the admin mailbox ever floods again, certificates can
 # go back in here — but note it halves the effective hourly rate (each email
-# costs 2 envelope recipients instead of 1).
+# costs extra envelope recipients instead of 1).
 NO_CC_EMAIL_TYPES = set()
 
 
@@ -52,12 +58,19 @@ def _wants_cc(email_type=None):
 
 
 def _cc_recipients(recipient_email, email_type=None):
-    """Recipients list for the SMTP envelope: the addressee plus the admin
-    CC, deduped so we don't double-send when they happen to be the same.
-    Types in NO_CC_EMAIL_TYPES go to the addressee only."""
-    if not _wants_cc(email_type) or recipient_email.strip().lower() == ADMIN_CC_EMAIL.strip().lower():
+    """Recipients list for the SMTP envelope: the addressee plus every admin
+    CC address, deduped so we don't double-send when they happen to be the
+    same. Types in NO_CC_EMAIL_TYPES go to the addressee only."""
+    if not _wants_cc(email_type):
         return [recipient_email]
-    return [recipient_email, ADMIN_CC_EMAIL]
+    recipients = [recipient_email]
+    seen = {recipient_email.strip().lower()}
+    for addr in ADMIN_CC_EMAILS:
+        key = addr.strip().lower()
+        if key and key not in seen:
+            recipients.append(addr)
+            seen.add(key)
+    return recipients
 
 # --- PASSWORD UTILS ---
 
@@ -178,7 +191,7 @@ def _build_image_invitation_message(from_name, from_email, recipient_email, subj
     outer = MIMEMultipart("mixed")
     outer["From"] = f"{from_name} <{from_email}>"
     outer["To"] = recipient_email
-    cc_list = ([ADMIN_CC_EMAIL] if cc else []) + list(extra_cc or [])
+    cc_list = (list(ADMIN_CC_EMAILS) if cc else []) + list(extra_cc or [])
     if cc_list:
         outer["Cc"] = ", ".join(cc_list)
     outer["Subject"] = subject
@@ -412,7 +425,7 @@ def send_email(recipient_email, subject, email_body, email_type="general",
         message = MIMEMultipart("alternative")
         message["From"] = f"{from_name} <{from_email}>"
         message["To"] = recipient_email
-        message["Cc"] = ADMIN_CC_EMAIL
+        message["Cc"] = ", ".join(ADMIN_CC_EMAILS)
         message["Subject"] = subject
         message["Date"] = formatdate(localtime=True)
         message["Message-ID"] = make_msgid(domain="ecsaconm.org")
@@ -457,7 +470,7 @@ def _load_recent_send_times(window_seconds=3600):
 
     One timestamp per SMTP *recipient*, not per message: the mail host counts
     every envelope recipient against its hourly cap, and each email also goes
-    to ADMIN_CC_EMAIL (see _cc_recipients), so a normal send costs 2."""
+    to the ADMIN_CC_EMAILS list (see _cc_recipients), so a normal send costs 1 + len(ADMIN_CC_EMAILS)."""
     from datetime import datetime, timedelta
     import calendar
     from core.database import SessionLocal
@@ -738,7 +751,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
             message["From"] = f"{from_name} <{from_email}>"
             message["To"] = recipient_email
             if _wants_cc(email_type):
-                message["Cc"] = ADMIN_CC_EMAIL
+                message["Cc"] = ", ".join(ADMIN_CC_EMAILS)
             message["Subject"] = subject
             message["Date"] = formatdate(localtime=True)
             message["Message-ID"] = make_msgid(domain="ecsaconm.org")
@@ -867,7 +880,7 @@ def send_email_with_attachment(recipient_email, subject, email_body, attachment_
         msg["Subject"] = subject
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain="ecsaconm.org")
-        msg["Cc"] = ADMIN_CC_EMAIL
+        msg["Cc"] = ", ".join(ADMIN_CC_EMAILS)
         msg["Reply-To"] = reply_to_email or f"{from_name} <{from_email}>"
         msg["X-Mailer"] = "ECSACONM Events Portal"
         msg.attach(MIMEText(final_body, "html", "utf-8"))
