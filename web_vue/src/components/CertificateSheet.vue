@@ -91,6 +91,21 @@ export default {
   data() {
     return { logo, watermark, signature }
   },
+  // Fit the name and body whenever the sheet appears or its content changes,
+  // so every place that shows it (print page, email preview, the off-screen
+  // render) gets the same layout without having to remember to call
+  // fitName()/fitBody() at the right moment. The email preview used to call
+  // them while its spinner was still showing, so the sheet mounted unfitted:
+  // a long name was clipped and a 3-line body ran into the signature.
+  mounted() {
+    this.refit()
+  },
+  watch: {
+    name: 'refit',
+    designation: 'refit',
+    eventName: 'refit',
+    type: 'refit',
+  },
   computed: {
     bodyLines() {
       const b = this.type.body
@@ -108,6 +123,14 @@ export default {
     },
   },
   methods: {
+    // Wait for the DOM update and the webfonts (fitting with fallback-font
+    // metrics would size wrongly), then fit both blocks.
+    async refit() {
+      await this.$nextTick()
+      try { await document.fonts.ready } catch (e) { /* fit with what we have */ }
+      this.fitName()
+      this.fitBody()
+    },
     // Long names: shrink the font until the name fits on the 700px line.
     // Called by the parent once the webfonts have loaded.
     fitName() {
