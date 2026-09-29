@@ -35,6 +35,40 @@ export const CERTIFICATE_TYPES = {
   },
 }
 
+// Certificate of Appreciation — sent one at a time to specific officials from
+// the "Certificates of Appreciation" card, not from the list tabs (so it's
+// deliberately not in CERTIFICATE_TYPES). Same sheet, different heading, a
+// designation line under the name, and no CPD badge.
+export const APPRECIATION_TYPE = {
+  label: 'Appreciation',
+  cpd: 0,
+  heading: 'OF APPRECIATION',
+  subtitle: 'IS PROUDLY PRESENTED TO',
+  body: (eventName) => [
+    'in recognition of outstanding dedication and invaluable support to the College',
+    `in hosting the ${eventName || DEFAULT_EVENT_NAME}, September 2026`,
+  ],
+}
+
+// Who gets one. `cc` is prefilled in the send dialog and can be edited there.
+const APPRECIATION_CC = ['lemmym@ecsahc.org', 'info@ecsaconm.org']
+export const APPRECIATION_RECIPIENTS = [
+  {
+    key: 'appreciation-ps-mohz',
+    name: 'Dr. Mngereza Mzee Miraji',
+    designation: 'Permanent Secretary, Ministry of Health Zanzibar',
+    email: 'ps@mohz.go.tz',
+    cc: APPRECIATION_CC,
+  },
+  {
+    key: 'appreciation-dnm-mohz',
+    name: 'Mwanaaisha Juma Fakih',
+    designation: 'Director of Nursing and Midwifery, Ministry of Health Zanzibar',
+    email: 'ayshajuly@gmail.com',
+    cc: APPRECIATION_CC,
+  },
+]
+
 // localStorage key the admin page writes the print job to; the print tab reads it.
 export const CERTIFICATE_JOB_KEY = 'certificatePrintJob'
 

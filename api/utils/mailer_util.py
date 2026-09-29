@@ -164,7 +164,7 @@ def _inject_tracking_pixel(email_body, log_id):
 def _build_image_invitation_message(from_name, from_email, recipient_email, subject, reply_to_email,
                                      image_bytes, image_filename, image_subtype, final_body_html,
                                      attachment_bytes=None, attachment_filename=None,
-                                     attachment_content_type=None, cc=True):
+                                     attachment_content_type=None, cc=True, extra_cc=None):
     """A message whose body shows the given image inline (via a cid:
     reference, so it renders directly in the email body). By default the
     same image bytes are attached again as a separate downloadable file; if
@@ -175,8 +175,9 @@ def _build_image_invitation_message(from_name, from_email, recipient_email, subj
     outer = MIMEMultipart("mixed")
     outer["From"] = f"{from_name} <{from_email}>"
     outer["To"] = recipient_email
-    if cc:
-        outer["Cc"] = ADMIN_CC_EMAIL
+    cc_list = ([ADMIN_CC_EMAIL] if cc else []) + list(extra_cc or [])
+    if cc_list:
+        outer["Cc"] = ", ".join(cc_list)
     outer["Subject"] = subject
     outer["Date"] = formatdate(localtime=True)
     outer["Message-ID"] = make_msgid(domain="ecsaconm.org")
@@ -303,7 +304,7 @@ def _image_invitation_body_html(cid="gala_invite_image", intro_html="", links_ht
 def send_image_invitation_email(recipient_email, subject, image_bytes, image_filename, image_subtype="jpeg",
                                  email_type="general", sent_by_user_id=None, reply_to_email=None,
                                  message_html="", links_html="", attachment_bytes=None, attachment_filename=None,
-                                 attachment_content_type=None):
+                                 attachment_content_type=None, extra_cc=None):
     """Send a one-off email whose body shows the given image inline —
     optionally preceded by a short intro message and followed by a links
     block (both already HTML-safe, see text_to_html()/links_to_html()). The
@@ -342,9 +343,15 @@ def send_image_invitation_email(recipient_email, subject, image_bytes, image_fil
             image_bytes, image_filename, image_subtype, final_body,
             attachment_bytes=attachment_bytes, attachment_filename=attachment_filename,
             attachment_content_type=attachment_content_type, cc=_wants_cc(email_type),
+            extra_cc=extra_cc,
         )
 
+        # Explicit per-send CCs (e.g. a Certificate of Appreciation copied to
+        # colleagues) on top of the usual envelope, deduped.
         envelope_to = _cc_recipients(recipient_email, email_type)
+        for addr in (extra_cc or []):
+            if addr.lower() not in {a.lower() for a in envelope_to}:
+                envelope_to.append(addr)
         if smtp_port == 465:
             with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
                 server.login(smtp_username, smtp_password)

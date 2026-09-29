@@ -30,14 +30,17 @@
     <div style="position:absolute; top:201px; left:552px; width:950px; height:3px; background:#fe5066"></div>
     <h1 style="position:absolute; top:244px; left:160px; width:1600px; font-family:'Alex Brush', 'Brush Script MT', serif; font-size:172px; font-weight:400; line-height:1; text-align:center; color:#7a1220">Certificate</h1>
     <div style="position:absolute; top:478px; left:460px; width:140px; height:2px; background:#fe5066"></div>
-    <h2 style="position:absolute; top:446px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:50px; font-weight:700; line-height:1; letter-spacing:8px; text-align:center; color:#f4253f">OF PARTICIPATION</h2>
+    <h2 style="position:absolute; top:446px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:50px; font-weight:700; line-height:1; letter-spacing:8px; text-align:center; color:#f4253f">{{ type.heading || 'OF PARTICIPATION' }}</h2>
     <div style="position:absolute; top:470px; left:1320px; width:140px; height:2px; background:#fe5066"></div>
-    <p style="position:absolute; top:526px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:32px; font-weight:600; letter-spacing:3px; text-align:center; color:#555555">THE FOLLOWING AWARD IS GIVEN TO</p>
+    <p style="position:absolute; top:526px; left:160px; width:1600px; font-family:Montserrat, Arial, sans-serif; font-size:32px; font-weight:600; letter-spacing:3px; text-align:center; color:#555555">{{ type.subtitle || 'THE FOLLOWING AWARD IS GIVEN TO' }}</p>
     <!-- Fixed height so the underline stays put when a long name is shrunk to fit (see fitName). -->
     <p ref="name" style="position:absolute; top:600px; left:610px; width:700px; height:84px; line-height:84px; padding:0 0 16px; white-space:nowrap; overflow:hidden; font-family:'Playfair Display', Georgia, serif; font-size:63px; font-weight:600; font-style:italic; text-align:center; color:#1a1a1a; border-bottom:3px solid #fe5066; box-sizing:content-box">{{ name }}</p>
     <!-- 1400px wide (source: 1200px) — the usher wording overflowed onto a 4th line and hit the signature.
          fitBody() shrinks the type if the body still runs long (e.g. a long event name). -->
-    <p ref="body" style="position:absolute; top:724px; left:260px; width:1400px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:400; line-height:1.5; text-align:center; color:#2b2b2b">
+    <!-- Optional designation under the name (Certificate of Appreciation);
+         the body then starts lower and gets 2 lines instead of 3. -->
+    <p v-if="designation" style="position:absolute; top:714px; left:360px; width:1200px; font-family:Montserrat, Arial, sans-serif; font-size:23px; font-weight:600; font-style:italic; line-height:1.3; text-align:center; color:#7a1220">{{ designation }}</p>
+    <p ref="body" :style="{ top: (designation ? 754 : 724) + 'px' }" style="position:absolute; left:260px; width:1400px; font-family:Montserrat, Arial, sans-serif; font-size:29px; font-weight:400; line-height:1.5; text-align:center; color:#2b2b2b">
       <template v-for="(line, i) in bodyLines" :key="i"><br v-if="i">{{ line }}</template>
     </p>
     <div style="position:absolute; top:900px; left:790px; width:340px; height:2px; background:#2b2b2b"></div>
@@ -79,6 +82,9 @@ export default {
     // The selected event's name — the usher/secretariat certificate says which
     // event the person supported, so it has to be passed in at render time.
     eventName: { type: String, default: '' },
+    // e.g. "Permanent Secretary, Ministry of Health Zanzibar" — shown under
+    // the name on a Certificate of Appreciation.
+    designation: { type: String, default: '' },
     // Keeps SVG gradient ids unique when many certificates share one page.
     uid: { type: [String, Number], required: true },
   },
@@ -119,7 +125,9 @@ export default {
     fitBody() {
       const el = this.$refs.body
       if (!el) return
-      const max = 112
+      // With a designation line the body starts at 754, leaving ~82px above
+      // the signature (y=838).
+      const max = this.designation ? 82 : 112
       let size = 29
       el.style.fontSize = size + 'px'
       while (el.scrollHeight > max && size > 20) {

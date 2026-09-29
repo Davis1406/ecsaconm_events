@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Annotated, List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
@@ -62,6 +63,8 @@ def _user_ids_by_email(db: Session, emails) -> dict:
 
 DEFAULT_SUBJECT = "Your certificate — ECSACONM Events"
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+
 
 @router.get("/sent")
 async def sent_certificates(
@@ -98,6 +101,8 @@ async def send_certificate(
     message: str = Form(None),
     image: UploadFile = File(...),
     pdf: UploadFile = File(...),
+    cc: str = Form(None),
+    kind: str = Form(None),
 ):
     """Email one person their certificate — the message body shows the
     certificate (rendered client-side to both a preview image and a PDF,
@@ -118,12 +123,26 @@ async def send_certificate(
     if not image_bytes or not pdf_bytes:
         raise HTTPException(status_code=400, detail="Empty certificate image or PDF")
 
+    # Optional explicit CCs (Certificate of Appreciation dialog), comma/semicolon separated.
+    cc_list = []
+    for addr in re.split(r"[,;\s]+", cc or ""):
+        addr = addr.strip()
+        if not addr:
+            continue
+        if not _EMAIL_RE.match(addr):
+            raise HTTPException(status_code=400, detail=f"Invalid CC address: {addr}")
+        if addr.lower() not in {a.lower() for a in cc_list} and addr.lower() != recipient_email.strip().lower():
+            cc_list.append(addr)
+    if len(cc_list) > 5:
+        raise HTTPException(status_code=400, detail="At most 5 CC addresses.")
+    label = "Certificate of Appreciation" if kind == "appreciation" else "Certificate"
+
     try:
         mailer_util.send_image_invitation_email(
             recipient_email=recipient_email.strip(),
             subject=subject or f"Your certificate — {recipient_name}",
             image_bytes=image_bytes,
-            image_filename=f"Certificate - {recipient_name}.{(image.filename or 'certificate.jpg').rsplit('.', 1)[-1]}",
+            image_filename=f"{label} - {recipient_name}.{(image.filename or 'certificate.jpg').rsplit('.', 1)[-1]}",
             image_subtype=_image_subtype(image.filename),
             email_type="certificate",
             sent_by_user_id=current_user["user_id"],
@@ -133,8 +152,9 @@ async def send_certificate(
                 _user_ids_by_email(db, [recipient_email]).get(recipient_email.strip().lower()),
             ),
             attachment_bytes=pdf_bytes,
-            attachment_filename=f"Certificate - {recipient_name}.pdf",
+            attachment_filename=f"{label} - {recipient_name}.pdf",
             attachment_content_type="application/pdf",
+            extra_cc=cc_list,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send certificate email: {e}")

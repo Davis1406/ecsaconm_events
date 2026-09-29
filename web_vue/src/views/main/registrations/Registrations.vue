@@ -1099,6 +1099,7 @@ export default {
       editCountries: [],
       participationOptions: [
         { value: 'delegate', label: 'Delegate', fee: 'Contact the secretariat for delegate rates.' },
+        { value: 'presenter', label: 'Presenter', fee: 'Delegate rates apply.' },
         { value: 'secretariat', label: 'Secretariat / Staff', fee: 'Internal registration — no registration fee.' },
         { value: 'media', label: 'Media', fee: 'Contact the secretariat.' },
         { value: 'exhibitor', label: 'Sponsor / Exhibitor', fee: 'Contact the secretariat for sponsorship packages.' },

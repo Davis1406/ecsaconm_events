@@ -394,6 +394,7 @@ export default {
       },
       roleOptions: [
         { value: 'delegate', label: 'Delegate' },
+        { value: 'presenter', label: 'Presenter' },
         { value: 'secretariat', label: 'Secretariat' },
         { value: 'media', label: 'Media' },
         { value: 'exhibitor', label: 'Exhibitor' },

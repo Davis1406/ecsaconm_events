@@ -312,6 +312,38 @@
           {{ skippedNoEmailCount }} selected {{ skippedNoEmailCount === 1 ? 'person has' : 'people have' }} no email on file and will be skipped by Email (still included in Generate).
         </p>
       </div>
+
+      <!-- Certificates of Appreciation — individual officials, sent one at a
+           time with their own CC list (utils/certificateTypes.js). -->
+      <div class="bg-white rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-widest text-gray-400">Certificates of Appreciation</div>
+            <p class="text-xs text-gray-400 mt-1">For officials who supported the College in hosting the event. Each is previewed and sent individually, with the CC list shown before sending.</p>
+          </div>
+        </div>
+        <div class="mt-3 divide-y divide-gray-100 border border-gray-100 rounded-xl">
+          <div v-for="r in appreciationRecipients" :key="r.key" class="flex flex-wrap items-center gap-3 px-4 py-3">
+            <div class="flex-1 min-w-[220px]">
+              <div class="text-sm font-semibold text-gray-800">{{ r.name }}</div>
+              <div class="text-xs text-gray-500">{{ r.designation }}</div>
+              <div class="text-xs text-gray-400 mt-0.5">
+                {{ r.email }}<span v-if="r.cc.length"> · CC {{ r.cc.join(', ') }}</span>
+              </div>
+            </div>
+            <span v-if="sentEmails.has(r.email.toLowerCase())"
+              class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700">Sent</span>
+            <button type="button" @click="openAppreciationModal(r)" :disabled="!!emailModal"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+              style="background-color: rgb(254,80,103);">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+              {{ sentEmails.has(r.email.toLowerCase()) ? 'Preview & Resend' : 'Preview & Send' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </template>
 
     <!-- Preview & edit email modal (both per-row Send and bulk Email open this) -->
@@ -320,7 +352,7 @@
       <div class="bg-white rounded-2xl shadow-xl w-full max-h-[90vh] overflow-y-auto">
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
           <div>
-            <div class="font-bold text-gray-800">Preview &amp; Edit Certificate Email</div>
+            <div class="font-bold text-gray-800">{{ emailModal.appreciation ? 'Preview &amp; Send Certificate of Appreciation' : 'Preview &amp; Edit Certificate Email' }}</div>
             <p class="text-xs text-gray-500 mt-0.5">
               {{ emailModal.recipients.length === 1 ? `To ${emailModal.recipients[0].email}` : `${emailModal.recipients.length} recipients` }}
               — use <code class="bg-gray-100 px-1 rounded">{{ mergeTagExample }}</code> and <code class="bg-gray-100 px-1 rounded">{{ mergeTagEventExample }}</code> in Subject/Message to personalize each one.
@@ -338,6 +370,13 @@
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none bg-white">
               <option v-for="p in emailModal.recipients" :key="p.key" :value="p.key">{{ p.name }} — {{ p.email }}</option>
             </select>
+          </div>
+
+          <div v-if="emailModal.appreciation">
+            <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1.5">CC</label>
+            <input v-model="emailModal.cc" type="text" placeholder="name@example.org, other@example.org"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
+            <p class="text-[11px] text-gray-400 mt-1">Separate addresses with commas. Leave blank for no CC.</p>
           </div>
 
           <div>
@@ -363,7 +402,7 @@
                   <div class="flex justify-center py-4 bg-gray-100 rounded-lg overflow-hidden">
                     <div v-if="emailModal.rendering" class="py-10"><SpinnerComponent /></div>
                     <div v-else class="cert-preview-scaled" :style="previewScaleStyle">
-                      <CertificateSheet ref="previewSheet" :name="previewName" :type="types[type]"
+                      <CertificateSheet ref="previewSheet" :name="previewName" :type="modalCertType" :designation="previewDesignation"
                         :event-name="selectedEventName" uid="email-preview" />
                     </div>
                   </div>
@@ -445,7 +484,7 @@
     <!-- Off-screen certificate used to render each recipient's image before
     upload (Send/Email) — parked far off-window so it's never visible. -->
     <div style="position: fixed; left: -99999px; top: 0; pointer-events: none;" aria-hidden="true">
-      <CertificateSheet ref="renderSheet" :name="renderJob.name" :type="renderJob.type"
+      <CertificateSheet ref="renderSheet" :name="renderJob.name" :type="renderJob.type" :designation="renderJob.designation"
         :event-name="selectedEventName" uid="email-render" />
     </div>
   </div>
@@ -458,7 +497,7 @@ import CertificateSheet from '@/components/CertificateSheet.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
-import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, certificateCategory, tidyName, ensureCertificateFonts } from '@/utils/certificateTypes'
+import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, APPRECIATION_TYPE, APPRECIATION_RECIPIENTS, certificateCategory, tidyName, ensureCertificateFonts } from '@/utils/certificateTypes'
 
 const API_URL = import.meta.env.VITE_API_URL
 // A paid abstract presenter who doesn't appear anywhere in the programme book.
@@ -472,6 +511,19 @@ const ABSTRACT_ONLY_LABEL = 'Abstract presenter — no programme slot'
 // at a time rather than one giant request.
 const EMAIL_BATCH_SIZE = 15
 const DEFAULT_EMAIL_SUBJECT = 'Your Certificate of Participation — {{name}}'
+
+// Defaults for the Certificate of Appreciation dialog (editable before sending).
+const APPRECIATION_EMAIL_SUBJECT = 'Certificate of Appreciation — {{name}}'
+const APPRECIATION_EMAIL_MESSAGE = [
+  'Dear {{name}},',
+  '',
+  'On behalf of the East, Central and Southern Africa College of Nursing and Midwifery (ECSACONM), please find attached a Certificate of Appreciation in recognition of your dedication and invaluable support to the College in hosting the {{event}} in Zanzibar.',
+  '',
+  'Your support contributed greatly to the success of the conference, and we are sincerely grateful.',
+  '',
+  'Warm regards,',
+  'ECSACONM Secretariat',
+].join('\n')
 const DEFAULT_EMAIL_MESSAGE = [
   'Dear {{name}},',
   '',
@@ -533,7 +585,8 @@ export default {
       extraNames: '',
       // off-screen certificate used to rasterize each recipient's image
       // before upload — see renderCertificateImage()
-      renderJob: { name: '', type: CERTIFICATE_TYPES.attendee },
+      renderJob: { name: '', type: CERTIFICATE_TYPES.attendee, designation: '' },
+      appreciationRecipients: APPRECIATION_RECIPIENTS,
       rowMsg: null,
       emailSuccess: '',
       // Preview & edit modal — opened by both the per-row Send button and
@@ -646,8 +699,10 @@ export default {
         if (title) p.titles.push(title)
       })
 
+      // Plus anyone an admin set to the "Presenter" role (Edit Participant) —
+      // the manual override for presenters the programme/abstracts miss.
       this.registrations
-        .filter(r => r.is_abstract_presenter && r.paid)
+        .filter(r => (r.is_abstract_presenter && r.paid) || this.isPresenterRole(r))
         .forEach(r => {
           const name = tidyName([r.title, r.firstname, r.lastname].filter(Boolean).join(' '))
           if (!name) return
@@ -780,6 +835,16 @@ export default {
       if (!m) return ''
       const person = m.recipients.find(p => p.key === m.previewKey) || m.recipients[0]
       return person ? person.name : ''
+    },
+    // The dialog's certificate design: appreciation mode uses its own type.
+    modalCertType() {
+      return this.emailModal && this.emailModal.appreciation ? APPRECIATION_TYPE : this.types[this.type]
+    },
+    previewDesignation() {
+      const m = this.emailModal
+      if (!m || !m.appreciation) return ''
+      const person = m.recipients.find(p => p.key === m.previewKey) || m.recipients[0]
+      return person ? person.designation || '' : ''
     },
     // Same scaling the print page uses, sized to the modal's content width
     // (max-w-2xl) rather than the full window.
@@ -926,6 +991,9 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
     roleLabel(r) {
       return certificateCategory(r.participation_role)
     },
+    isPresenterRole(r) {
+      return String(r.participation_role || '').toLowerCase() === 'presenter'
+    },
     presenterCategoryLabel(c) {
       return c === ABSTRACT_ONLY_CATEGORY ? 'abstract presenter' : c
     },
@@ -1026,6 +1094,19 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       }
       this.refreshPreview()
     },
+    // One official from the Certificates of Appreciation card: same dialog,
+    // appreciation wording/design, and an editable CC prefilled from config.
+    openAppreciationModal(r) {
+      if (this.emailModal) return
+      this.openEmailModal([{ ...r }])
+      Object.assign(this.emailModal, {
+        appreciation: true,
+        cc: (r.cc || []).join(', '),
+        subject: APPRECIATION_EMAIL_SUBJECT,
+        message: APPRECIATION_EMAIL_MESSAGE,
+      })
+      this.refreshPreview()
+    },
     closeEmailModal() {
       if (this.emailModal && this.emailModal.sending) return
       this.emailModal = null
@@ -1102,8 +1183,8 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
     // heading over "OF PARTICIPATION". foreignObject asks the browser to
     // lay out the live sheet exactly as the preview/print page renders it,
     // so the emailed image is pixel-identical to what the admin previewed.
-    async renderCertificateAssets(name) {
-      this.renderJob = { name, type: this.types[this.type] }
+    async renderCertificateAssets(name, opts = {}) {
+      this.renderJob = { name, type: opts.type || this.types[this.type], designation: opts.designation || '' }
       await this.$nextTick()
       await this.ensureCertFonts()
       const sheet = this.$refs.renderSheet
@@ -1287,7 +1368,10 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       this.rowMsg = null
       const m = this.emailModal
       if (m) { m.stage = 'Preparing certificate…'; m.currentName = `${p.name} — ${p.email}` }
-      const { jpegBlob, pdfBlob } = await this.renderCertificateAssets(p.name)
+      const appreciation = !!(m && m.appreciation)
+      const { jpegBlob, pdfBlob } = await this.renderCertificateAssets(
+        p.name, appreciation ? { type: APPRECIATION_TYPE, designation: p.designation } : {},
+      )
       if (m) m.stage = 'Sending email…'
       const form = new FormData()
       form.append('recipient_email', p.email)
@@ -1297,6 +1381,10 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       form.append('message', this.renderTemplate(messageTpl, p.name))
       form.append('image', jpegBlob, 'certificate.jpg')
       form.append('pdf', pdfBlob, 'certificate.pdf')
+      if (appreciation) {
+        form.append('cc', m.cc || '')
+        form.append('kind', 'appreciation')
+      }
       await this.api().post('/certificates/send', form)
       this.rowMsg = { key: p.key, ok: true, text: 'Sent' }
     },
