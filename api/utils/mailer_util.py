@@ -622,6 +622,42 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
         logger.warning("Could not load recent send times for quota pacing: %s", e)
         send_times = deque()
 
+    # ── Daily quota guard ──────────────────────────────────────────────────
+    # HostGator (and other shared hosts) also enforce a *daily* outbound cap
+    # (rcpt_limits_user_daily) in addition to the hourly one. Unlike the hourly
+    # pacing — which waits a few minutes for the window to free up — the daily
+    # cap only resets on the host's schedule (up to 24h later), so there is
+    # nothing to wait for inside this run. Instead, once the day's allowance is
+    # spent the batch stops and leaves the remaining jobs *unattempted* (not
+    # failed) so a later run after the reset picks them up, rather than
+    # blasting 250 more "sent"-then-discarded emails into the void.
+    # Configurable via SMTP_MAX_EMAILS_PER_DAY (0 disables the guard).
+    try:
+        max_per_day = int(os.getenv("SMTP_MAX_EMAILS_PER_DAY", "0"))
+    except ValueError:
+        max_per_day = 0
+    day_window = 24 * 3600
+    try:
+        day_send_times = deque(_load_recent_send_times(day_window))
+    except Exception as e:
+        logger.warning("Could not load recent send times for daily quota guard: %s", e)
+        day_send_times = deque()
+
+    def _daily_quota_exhausted(cost=1):
+        """True when `cost` more recipients would exceed the rolling 24h cap."""
+        if max_per_day <= 0:
+            return False
+        now = time.time()
+        while day_send_times and now - day_send_times[0] >= day_window:
+            day_send_times.popleft()
+        return day_send_times and len(day_send_times) + cost > max_per_day
+
+    def _record_send(quota_cost):
+        """Record a successful send in both the hourly and daily trackers."""
+        now = time.time()
+        send_times.extend([now] * quota_cost)
+        day_send_times.extend([now] * quota_cost)
+
     def _await_quota_slot(cost=1):
         """Block until `cost` more recipients fit under the rolling-hour cap."""
         if max_per_hour <= 0:
@@ -663,6 +699,18 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
             # Cost = envelope recipients (addressee + admin CC), the host's unit.
             quota_cost = len(_cc_recipients(job["recipient_email"], job.get("email_type", "general")))
             _await_quota_slot(quota_cost)
+
+            # Respect the rolling-24h quota too — if the host's daily allowance
+            # is spent (HostGator: rcpt_limits_user_daily), stop the batch and
+            # leave the rest unattempted rather than sending into a held queue.
+            if _daily_quota_exhausted(quota_cost):
+                logger.warning(
+                    "Daily email quota reached (%d/%d recipients in 24h) — "
+                    "stopping this batch early (%d of %d jobs left unattempted, "
+                    "not marked failed; retry after the host's daily limit resets).",
+                    len(day_send_times), max_per_day, len(jobs) - i, len(jobs),
+                )
+                break
 
             recipient_email = job["recipient_email"]
             subject = job["subject"]
@@ -709,7 +757,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                     logger.info("Email sent successfully to %s", recipient_email)
                     _update_email_log(log_id, "sent")
                     sent_count += 1
-                    send_times.extend([time.time()] * quota_cost)
+                    _record_send(quota_cost)
                     consecutive_reconnect_failures = 0
                 except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
                     logger.warning("SMTP connection dropped sending to %s (%s) - pausing then reconnecting and retrying once",
@@ -723,7 +771,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                         logger.info("Email sent successfully to %s (after reconnect)", recipient_email)
                         _update_email_log(log_id, "sent")
                         sent_count += 1
-                        send_times.extend([time.time()] * quota_cost)
+                        _record_send(quota_cost)
                         consecutive_reconnect_failures = 0
                     except Exception as e2:
                         logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
@@ -787,7 +835,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                 logger.info("Email sent successfully to %s", recipient_email)
                 _update_email_log(log_id, "sent")
                 sent_count += 1
-                send_times.extend([time.time()] * quota_cost)
+                _record_send(quota_cost)
                 consecutive_reconnect_failures = 0
             except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
                 # The server dropped/refused the connection mid-batch (the
@@ -805,7 +853,7 @@ def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, a
                     logger.info("Email sent successfully to %s (after reconnect)", recipient_email)
                     _update_email_log(log_id, "sent")
                     sent_count += 1
-                    send_times.extend([time.time()] * quota_cost)
+                    _record_send(quota_cost)
                     consecutive_reconnect_failures = 0
                 except Exception as e2:
                     logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
