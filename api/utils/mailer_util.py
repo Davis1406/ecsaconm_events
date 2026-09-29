@@ -2,6 +2,7 @@ import os
 import smtplib
 import logging
 import time
+import threading
 import uuid
 import html as _html
 from urllib.parse import urlparse
@@ -407,11 +408,26 @@ def send_email(recipient_email, subject, email_body, email_type="general",
         _update_email_log(log_id, "failed", str(e))
 
 
+# Serializes send_bulk_emails() across concurrent background tasks. The
+# Certificates page uploads in batches of 15, each queued as its own task; run
+# in parallel, every batch seeded its own quota counter from EmailLog and
+# assumed the remaining headroom was all its own, so together they blew
+# through the host's limit (2026-09-29: 253 certificates in ~2 minutes, then
+# "550 … exceeded the max emails per hour" and refused connections). With the
+# lock, batches take turns and each one re-seeds from EmailLog, which already
+# includes everything the previous batch sent.
+_BULK_SEND_LOCK = threading.Lock()
+
+
 def _load_recent_send_times(window_seconds=3600):
     """Epoch-second timestamps of emails successfully sent within the last
     `window_seconds`, read from EmailLog. Seeds the rolling-hour quota counter
     in send_bulk_emails() so a bulk send also accounts for mail already sent by
-    other requests (e.g. account/profile emails) in the same window."""
+    other requests (e.g. account/profile emails) in the same window.
+
+    One timestamp per SMTP *recipient*, not per message: the mail host counts
+    every envelope recipient against its hourly cap, and each email also goes
+    to ADMIN_CC_EMAIL (see _cc_recipients), so a normal send costs 2."""
     from datetime import datetime, timedelta
     import calendar
     from core.database import SessionLocal
@@ -421,25 +437,34 @@ def _load_recent_send_times(window_seconds=3600):
     db = SessionLocal()
     try:
         rows = (
-            db.query(EmailLog.sent_at)
+            db.query(EmailLog.sent_at, EmailLog.recipient_email)
             .filter(EmailLog.status == "sent", EmailLog.sent_at >= cutoff)
             .all()
         )
         times = []
-        for r in rows:
-            dt = r[0]
+        for dt, recipient in rows:
             if dt is None:
                 continue
             # Naive DB timestamps are UTC (server default func.now()); treat
             # them as such regardless of the process timezone.
-            times.append(calendar.timegm(dt.timetuple()) if dt.tzinfo is None else dt.timestamp())
+            ts = calendar.timegm(dt.timetuple()) if dt.tzinfo is None else dt.timestamp()
+            times.extend([ts] * len(_cc_recipients(recipient or "")))
+        times.sort()
         return times
     finally:
         db.close()
 
 
-def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_filename=None,
-                      inline_image_bytes=None, inline_image_filename=None, inline_image_subtype="jpeg"):
+def send_bulk_emails(jobs, *args, **kwargs):
+    """Send multiple emails over a single, reused SMTP connection — one bulk
+    send at a time (see _BULK_SEND_LOCK); later batches wait their turn.
+    Arguments and return value are those of _send_bulk_emails_unlocked()."""
+    with _BULK_SEND_LOCK:
+        return _send_bulk_emails_unlocked(jobs, *args, **kwargs)
+
+
+def _send_bulk_emails_unlocked(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_filename=None,
+                               inline_image_bytes=None, inline_image_filename=None, inline_image_subtype="jpeg"):
     """Send multiple emails over a single, reused SMTP connection.
 
     `send_email()` opens (and logs into) a brand-new SMTP connection per
@@ -541,6 +566,8 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
     try:
         # Default 450 leaves headroom below the host's 500/hr domain limit for
         # mail this app didn't send (other mailboxes on the domain, etc.).
+        # Counted in envelope RECIPIENTS (the host's unit) — each email plus
+        # its admin CC costs 2, so this is ~225 emails/hour.
         max_per_hour = int(os.getenv("SMTP_MAX_EMAILS_PER_HOUR", "450"))
     except ValueError:
         max_per_hour = 450
@@ -551,17 +578,17 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
         logger.warning("Could not load recent send times for quota pacing: %s", e)
         send_times = deque()
 
-    def _await_quota_slot():
-        """Block until the rolling-hour send count is below the cap."""
+    def _await_quota_slot(cost=1):
+        """Block until `cost` more recipients fit under the rolling-hour cap."""
         if max_per_hour <= 0:
             return
         now = time.time()
         while send_times and now - send_times[0] >= quota_window:
             send_times.popleft()
-        while len(send_times) >= max_per_hour:
+        while send_times and len(send_times) + cost > max_per_hour:
             wait = quota_window - (now - send_times[0]) + 2
-            logger.info(
-                "Hourly email quota reached (%d/%d) — pausing %.0fs before continuing",
+            logger.warning(
+                "Hourly email quota reached (%d/%d recipients) — pausing %.0fs before continuing",
                 len(send_times), max_per_hour, wait,
             )
             time.sleep(max(1, wait))
@@ -589,7 +616,9 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
             if circuit_open:
                 break
             # Respect the rolling-hour quota before doing any work for this job.
-            _await_quota_slot()
+            # Cost = envelope recipients (addressee + admin CC), the host's unit.
+            quota_cost = len(_cc_recipients(job["recipient_email"]))
+            _await_quota_slot(quota_cost)
 
             recipient_email = job["recipient_email"]
             subject = job["subject"]
@@ -635,7 +664,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                     logger.info("Email sent successfully to %s", recipient_email)
                     _update_email_log(log_id, "sent")
                     sent_count += 1
-                    send_times.append(time.time())
+                    send_times.extend([time.time()] * quota_cost)
                     consecutive_reconnect_failures = 0
                 except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
                     logger.warning("SMTP connection dropped sending to %s (%s) - pausing then reconnecting and retrying once",
@@ -649,7 +678,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                         logger.info("Email sent successfully to %s (after reconnect)", recipient_email)
                         _update_email_log(log_id, "sent")
                         sent_count += 1
-                        send_times.append(time.time())
+                        send_times.extend([time.time()] * quota_cost)
                         consecutive_reconnect_failures = 0
                     except Exception as e2:
                         logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
@@ -712,7 +741,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                 logger.info("Email sent successfully to %s", recipient_email)
                 _update_email_log(log_id, "sent")
                 sent_count += 1
-                send_times.append(time.time())
+                send_times.extend([time.time()] * quota_cost)
                 consecutive_reconnect_failures = 0
             except (smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException, OSError) as e:
                 # The server dropped/refused the connection mid-batch (the
@@ -730,7 +759,7 @@ def send_bulk_emails(jobs, delay_seconds=0.3, attachment_bytes=None, attachment_
                     logger.info("Email sent successfully to %s (after reconnect)", recipient_email)
                     _update_email_log(log_id, "sent")
                     sent_count += 1
-                    send_times.append(time.time())
+                    send_times.extend([time.time()] * quota_cost)
                     consecutive_reconnect_failures = 0
                 except Exception as e2:
                     logger.error("Failed to send email to %s after reconnect: %s", recipient_email, str(e2))
