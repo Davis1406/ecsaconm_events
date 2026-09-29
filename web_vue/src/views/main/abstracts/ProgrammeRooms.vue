@@ -8,7 +8,8 @@
     </div>
 
     <!-- Opens of the public Conference presentations page (page_view table).
-         People are only named when they came via their certificate-email link. -->
+         People are named when they came via their certificate-email link or
+         typed their email into the page's access prompt (before preview/download). -->
     <div v-if="isAdmin && pageStats" class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -37,12 +38,16 @@
         <div v-if="showOpeners" class="mt-2 max-h-72 overflow-y-auto border border-gray-100 rounded-lg">
           <table class="w-full text-xs">
             <thead class="bg-gray-50 text-gray-500 sticky top-0">
-              <tr><th class="text-left px-3 py-1.5">Name</th><th class="text-left px-3 py-1.5">Email</th><th class="text-right px-3 py-1.5">Opens</th><th class="text-right px-3 py-1.5">Last opened</th></tr>
+              <tr><th class="text-left px-3 py-1.5">Name</th><th class="text-left px-3 py-1.5">Email</th><th class="text-left px-3 py-1.5">Status</th><th class="text-right px-3 py-1.5">Opens</th><th class="text-right px-3 py-1.5">Last opened</th></tr>
             </thead>
             <tbody>
-              <tr v-for="p in pageStats.people" :key="p.user_id" class="border-t border-gray-100">
-                <td class="px-3 py-1.5 text-gray-800">{{ p.name }}</td>
+              <tr v-for="p in pageStats.people" :key="p.user_id || p.email" class="border-t border-gray-100">
+                <td class="px-3 py-1.5 text-gray-800">{{ p.name || '—' }}</td>
                 <td class="px-3 py-1.5 text-gray-500">{{ p.email }}</td>
+                <td class="px-3 py-1.5">
+                  <span v-if="p.registered" class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-50 text-green-700">Registered</span>
+                  <span v-else class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700" title="Typed into the page; matches no account">Unverified</span>
+                </td>
                 <td class="px-3 py-1.5 text-right">{{ p.opens }}</td>
                 <td class="px-3 py-1.5 text-right text-gray-500">{{ fmtOpenTime(p.last_opened) }}</td>
               </tr>

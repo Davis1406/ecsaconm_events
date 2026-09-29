@@ -1262,6 +1262,9 @@ class PageView(Base):
     event_id = Column(Integer, nullable=True)
     visitor_id = Column(String(64), nullable=True)
     user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    # Email the visitor typed into the page's "Access conference slides"
+    # prompt (self-reported; kept even when it matches no account).
+    email = Column(String(255), nullable=True)
     source = Column(String(50), nullable=True)
     user_agent = Column(String(300), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

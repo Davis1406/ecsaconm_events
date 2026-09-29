@@ -182,7 +182,7 @@
                     <span class="text-[11px] text-white/85 font-medium tabular-nums" :title="`${room.total} entries, ${room.with_slide} with a file`">
                       {{ room.total }}<span class="opacity-60"> · </span>{{ room.with_slide }} file{{ room.with_slide !== 1 ? 's' : '' }}
                     </span>
-                    <button v-if="room.with_slide" type="button" @click="downloadRoomZip(room)" :disabled="zipBusy"
+                    <button v-if="room.with_slide" type="button" @click="requireViewer(() => downloadRoomZip(room))" :disabled="zipBusy"
                       title="Download every uploaded file in this room as a ZIP"
                       class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white hover:opacity-90 disabled:opacity-50"
                       style="color: rgb(0,150,180);">
@@ -240,7 +240,7 @@
                       <!-- actions -->
                       <div class="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
                         <template v-if="e.has_presentation">
-                          <button v-if="isPreviewable(e.presentation_ext)" type="button" @click="openPreview(e)"
+                          <button v-if="isPreviewable(e.presentation_ext)" type="button" @click="requireViewer(() => openPreview(e))"
                             title="Open in a new preview window"
                             class="act act-preview">
                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -251,7 +251,7 @@
                             </svg>
                             <span class="hidden sm:inline">Preview</span>
                           </button>
-                          <button type="button" @click="downloadSingle(e)" title="Download this file"
+                          <button type="button" @click="requireViewer(() => downloadSingle(e))" title="Download this file"
                             class="act act-download">
                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                               <path stroke-linecap="round" stroke-linejoin="round"
@@ -261,6 +261,7 @@
                           </button>
                         </template>
                         <a v-if="e.video_url" :href="e.video_url" target="_blank" rel="noopener" title="Watch the recording"
+                          @click="onVideoClick($event, e.video_url)"
                           class="act act-video">
                           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round"
@@ -323,6 +324,31 @@
           <iframe :src="preview.src" class="w-full h-full border-0" title="Slides preview"></iframe>
         </div>
       </div>
+    </div>
+
+    <!-- One-time "who are you" prompt before preview/download (per device).
+         Never blocks: any valid email continues; it's matched to a
+         registration server-side when possible (POST /page-views/identify). -->
+    <div v-if="viewerPrompt.open" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60"
+      @click.self="viewerPrompt.open = false">
+      <form class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" @submit.prevent="submitViewer">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style="background: #fff0f2;">
+          <svg class="w-5 h-5" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0l-9.75 6.75L2.25 6.75" />
+          </svg>
+        </div>
+        <h3 class="font-bold text-gray-800">Access conference slides</h3>
+        <p class="text-sm text-gray-500 mt-1">Enter the email you registered with to preview and download presentations. You'll only be asked once on this device.</p>
+        <input ref="viewerEmailInput" v-model="viewerPrompt.email" type="email" autocomplete="email" inputmode="email"
+          placeholder="you@example.com"
+          class="mt-4 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gray-400" />
+        <p v-if="viewerPrompt.error" class="text-xs text-red-600 mt-1.5">{{ viewerPrompt.error }}</p>
+        <div class="flex justify-end gap-2 mt-5">
+          <button type="button" @click="viewerPrompt.open = false" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90" style="background-color: rgb(254,80,103);">Continue</button>
+        </div>
+        <p class="text-[11px] text-gray-400 mt-4">Used only so the ECSACONM secretariat can see who has accessed the conference presentations.</p>
+      </form>
     </div>
 
     <!-- Single-file download progress -->
@@ -425,6 +451,11 @@ export default {
       downloadProgress: { active: false, label: '', percent: 0, loadedMB: '0.0', totalMB: null },
       zipProgress: { active: false, room: '', percent: 0, loadedMB: '0.0', totalMB: null },
       downloadFlash: '',
+      // Who's viewing, for page-view stats: { ref } from a certificate-email
+      // link or { email } typed into the prompt; remembered per device.
+      viewer: null,
+      visitorId: null,
+      viewerPrompt: { open: false, email: '', error: '', pending: null },
     }
   },
 
@@ -717,13 +748,62 @@ export default {
           localStorage.setItem('ecsa_visitor_id', visitorId)
         }
       } catch (e) { /* storage blocked — still count the open, just not uniquely */ }
+      this.visitorId = visitorId
       const q = this.$route.query
+      // A tagged email link identifies the visitor outright — remember it so
+      // they're never prompted on this device.
+      if (q.ref) this.saveViewer({ ref: String(q.ref) })
+      else this.viewer = this.loadViewer()
       axios.post(`${this.apiUrl}/page-views/`, {
         page: 'programme-rooms-public',
         event_id: Number(this.eventId) || null,
         visitor_id: visitorId,
-        ref: q.ref ? String(q.ref) : null,
+        ref: this.viewer?.ref || null,
+        email: this.viewer?.email || null,
         source: q.src === 'email' ? 'email' : 'direct',
+      }).catch(() => {})
+    },
+
+    loadViewer() {
+      try {
+        const v = JSON.parse(localStorage.getItem('ecsa_viewer') || 'null')
+        return v && (v.ref || v.email) ? v : null
+      } catch (e) { return null }
+    },
+    saveViewer(v) {
+      this.viewer = v
+      try { localStorage.setItem('ecsa_viewer', JSON.stringify(v)) } catch (e) { /* per-session only */ }
+    },
+
+    // Runs `action` straight away for an identified visitor; otherwise asks
+    // for their email first and runs it on Continue.
+    requireViewer(action) {
+      if (this.viewer) return action()
+      this.viewerPrompt = { open: true, email: '', error: '', pending: action }
+      this.$nextTick(() => this.$refs.viewerEmailInput?.focus())
+    },
+    onVideoClick(evt, url) {
+      if (this.viewer) return
+      evt.preventDefault()
+      this.requireViewer(() => window.open(url, '_blank', 'noopener'))
+    },
+    submitViewer() {
+      const email = this.viewerPrompt.email.trim().toLowerCase()
+      if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) {
+        this.viewerPrompt.error = 'Please enter a valid email address.'
+        return
+      }
+      const action = this.viewerPrompt.pending
+      this.saveViewer({ email })
+      this.viewerPrompt = { open: false, email: '', error: '', pending: null }
+      // Run the action inside this click (so a new tab isn't popup-blocked);
+      // recording the email is fire-and-forget and never holds it up.
+      if (action) action()
+      axios.post(`${this.apiUrl}/page-views/identify`, {
+        page: 'programme-rooms-public',
+        event_id: Number(this.eventId) || null,
+        visitor_id: this.visitorId,
+        email,
       }).catch(() => {})
     },
 
