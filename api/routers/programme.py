@@ -81,16 +81,25 @@ def _firstname(n) -> str:
     return " ".join(p[:-1])
 
 
+# Titles the programme book puts in front of names ("Dr. Hassan Thabit Haji")
+# — not part of the given name, so they mustn't be scored as one.
+_HONORIFICS = {"dr", "mr", "mrs", "ms", "miss", "prof", "professor", "sr", "sister", "rev", "hon", "eng"}
+
+
 def _name_score(pname, cand_first, cand_last):
     """Fuzzy surname+firstname score between a free-typed name (pname, e.g.
     from the programme book) and a candidate (first, last) on record.
     Returns None if the surname doesn't plausibly match at all."""
     sn, fn = _surname(pname), _firstname(pname)
+    fn = " ".join(w for w in fn.split(" ") if w and w not in _HONORIFICS)
     rsn = _norm(cand_last or "")
     rfn = _norm(cand_first or "")
     if not rsn:
         return None
-    if not (rsn == sn or (len(rsn) >= 5 and rsn[:4] == sn[:4])):
+    # A multi-word surname on record ("Thabit Haji", "Cobos Serrano",
+    # "Mankhaka-Banda") is matched on its last word too — the programme's
+    # surname is just the final word of the typed name.
+    if not (rsn == sn or rsn.split(" ")[-1] == sn or (len(rsn) >= 5 and rsn[:4] == sn[:4])):
         return None
     sc = 2
     if fn and rfn:
