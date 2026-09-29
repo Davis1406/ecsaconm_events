@@ -19,22 +19,26 @@ TRACKED_LINK_MARKERS = ("programme-rooms-public",)
 _REF_RE = re.compile(r"^(\d{1,10})\.([0-9a-f]{12})$")
 
 
-def _sig(user_id: int) -> str:
+# `kind` namespaces the signature: "page-ref" tokens only ever go out in a
+# recipient's own email, while "pick" tokens are handed to anyone who picks a
+# name in the presentations page's searchable list — so a pick token can never
+# pass as an email-link ref.
+def _sig(user_id: int, kind: str = "page-ref") -> str:
     key = (os.getenv("SECRET_KEY", "") or "ecsaconm").encode()
-    return hmac.new(key, f"page-ref:{int(user_id)}".encode(), hashlib.sha256).hexdigest()[:12]
+    return hmac.new(key, f"{kind}:{int(user_id)}".encode(), hashlib.sha256).hexdigest()[:12]
 
 
-def make_ref(user_id: int) -> str:
-    return f"{int(user_id)}.{_sig(user_id)}"
+def make_ref(user_id: int, kind: str = "page-ref") -> str:
+    return f"{int(user_id)}.{_sig(user_id, kind)}"
 
 
-def parse_ref(ref) -> Optional[int]:
-    """The user id a valid ref was issued for, else None."""
+def parse_ref(ref, kind: str = "page-ref") -> Optional[int]:
+    """The user id a valid ref of this kind was issued for, else None."""
     m = _REF_RE.match(str(ref or "").strip())
     if not m:
         return None
     user_id = int(m.group(1))
-    return user_id if hmac.compare_digest(m.group(2), _sig(user_id)) else None
+    return user_id if hmac.compare_digest(m.group(2), _sig(user_id, kind)) else None
 
 
 def with_ref(url: str, user_id) -> str:

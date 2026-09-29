@@ -338,10 +338,62 @@
           </svg>
         </div>
         <h3 class="font-bold text-gray-800">Access conference slides</h3>
-        <p class="text-sm text-gray-500 mt-1">Enter the email you registered with to preview and download presentations. You'll only be asked once on this device.</p>
-        <input ref="viewerEmailInput" v-model="viewerPrompt.email" type="email" autocomplete="email" inputmode="email"
-          placeholder="you@example.com"
-          class="mt-4 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gray-400" />
+        <p class="text-sm text-gray-500 mt-1">
+          {{ viewerPrompt.mode === 'search'
+            ? 'Find your name to preview and download presentations.'
+            : 'Enter the email you registered with.' }}
+          You'll only be asked once on this device.
+        </p>
+
+        <!-- Search mode: pick your own name (names only, emails masked) -->
+        <div v-if="viewerPrompt.mode === 'search'" class="mt-4">
+          <div v-if="viewerPrompt.selected"
+            class="flex items-center gap-3 rounded-xl border px-3 py-2.5" style="border-color: rgb(254,80,103); background: rgba(254,80,103,0.08);">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-gray-800 truncate">{{ viewerPrompt.selected.name }}</div>
+              <div class="text-xs text-gray-500 truncate">{{ viewerPrompt.selected.hint }}</div>
+            </div>
+            <button type="button" @click="clearViewerPick" class="text-xs font-semibold text-gray-500 hover:text-gray-800">Change</button>
+          </div>
+          <div v-else>
+            <div class="relative">
+            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
+            <input ref="viewerSearchInput" v-model="viewerPrompt.query" @input="searchViewers" type="text" autocomplete="off"
+              placeholder="Type your name…"
+              class="w-full border border-gray-200 rounded-xl pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:border-gray-400" />
+            <svg v-if="viewerPrompt.searching" class="animate-spin w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2" style="color: rgb(254,80,103);" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            </div>
+            <div v-if="viewerPrompt.query.trim().length >= 3 && !viewerPrompt.searching"
+              class="mt-1.5 max-h-56 overflow-y-auto rounded-xl border border-gray-100 shadow-sm">
+              <button v-for="r in viewerPrompt.results" :key="r.token" type="button" @click="pickViewer(r)"
+                class="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-b-0">
+                <div class="text-sm font-medium text-gray-800">{{ r.name }}</div>
+                <div class="text-xs text-gray-400">{{ r.hint }}</div>
+              </button>
+              <div v-if="!viewerPrompt.results.length" class="px-3 py-2.5 text-xs text-gray-500">No registered delegate matches that name.</div>
+            </div>
+            <p v-else-if="viewerPrompt.query.trim().length > 0 && viewerPrompt.query.trim().length < 3" class="text-[11px] text-gray-400 mt-1.5">Keep typing — at least 3 letters.</p>
+          </div>
+          <button type="button" @click="setViewerMode('email')" class="mt-2.5 text-xs font-semibold" style="color: rgb(220,50,75);">
+            Can't find your name? Enter your email instead
+          </button>
+        </div>
+
+        <!-- Email fallback -->
+        <div v-else class="mt-4">
+          <input ref="viewerEmailInput" v-model="viewerPrompt.email" type="email" autocomplete="email" inputmode="email"
+            placeholder="you@example.com"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gray-400" />
+          <button type="button" @click="setViewerMode('search')" class="mt-2.5 text-xs font-semibold" style="color: rgb(220,50,75);">
+            &larr; Search by name instead
+          </button>
+        </div>
+
         <p v-if="viewerPrompt.error" class="text-xs text-red-600 mt-1.5">{{ viewerPrompt.error }}</p>
         <div class="flex justify-end gap-2 mt-5">
           <button type="button" @click="viewerPrompt.open = false" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Cancel</button>
@@ -455,7 +507,8 @@ export default {
       // link or { email } typed into the prompt; remembered per device.
       viewer: null,
       visitorId: null,
-      viewerPrompt: { open: false, email: '', error: '', pending: null },
+      viewerPrompt: { open: false, mode: 'search', query: '', results: [], searching: false, selected: null, email: '', error: '', pending: null },
+      viewerSearchTimer: null,
     }
   },
 
@@ -759,6 +812,7 @@ export default {
         event_id: Number(this.eventId) || null,
         visitor_id: visitorId,
         ref: this.viewer?.ref || null,
+        pick: this.viewer?.pick || null,
         email: this.viewer?.email || null,
         source: q.src === 'email' ? 'email' : 'direct',
       }).catch(() => {})
@@ -767,7 +821,7 @@ export default {
     loadViewer() {
       try {
         const v = JSON.parse(localStorage.getItem('ecsa_viewer') || 'null')
-        return v && (v.ref || v.email) ? v : null
+        return v && (v.ref || v.pick || v.email) ? v : null
       } catch (e) { return null }
     },
     saveViewer(v) {
@@ -779,8 +833,46 @@ export default {
     // for their email first and runs it on Continue.
     requireViewer(action) {
       if (this.viewer) return action()
-      this.viewerPrompt = { open: true, email: '', error: '', pending: action }
-      this.$nextTick(() => this.$refs.viewerEmailInput?.focus())
+      this.viewerPrompt = { open: true, mode: 'search', query: '', results: [], searching: false, selected: null, email: '', error: '', pending: action }
+      this.$nextTick(() => this.$refs.viewerSearchInput?.focus())
+    },
+    setViewerMode(mode) {
+      this.viewerPrompt.mode = mode
+      this.viewerPrompt.error = ''
+      this.$nextTick(() => (mode === 'email' ? this.$refs.viewerEmailInput : this.$refs.viewerSearchInput)?.focus())
+    },
+    // Debounced name search (GET /page-views/people-search — names only,
+    // 3+ letters, max 8, masked emails).
+    searchViewers() {
+      clearTimeout(this.viewerSearchTimer)
+      const q = this.viewerPrompt.query.trim()
+      this.viewerPrompt.error = ''
+      if (q.length < 3) {
+        this.viewerPrompt.results = []
+        this.viewerPrompt.searching = false
+        return
+      }
+      this.viewerPrompt.searching = true
+      this.viewerSearchTimer = setTimeout(async () => {
+        try {
+          const res = await axios.get(`${this.apiUrl}/page-views/people-search`, {
+            params: { q, event_id: Number(this.eventId) || 1 },
+          })
+          if (this.viewerPrompt.query.trim() === q) this.viewerPrompt.results = res.data.results || []
+        } catch (e) {
+          this.viewerPrompt.results = []
+        } finally {
+          if (this.viewerPrompt.query.trim() === q) this.viewerPrompt.searching = false
+        }
+      }, 250)
+    },
+    pickViewer(r) {
+      this.viewerPrompt.selected = r
+      this.viewerPrompt.error = ''
+    },
+    clearViewerPick() {
+      this.viewerPrompt.selected = null
+      this.$nextTick(() => this.$refs.viewerSearchInput?.focus())
     },
     onVideoClick(evt, url) {
       if (this.viewer) return
@@ -788,22 +880,33 @@ export default {
       this.requireViewer(() => window.open(url, '_blank', 'noopener'))
     },
     submitViewer() {
-      const email = this.viewerPrompt.email.trim().toLowerCase()
-      if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) {
-        this.viewerPrompt.error = 'Please enter a valid email address.'
-        return
+      const p = this.viewerPrompt
+      let viewer
+      if (p.mode === 'search') {
+        if (!p.selected) {
+          p.error = 'Pick your name from the list, or enter your email instead.'
+          return
+        }
+        viewer = { pick: p.selected.token }
+      } else {
+        const email = p.email.trim().toLowerCase()
+        if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) {
+          p.error = 'Please enter a valid email address.'
+          return
+        }
+        viewer = { email }
       }
-      const action = this.viewerPrompt.pending
-      this.saveViewer({ email })
-      this.viewerPrompt = { open: false, email: '', error: '', pending: null }
+      const action = p.pending
+      this.saveViewer(viewer)
+      this.viewerPrompt = { ...p, open: false, pending: null }
       // Run the action inside this click (so a new tab isn't popup-blocked);
-      // recording the email is fire-and-forget and never holds it up.
+      // recording who it is is fire-and-forget and never holds it up.
       if (action) action()
       axios.post(`${this.apiUrl}/page-views/identify`, {
         page: 'programme-rooms-public',
         event_id: Number(this.eventId) || null,
         visitor_id: this.visitorId,
-        email,
+        ...viewer,
       }).catch(() => {})
     },
 
