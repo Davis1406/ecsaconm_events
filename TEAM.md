@@ -171,7 +171,7 @@ The `.env.development` file already points the frontend at the production API (`
 | `MAIL_FROM` | Sender address |
 | `MAIL_SERVER` | SMTP host |
 | `MAIL_PORT` | SMTP port |
-| `SMTP_MAX_EMAILS_PER_HOUR` | Rolling-hour cap for bulk email sends, counted in **envelope recipients** (the host's unit — emails are CC'd to `ADMIN_CC_EMAIL` and cost 2, except types in `NO_CC_EMAIL_TYPES` in `mailer_util.py`, currently certificates, which go to the addressee only and cost 1). `send_bulk_emails` runs one batch at a time and pauses when the cap is reached (default `450` — the mail host caps the `ecsaconm.org` domain at 500/hr). Set `0` to disable pacing. |
+| `SMTP_MAX_EMAILS_PER_HOUR` | Rolling-hour cap for bulk email sends, counted in **envelope recipients** (the host's unit — every email is also CC'd to `ADMIN_CC_EMAIL`, so each costs 2, i.e. ~225 emails/hr at the default). `send_bulk_emails` runs one batch at a time and pauses when the cap is reached (default `450` — the mail host caps the `ecsaconm.org` domain at 500/hr). Set `0` to disable pacing. `NO_CC_EMAIL_TYPES` in `mailer_util.py` can opt individual types out of the CC (currently none). |
 | `SMTP_MAX_MSGS_PER_CONNECTION` | Messages per SMTP session before reconnecting (default `20`) |
 | `BASE_URL` | Public API base, e.g. `https://events.ecsaconm.org/api` |
 | `CLIENT_ORIGIN` | Frontend origin, e.g. `https://events.ecsaconm.org` |

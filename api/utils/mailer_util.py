@@ -39,10 +39,12 @@ CLIENT_ORIGIN = os.getenv("CLIENT_ORIGIN", "https://events.ecsaconm.org")
 # to Sent) mailbox. Override via ADMIN_CC_EMAIL in .env if needed.
 ADMIN_CC_EMAIL = os.getenv("ADMIN_CC_EMAIL", "admission@cosecsa.org")
 
-# Email types sent WITHOUT the admin CC. Certificates go out in the hundreds —
-# CC'ing each one doubled the load on the host's 500-recipients/hour cap and
-# flooded the admin mailbox; the Sent Emails log is the record for these.
-NO_CC_EMAIL_TYPES = {"certificate"}
+# Email types sent WITHOUT the admin CC. The admin explicitly wants a copy of
+# every certificate email again (they were worried delivery was broken), so the
+# set is empty for now. If the admin mailbox ever floods again, certificates can
+# go back in here — but note it halves the effective hourly rate (each email
+# costs 2 envelope recipients instead of 1).
+NO_CC_EMAIL_TYPES = set()
 
 
 def _wants_cc(email_type=None):
