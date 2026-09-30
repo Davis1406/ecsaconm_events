@@ -37,12 +37,14 @@ CLIENT_ORIGIN = os.getenv("CLIENT_ORIGIN", "https://events.ecsaconm.org")
 # Every outgoing email is CC'd here so there's a visible record of what the
 # system has sent, independent of the SMTP account's own (unpopulated, since
 # sends go out over raw SMTP rather than through a client that IMAP-appends
-# to Sent) mailbox. Comma/semicolon-separated list — the admin requested the
-# CCs be lemmym@ecsahc.org and info@ecsaconm.org. Override via ADMIN_CC_EMAIL
-# in .env if needed.
+# to Sent) mailbox. Comma/semicolon-separated list. Empty by default — the
+# admin wants NO automatic CC on certificate emails; the Certificates of
+# Appreciation flow supplies its own per-recipient CCs (lemmym@ecsahc.org +
+# info@ecsaconm.org) via `extra_cc` from the send dialog instead. Override via
+# ADMIN_CC_EMAIL in .env if a blanket copy is ever wanted again.
 ADMIN_CC_EMAILS = [
     a.strip()
-    for a in re.split(r"[,;\s]+", os.getenv("ADMIN_CC_EMAIL", "lemmym@ecsahc.org, info@ecsaconm.org"))
+    for a in re.split(r"[,;\s]+", os.getenv("ADMIN_CC_EMAIL", ""))
     if a.strip()
 ]
 
