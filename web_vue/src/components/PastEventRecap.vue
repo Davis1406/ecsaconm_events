@@ -113,8 +113,8 @@
       :class="ci % 2 ? 'bg-[#2b2e37]' : 'bg-[#23252d]'">
       <div class="max-w-6xl mx-auto">
         <div class="mb-8 sm:mb-10 max-w-2xl" :class="ci % 2 ? 'ml-auto text-right' : ''">
-          <p data-reveal class="reveal text-5xl sm:text-7xl font-black text-[rgba(254,80,103,0.35)] leading-none">{{ pad(ci + 1) }}</p>
-          <h2 data-reveal class="reveal text-2xl sm:text-4xl font-black text-white -mt-4 sm:-mt-7" style="transition-delay: 80ms">{{ ch.title }}</h2>
+          <p data-reveal class="reveal text-4xl sm:text-6xl font-black text-[rgba(254,80,103,0.55)] leading-none">{{ pad(ci + 1) }}</p>
+          <h2 data-reveal class="reveal text-2xl sm:text-4xl font-black text-white mt-1 sm:mt-2" style="transition-delay: 80ms">{{ ch.title }}</h2>
           <p data-reveal class="reveal mt-3 text-gray-200 text-sm sm:text-base" style="transition-delay: 160ms">{{ ch.text }}</p>
         </div>
 

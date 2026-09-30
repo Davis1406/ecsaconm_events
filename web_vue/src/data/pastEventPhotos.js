@@ -22,7 +22,7 @@ export const pastEventPhotos = {
         title: 'Opening & Arrivals',
         text: 'Delegates from across East, Central and Southern Africa gathered at the Golden Tulip Zanzibar Airport Hotel for five days of learning and connection.',
         photos: [
-          p17('01', 'Delegates and Fellows at the official opening'),
+          p17('01', 'The Secretariat with the Guest of Honour'),
           p17('02', 'The conference venue, Golden Tulip Zanzibar Airport Hotel'),
           p17('03', 'Registration and welcome at the conference desk'),
           p17('04', 'Delegates arriving for the conference'),
