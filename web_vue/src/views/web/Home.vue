@@ -162,125 +162,63 @@
       </div>
     </section>
 
-    <!-- ── PAST EVENT: PHOTOS & RECAP (shown when nothing is upcoming) ──────── -->
-    <template v-if="!isLoading && !featuredEvent && pastEvent">
-      <section class="relative w-full overflow-hidden" style="min-height: 420px;">
-        <div class="absolute inset-0 bg-center bg-cover" :style="pastHeroBgStyle"></div>
-        <div class="absolute inset-0" style="background-color: rgba(0,0,0,0.6);"></div>
-
-        <div class="relative z-10 max-w-5xl mx-auto px-6 py-16 sm:py-24 text-white text-center">
-          <div class="mb-4 inline-flex items-center gap-2">
-            <span class="text-sm font-semibold px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm">Past Event · Photos &amp; Recap</span>
+    <!-- ── NO CURRENT EVENT → PAST EVENT PHOTOS & RECAP ─────────────────── -->
+    <div v-if="!isLoading && !featuredEvent && pastEvent" class="bg-[#0e0f13]">
+    <Transition name="stage" mode="out-in" @before-enter="toTop" @after-enter="toTop">
+      <section v-if="!isLoading && !featuredEvent && pastEvent && !showRecap" key="intro"
+        class="relative overflow-hidden bg-black flex items-center justify-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100svh-5rem)]">
+        <!-- Drifting photo wall -->
+        <div v-if="introPhotos.length" class="absolute inset-0 photo-wall" aria-hidden="true">
+          <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 photo-wall-inner">
+            <div v-for="(p, i) in introPhotos" :key="`w-${i}`" class="aspect-[4/3] rounded-xl overflow-hidden">
+              <img :src="p.thumb" alt="" class="h-full w-full object-cover" />
+            </div>
           </div>
+        </div>
+        <div v-else class="absolute inset-0 bg-center bg-cover" :style="pastHeroBgStyle"></div>
+        <div class="absolute inset-0 bg-gradient-to-b from-black/80 via-black/70 to-black/85"></div>
 
-          <h1 class="text-3xl sm:text-5xl font-black leading-tight mb-4 drop-shadow-lg"
-            v-html="formatOrdinals(pastEvent.event)"></h1>
-
-          <p v-if="pastEvent.theme" class="text-base sm:text-xl text-white/90 font-medium mb-6 max-w-2xl mx-auto">
-            {{ pastEvent.theme }}
+        <div class="relative z-10 max-w-3xl mx-auto px-6 py-16 text-center text-white intro-content">
+          <span class="inline-flex items-center gap-2 text-sm font-semibold px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm mb-6">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            ECSACONM Events
+          </span>
+          <h1 class="text-3xl sm:text-5xl font-black leading-tight mb-4 drop-shadow-lg">No current event for now</h1>
+          <p class="text-base sm:text-lg text-white/80 mb-10">
+            Our next event will be announced here soon. In the meantime, look back at our most recent conference.
           </p>
 
-          <div class="flex flex-wrap justify-center gap-4 text-sm sm:text-base text-white/90 mb-8">
-            <div class="flex items-center gap-2">
-              <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-              <span>{{ formatDate(pastEvent.start_date) }} – {{ formatDate(pastEvent.end_date) }}</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <svg class="h-5 w-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M5 8a5 5 0 1110 0c0 3-5 9-5 9S5 11 5 8zm5-2a2 2 0 100 4 2 2 0 000-4z" clip-rule="evenodd"/>
-              </svg>
-              <span>{{ pastEvent.location }}</span>
-            </div>
+          <div class="rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 px-6 py-6 sm:px-8 mb-8">
+            <p class="text-xs uppercase tracking-[0.25em] font-bold mb-2" style="color: rgb(254,80,103);">Past event</p>
+            <p class="text-lg sm:text-2xl font-bold leading-snug" v-html="formatOrdinals(pastEvent.event)"></p>
+            <p class="text-sm text-white/70 mt-2">
+              {{ formatDate(pastEvent.start_date) }} – {{ formatDate(pastEvent.end_date) }}
+              <span v-if="pastEvent.location"> · {{ pastEvent.location }}</span>
+            </p>
           </div>
 
-          <p class="text-white/85 max-w-2xl mx-auto mb-8">
-            Thank you to everyone who joined us. Relive the conference through the photo galleries and resources below.
-          </p>
-
-          <div class="flex flex-wrap justify-center gap-3">
-            <a v-if="photoLinks.length" href="#past-photos" @click.prevent="scrollTo('past-photos')"
-              class="inline-block px-8 py-3 rounded-full font-semibold text-sm sm:text-base shadow-lg transition hover:opacity-90 hover:-translate-y-0.5"
-              style="background-color: rgb(254,80,103); color: #fff;">
-              View Conference Photos →
-            </a>
-            <router-link :to="{ name: 'WebEvent', params: { id: pastEvent.id } }"
-              class="inline-block px-8 py-3 rounded-full font-semibold text-sm sm:text-base bg-white/20 text-white hover:bg-white/30 transition">
-              Event details
-            </router-link>
-          </div>
+          <button v-if="pastStory" type="button" @click="openRecap"
+            class="cta-pulse inline-flex items-center gap-2 px-8 py-4 rounded-full font-semibold text-base shadow-lg transition hover:-translate-y-0.5"
+            style="background-color: rgb(254,80,103); color: #fff;">
+            Click here to view the past event
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+          </button>
+          <router-link v-else :to="{ name: 'WebEvent', params: { id: pastEvent.id } }"
+            class="inline-flex items-center gap-2 px-8 py-4 rounded-full font-semibold text-base shadow-lg"
+            style="background-color: rgb(254,80,103); color: #fff;">
+            Click here to view the past event →
+          </router-link>
         </div>
       </section>
 
-      <!-- Photo galleries -->
-      <section v-if="photoLinks.length" id="past-photos" class="max-w-5xl mx-auto px-4 sm:px-6 pt-12">
-        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Conference Photos</h2>
-        <p class="text-sm text-gray-500 mb-6">Browse and download photos from the conference.</p>
-        <div class="grid gap-5 sm:grid-cols-2">
-          <a v-for="link in photoLinks" :key="link.id" :href="link.link" target="_blank" rel="noopener"
-            class="group bg-white rounded-2xl shadow-sm hover:shadow-md transition overflow-hidden border-t-4 flex items-center gap-4 p-5"
-            style="border-color: rgb(254,80,103);">
-            <div class="h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0"
-              style="background-color: rgb(254,80,103);">
-              <svg class="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-base font-bold text-gray-800">{{ link.link_name || link.name }}</p>
-              <p class="text-xs text-gray-400 truncate">{{ linkHost(link.link) }}</p>
-            </div>
-            <span class="text-sm font-semibold flex-shrink-0 group-hover:translate-x-0.5 transition"
-              style="color: rgb(254,80,103);">Open →</span>
-          </a>
-        </div>
-      </section>
-
-      <!-- Recap: other public links & documents -->
-      <section v-if="recapLinks.length || pastDocuments.length" class="max-w-5xl mx-auto px-4 sm:px-6 pt-12">
-        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Conference Recap</h2>
-        <p class="text-sm text-gray-500 mb-6">Presentations, documents and resources from the conference.</p>
-        <div class="bg-white rounded-2xl shadow-sm px-6 py-5">
-          <ul class="space-y-3">
-            <li v-for="link in recapLinks" :key="`l-${link.id}`"
-              class="flex items-center gap-4 p-4 rounded-xl bg-gray-50 hover:bg-pink-50 transition">
-              <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                style="background-color: rgb(220,50,75);">
-                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </div>
-              <p class="flex-1 min-w-0 text-sm font-bold text-gray-800 truncate">{{ link.link_name || link.name }}</p>
-              <a :href="link.link" target="_blank" rel="noopener"
-                class="px-5 py-2 rounded-full text-sm font-semibold text-white transition hover:opacity-90 flex-shrink-0"
-                style="background-color: rgb(220,50,75);">Open</a>
-            </li>
-            <li v-for="file in pastDocuments" :key="`d-${file.id}`"
-              class="flex items-center gap-4 p-4 rounded-xl bg-gray-50 hover:bg-pink-50 transition">
-              <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                style="background-color: rgb(254,80,103);">
-                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold text-gray-800 truncate">{{ file.name || file.file_name }}</p>
-                <p class="text-xs text-gray-400">{{ formatDocType(file.document_type) }}</p>
-              </div>
-              <a :href="`${apiUrl}/${file.path}`" target="_blank" rel="noopener"
-                class="px-5 py-2 rounded-full text-sm font-semibold text-white transition hover:opacity-90 flex-shrink-0"
-                style="background-color: rgb(254,80,103);">Download</a>
-            </li>
-          </ul>
-        </div>
-      </section>
-    </template>
+      <PastEventRecap v-else-if="!isLoading && !featuredEvent && pastEvent && showRecap" key="recap"
+        :event="pastEvent" :story="pastStory" :links="pastLinks" :documents="pastDocuments"
+        @back="closeRecap" />
+    </Transition>
+    </div>
 
     <!-- No events state (when not loading and nothing featured or past) -->
     <div v-if="!isLoading && !featuredEvent && !pastEvent" class="text-center py-24 text-gray-400">
@@ -293,7 +231,7 @@
     </div>
 
     <!-- ── CONTACT CTA STRIP ──────────────────────────────────────────────── -->
-    <section class="mt-12" style="background: linear-gradient(135deg, rgb(254,80,103) 0%, rgb(220,50,75) 100%);">
+    <section :class="!featuredEvent && pastEvent ? '' : 'mt-12'" style="background: linear-gradient(135deg, rgb(254,80,103) 0%, rgb(220,50,75) 100%);">
       <div class="max-w-5xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-white">
         <div>
           <h2 class="text-xl sm:text-2xl font-bold mb-1">Have a question about an event?</h2>
@@ -312,9 +250,12 @@
 <script>
 import { fetchData, fetchItem } from '@/services/apiService'
 import goldenTulip from '@/assets/images/golden-tulip.avif'
+import PastEventRecap from '@/components/PastEventRecap.vue'
+import { photosForEvent } from '@/data/pastEventPhotos'
 
 export default {
   name: 'HomeView',
+  components: { PastEventRecap },
   data() {
     return {
       isLoading: true,
@@ -349,11 +290,16 @@ export default {
       const img = this.pastEvent?.banner_image
       return { backgroundImage: img ? `url('${this.apiUrl}/${img}')` : `url('${goldenTulip}')` }
     },
-    photoLinks() {
-      return this.pastLinks.filter(l => this.isPhotoLink(l))
+    pastStory() {
+      return this.pastEvent ? photosForEvent(this.pastEvent.id) : null
     },
-    recapLinks() {
-      return this.pastLinks.filter(l => !this.isPhotoLink(l))
+    showRecap() {
+      return !!this.pastStory && this.$route.query.view === 'past-event'
+    },
+    introPhotos() {
+      // repeat the photo set so the drifting wall always covers the screen
+      const all = (this.pastStory?.chapters || []).flatMap(c => c.photos)
+      return all.length ? [...all, ...all].slice(0, 36) : []
     },
     publicDocuments() {
       return this.documents.filter(d => (d.access_level || 'public') === 'public')
@@ -400,14 +346,15 @@ export default {
         console.error('Error fetching past event:', e)
       }
     },
-    isPhotoLink(link) {
-      return /photo|gallery|album|picture/i.test(link.link_name || link.name || '')
+    openRecap() {
+      this.$router.push({ query: { ...this.$route.query, view: 'past-event' } })
     },
-    linkHost(url) {
-      try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url }
+    closeRecap() {
+      const { view, ...rest } = this.$route.query
+      this.$router.push({ query: rest })
     },
-    scrollTo(id) {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+    toTop() {
+      window.scrollTo({ top: 0, behavior: 'instant' })
     },
     formatDate(d) {
       if (!d) return ''
@@ -434,6 +381,35 @@ export default {
 </script>
 
 <style scoped>
+/* Intro ⇄ recap page change */
+.stage-enter-active { transition: opacity .8s ease, transform .9s cubic-bezier(.2,.7,.2,1); }
+.stage-leave-active { transition: opacity .6s ease, transform .6s ease, filter .6s ease; }
+.stage-enter-from { opacity: 0; transform: translateY(48px) scale(.98); }
+.stage-leave-to { opacity: 0; transform: scale(1.08); filter: blur(8px); }
+
+.photo-wall { overflow: hidden; }
+.photo-wall-inner {
+  width: 130%;
+  margin-left: -15%;
+  transform: rotate(-6deg) translateY(-12%);
+  animation: drift 40s linear infinite alternate;
+}
+@keyframes drift {
+  from { transform: rotate(-6deg) translate(0, -12%); }
+  to { transform: rotate(-6deg) translate(-6%, -30%); }
+}
+.intro-content { animation: introRise 1s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes introRise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+.cta-pulse { animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(254,80,103,.55); }
+  50% { box-shadow: 0 0 0 14px rgba(254,80,103,0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .photo-wall-inner, .intro-content, .cta-pulse { animation: none; }
+  .stage-enter-active, .stage-leave-active { transition: none; }
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
