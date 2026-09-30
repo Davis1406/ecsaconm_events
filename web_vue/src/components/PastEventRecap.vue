@@ -1,5 +1,5 @@
 <template>
-  <div class="recap bg-[#fff7f8] text-gray-800">
+  <div class="recap bg-[#23252d] text-white">
 
     <!-- ── Section navigator (desktop) ─────────────────────────────────────── -->
     <nav class="hidden lg:flex fixed right-5 top-1/2 -translate-y-1/2 z-40 flex-col gap-3" aria-label="Sections">
@@ -9,7 +9,7 @@
           {{ s.label }}
         </span>
         <span class="block rounded-full transition-all duration-300"
-          :class="activeSection === s.id ? 'h-3 w-3 bg-[rgb(254,80,103)] ring-4 ring-[rgba(254,80,103,0.3)]' : 'h-2 w-2 bg-gray-400 ring-2 ring-white/80 group-hover:bg-gray-600'"></span>
+          :class="activeSection === s.id ? 'h-3 w-3 bg-[rgb(254,80,103)] ring-4 ring-[rgba(254,80,103,0.3)]' : 'h-2 w-2 bg-gray-300/80 group-hover:bg-white'"></span>
       </button>
     </nav>
 
@@ -22,11 +22,11 @@
         :class="i === current ? 'opacity-100 z-[1]' : 'opacity-0 z-0'" :aria-hidden="i !== current">
         <img v-if="loaded[i]" :key="i === current ? `on-${kbCycle}` : 'off'" :src="p.full" :alt="p.caption"
           class="h-full w-full object-cover" :class="i === current ? (i % 2 ? 'kb-out' : 'kb-in') : ''"
-          :style="{ objectPosition: 'center 35%' }" decoding="async" />
+          :style="{ objectPosition: p.pos || 'center 35%' }" decoding="async" />
       </div>
 
       <!-- Overlays -->
-      <div class="absolute inset-0 z-[2] bg-gradient-to-t from-black/65 via-black/5 to-black/20 pointer-events-none"></div>
+      <div class="absolute inset-0 z-[2] bg-gradient-to-t from-black/70 via-black/10 to-black/25 pointer-events-none"></div>
 
       <!-- Progress bar -->
       <div class="absolute top-0 left-0 right-0 z-[3] h-1 bg-white/15">
@@ -97,12 +97,12 @@
     </section>
 
     <!-- ── THEME ─────────────────────────────────────────────────────────────── -->
-    <section v-if="event.theme" id="recap-theme" data-section class="recap-section bg-white py-20 sm:py-28 px-6 text-center">
+    <section v-if="event.theme" id="recap-theme" data-section class="recap-section bg-[#2b2e37] py-20 sm:py-28 px-6 text-center">
       <p data-reveal class="reveal text-xs uppercase tracking-[0.3em] text-[rgb(254,80,103)] font-bold mb-5">Conference theme</p>
-      <p data-reveal class="reveal text-2xl sm:text-4xl font-black max-w-3xl mx-auto leading-snug text-gray-900" style="transition-delay: 120ms">
+      <p data-reveal class="reveal text-2xl sm:text-4xl font-black max-w-3xl mx-auto leading-snug text-white" style="transition-delay: 120ms">
         “{{ event.theme }}”
       </p>
-      <p data-reveal class="reveal mt-6 text-gray-500 max-w-xl mx-auto" style="transition-delay: 240ms">
+      <p data-reveal class="reveal mt-6 text-gray-200 max-w-xl mx-auto" style="transition-delay: 240ms">
         Thank you to every delegate, speaker, partner and volunteer who made it happen. Here is the week in pictures.
       </p>
     </section>
@@ -110,21 +110,22 @@
     <!-- ── PHOTO STORY CHAPTERS ──────────────────────────────────────────────── -->
     <section v-for="(ch, ci) in chapters" :key="ch.id" :id="ch.id" data-section
       class="recap-section py-16 sm:py-24 px-4 sm:px-8 lg:px-16"
-      :class="ci % 2 ? 'bg-white' : 'bg-[#fff1f3]'">
+      :class="ci % 2 ? 'bg-[#2b2e37]' : 'bg-[#23252d]'">
       <div class="max-w-6xl mx-auto">
         <div class="mb-8 sm:mb-10 max-w-2xl" :class="ci % 2 ? 'ml-auto text-right' : ''">
-          <p data-reveal class="reveal text-5xl sm:text-7xl font-black text-[rgba(254,80,103,0.18)] leading-none">{{ pad(ci + 1) }}</p>
-          <h2 data-reveal class="reveal text-2xl sm:text-4xl font-black text-gray-900 -mt-4 sm:-mt-7" style="transition-delay: 80ms">{{ ch.title }}</h2>
-          <p data-reveal class="reveal mt-3 text-gray-600 text-sm sm:text-base" style="transition-delay: 160ms">{{ ch.text }}</p>
+          <p data-reveal class="reveal text-5xl sm:text-7xl font-black text-[rgba(254,80,103,0.35)] leading-none">{{ pad(ci + 1) }}</p>
+          <h2 data-reveal class="reveal text-2xl sm:text-4xl font-black text-white -mt-4 sm:-mt-7" style="transition-delay: 80ms">{{ ch.title }}</h2>
+          <p data-reveal class="reveal mt-3 text-gray-200 text-sm sm:text-base" style="transition-delay: 160ms">{{ ch.text }}</p>
         </div>
 
         <div class="grid grid-flow-row-dense grid-cols-2 md:grid-cols-4 auto-rows-[140px] sm:auto-rows-[190px] gap-3 sm:gap-4">
           <button v-for="(p, pi) in ch.photos" :key="p.id" type="button" data-reveal
             @click="openLightbox(indexOf(p))"
-            class="reveal reveal-photo group relative overflow-hidden rounded-2xl bg-gray-100 shadow-md hover:shadow-xl transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(254,80,103)]"
+            class="reveal reveal-photo group relative overflow-hidden rounded-2xl bg-white/10 shadow-lg shadow-black/30 hover:shadow-xl transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(254,80,103)]"
             :class="tileClass(ch.photos.length, pi, ci)"
             :style="{ transitionDelay: `${pi * 90}ms` }">
             <img :src="p.thumb" :data-full="p.full" :alt="p.caption" loading="lazy"
+              :style="{ objectPosition: p.pos || 'center' }"
               class="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
               @load="upgrade($event, pi, ch.photos.length)" />
             <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -138,18 +139,18 @@
 
     <!-- ── FULL GALLERIES & RESOURCES ────────────────────────────────────────── -->
     <section v-if="photoLinks.length || recapLinks.length || documents.length" id="recap-galleries" data-section
-      class="recap-section py-16 sm:py-24 px-4 sm:px-8 lg:px-16 bg-gradient-to-b from-[#fff1f3] to-[#ffe3e8]">
+      class="recap-section py-16 sm:py-24 px-4 sm:px-8 lg:px-16 bg-gradient-to-b from-[#23252d] to-[#33272d]">
       <div class="max-w-5xl mx-auto">
         <div class="text-center mb-10">
-          <h2 data-reveal class="reveal text-2xl sm:text-4xl font-black text-gray-900">See every moment</h2>
-          <p data-reveal class="reveal mt-3 text-gray-600" style="transition-delay: 100ms">
+          <h2 data-reveal class="reveal text-2xl sm:text-4xl font-black text-white">See every moment</h2>
+          <p data-reveal class="reveal mt-3 text-gray-200" style="transition-delay: 100ms">
             Browse and download the full photo galleries, presentations and conference documents.
           </p>
         </div>
 
         <div v-if="photoLinks.length" class="grid gap-4 sm:grid-cols-2 mb-8">
           <a v-for="(link, li) in photoLinks" :key="link.id" :href="link.link" target="_blank" rel="noopener"
-            data-reveal class="reveal group flex items-center gap-4 p-5 rounded-2xl bg-white shadow-sm hover:shadow-md border border-gray-100 hover:border-[rgb(254,80,103)] transition"
+            data-reveal class="reveal group flex items-center gap-4 p-5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 hover:border-[rgb(254,80,103)] transition"
             :style="{ transitionDelay: `${li * 100}ms` }">
             <div class="h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-[rgb(254,80,103)] text-white">
               <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -159,8 +160,8 @@
               </svg>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-gray-900">{{ link.link_name || link.name }}</p>
-              <p class="text-xs text-gray-400 truncate">{{ linkHost(link.link) }}</p>
+              <p class="font-bold text-white">{{ link.link_name || link.name }}</p>
+              <p class="text-xs text-gray-300 truncate">{{ linkHost(link.link) }}</p>
             </div>
             <span class="text-sm font-semibold text-[rgb(254,80,103)] group-hover:translate-x-1 transition">Open →</span>
           </a>
@@ -168,16 +169,16 @@
 
         <ul v-if="recapLinks.length || documents.length" class="space-y-3">
           <li v-for="link in recapLinks" :key="`l-${link.id}`" data-reveal
-            class="reveal flex items-center gap-4 p-4 rounded-xl bg-white shadow-sm border border-gray-100">
+            class="reveal flex items-center gap-4 p-4 rounded-xl bg-white/10 border border-white/15">
             <p class="flex-1 min-w-0 text-sm font-bold truncate">{{ link.link_name || link.name }}</p>
             <a :href="link.link" target="_blank" rel="noopener"
               class="px-5 py-2 rounded-full text-sm font-semibold bg-[rgb(220,50,75)] text-white hover:opacity-90 transition flex-shrink-0">Open</a>
           </li>
           <li v-for="file in documents" :key="`d-${file.id}`" data-reveal
-            class="reveal flex items-center gap-4 p-4 rounded-xl bg-white shadow-sm border border-gray-100">
+            class="reveal flex items-center gap-4 p-4 rounded-xl bg-white/10 border border-white/15">
             <div class="flex-1 min-w-0">
               <p class="text-sm font-bold truncate">{{ file.name || file.file_name }}</p>
-              <p class="text-xs text-gray-400">{{ formatDocType(file.document_type) }}</p>
+              <p class="text-xs text-gray-300">{{ formatDocType(file.document_type) }}</p>
             </div>
             <a :href="`${apiUrl}/${file.path}`" target="_blank" rel="noopener"
               class="px-5 py-2 rounded-full text-sm font-semibold bg-[rgb(254,80,103)] text-white hover:opacity-90 transition flex-shrink-0">Download</a>
@@ -186,7 +187,7 @@
 
         <div class="text-center mt-12">
           <router-link :to="{ name: 'WebEvent', params: { id: event.id } }"
-            class="inline-block px-7 py-3 rounded-full font-semibold text-sm border-2 border-gray-300 text-gray-700 hover:border-[rgb(254,80,103)] hover:text-[rgb(254,80,103)] transition">
+            class="inline-block px-7 py-3 rounded-full font-semibold text-sm border-2 border-white/40 text-white hover:border-[rgb(254,80,103)] hover:text-[rgb(254,80,103)] transition">
             Event details
           </router-link>
         </div>

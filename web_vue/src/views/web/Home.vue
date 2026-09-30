@@ -163,7 +163,7 @@
     </section>
 
     <!-- ── NO CURRENT EVENT → PAST EVENT PHOTOS & RECAP ─────────────────── -->
-    <div v-if="!isLoading && !featuredEvent && pastEvent" class="bg-[#fff7f8]">
+    <div v-if="!isLoading && !featuredEvent && pastEvent" class="bg-[#23252d]">
     <Transition name="stage" mode="out-in" @before-enter="toTop" @after-enter="toTop">
       <section v-if="!isLoading && !featuredEvent && pastEvent && !showRecap" key="intro"
         class="relative overflow-hidden bg-black flex items-center justify-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100svh-5rem)]">

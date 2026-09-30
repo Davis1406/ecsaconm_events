@@ -3,14 +3,16 @@
 
 const base = `${import.meta.env.BASE_URL}recap/`
 
-const photo = (folder, n, caption) => ({
+// pos: optional CSS object-position for photos whose subject isn't centred (e.g. portrait shots)
+const photo = (folder, n, caption, pos) => ({
   id: n,
   full: `${base}${folder}/full/${n}.webp`,
   thumb: `${base}${folder}/thumb/${n}.webp`,
   caption,
+  pos,
 })
 
-const p17 = (n, caption) => photo('17th', n, caption)
+const p17 = (n, caption, pos) => photo('17th', n, caption, pos)
 
 export const pastEventPhotos = {
   1: {
@@ -25,7 +27,7 @@ export const pastEventPhotos = {
           p17('03', 'Registration and welcome at the conference desk'),
           p17('04', 'Delegates arriving for the conference'),
           p17('05', 'Delegates at the 17th ECSACONM conference backdrop'),
-          p17('06', 'Guests at the opening of the conference'),
+          p17('06', 'Guests at the opening of the conference', 'center 18%'),
         ],
       },
       {
