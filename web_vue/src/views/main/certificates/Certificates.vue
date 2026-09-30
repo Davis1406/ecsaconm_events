@@ -356,7 +356,18 @@
         </div>
         <div class="mt-3 divide-y divide-gray-100 border border-gray-100 rounded-xl">
           <div v-for="g in appreciationDriverGroups" :key="g.key" class="px-4 py-3">
-            <div class="text-sm font-semibold text-gray-800">{{ g.designation }}</div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="text-sm font-semibold text-gray-800">{{ g.designation }}</div>
+              <button type="button" @click="generateDrivers([g])" :disabled="driverZipping"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition hover:opacity-80 disabled:opacity-60"
+                style="border-color: rgb(254,80,103); color: rgb(254,80,103);"
+                :title="`Download these ${(g.names || []).length} certificates as one ZIP`">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+                {{ driverZipping ? 'Zipping…' : `Download ${(g.names || []).length} (.zip)` }}
+              </button>
+            </div>
             <div class="mt-1.5 flex flex-wrap gap-1.5">
               <span v-for="n in g.names" :key="n"
                 class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[12px] text-gray-700">
@@ -366,7 +377,7 @@
           </div>
         </div>
 <div class="mt-3">
-          <button type="button" @click="generateDrivers" :disabled="driverZipping"
+          <button type="button" @click="generateDrivers()" :disabled="driverZipping"
             class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             style="background-color: rgb(254,80,103);">
             <svg v-if="driverZipping" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -375,7 +386,7 @@
             <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
             </svg>
-            {{ driverZipping ? `Zipping ${driverCount} Certificates…` : `Download ${driverCount} Certificates of Appreciation (.zip)` }}
+            {{ driverZipping ? `Zipping ${driverCount} Certificates…` : `Download All ${driverCount} Certificates of Appreciation (.zip)` }}
           </button>
         </div>
       </div>
@@ -1132,16 +1143,22 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
       this.openPrint({ type: this.type, names: ['Full Name'], autoPrint: false })
     },
     // Certificates of Appreciation for the drivers — no emails, so rendered
-    // straight to PDFs and downloaded as one ZIP (one PDF per person). Uses
+    // straight to PDFs and downloaded as a ZIP (one PDF per person). Uses
     // APPRECIATION_TYPE (0 CPD, "OF APPRECIATION") with each group's heading
-    // as the designation.
-    async generateDrivers() {
-      if (!this.driverCount || this.driverZipping) return
+    // as the designation. `groups` defaults to every driver group (the
+    // "Download All" button); pass a single group to zip just its members
+    // (e.g. the AFISA MUUGUZI three).
+    async generateDrivers(groups) {
+      const list = Array.isArray(groups)
+        ? groups
+        : (groups && groups.names ? [groups] : APPRECIATION_DRIVER_GROUPS)
+      const count = list.reduce((n, g) => n + (g.names || []).length, 0)
+      if (!count || this.driverZipping) return
       this.driverZipping = true
       try {
         const names = []
         const designations = []
-        APPRECIATION_DRIVER_GROUPS.forEach(g => {
+        list.forEach(g => {
           (g.names || []).forEach(n => {
             names.push(tidyName(n))
             designations.push(g.designation)
@@ -1156,7 +1173,11 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
           zip.file(`${String(i + 1).padStart(2, '0')} - ${names[i]}.pdf`, pdfBlob)
         }
         const blob = await zip.generateAsync({ type: 'blob' })
-        saveAs(blob, 'ECSACONM Driver Certificates of Appreciation.zip')
+        const single = list.length === 1
+        const zipName = single
+          ? `ECSACONM - ${(list[0].designation || '').replace(/[^A-Za-z0-9 ]+/g, ' ').trim().replace(/\s+/g, ' ')}.zip`
+          : 'ECSACONM Driver Certificates of Appreciation.zip'
+        saveAs(blob, zipName)
       } catch (e) {
         console.error('Failed to generate driver certificates:', e)
       } finally {

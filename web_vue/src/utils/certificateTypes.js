@@ -77,7 +77,7 @@ export const APPRECIATION_RECIPIENTS = [
 export const APPRECIATION_DRIVER_GROUPS = [
   {
     key: 'appreciation-drivers-afisa',
-    designation: 'AFISA MUUGUZI WIZARA YA AFYA',
+    designation: 'AFISA MUUGUZI WIZARA YA AFYA ZANZIBAR IDARA YA UUGUZI NA UKUNGA',
     names: [
       'JAFFAR KHAMIS LUOGA',
       'HASNUU SAID NYANGA',
