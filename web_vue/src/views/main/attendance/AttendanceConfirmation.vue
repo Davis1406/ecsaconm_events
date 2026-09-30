@@ -14,6 +14,14 @@
             <option v-for="event in events" :key="event.id" :value="event.id">{{ event.event }}</option>
           </select>
         </div>
+        <div v-if="selectedEventId && !isLoading && countryCounts.length" class="w-full sm:w-64">
+          <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1.5">Country</label>
+          <select v-model="countryFilter"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none bg-white">
+            <option value="">All countries ({{ registrations.length }})</option>
+            <option v-for="c in countryCounts" :key="c.country" :value="c.country">{{ c.country }} ({{ c.registered }})</option>
+          </select>
+        </div>
         <div v-if="selectedEventId && !isLoading" class="flex items-end gap-2 flex-wrap">
           <!-- Extract Excel -->
           <button @click="extractAttendance"
@@ -23,7 +31,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            Export Participants
+            {{ countryFilter ? `Export ${countryFilter}` : 'Export Participants' }}
           </button>
           <!-- Clear all attendance -->
           <button v-if="hasAttendance" @click="clearAllAttendance"
@@ -69,6 +77,10 @@
           <div>
             <h2 class="text-base font-bold text-gray-800">Attendance Report</h2>
             <p class="text-xs text-gray-400 mt-0.5">{{ selectedEvent?.event }} — {{ eventDateRangeLabel }}</p>
+            <p v-if="countryFilter" class="text-xs font-semibold mt-1" style="color: rgb(254,80,103);">
+              Country: {{ countryFilter }}
+              <button type="button" @click="countryFilter = ''" class="ml-1 underline text-gray-400 hover:text-gray-600 font-medium">show all</button>
+            </p>
           </div>
           <div class="flex items-center gap-2">
             <button @click="exportReportExcel"
@@ -93,22 +105,26 @@
         </div>
 
         <!-- Stat cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <div class="rounded-xl bg-gray-50 p-4 text-center">
             <p class="text-2xl font-bold text-gray-800">{{ stats.total }}</p>
             <p class="text-xs text-gray-400 uppercase tracking-wide mt-1">Registered</p>
+          </div>
+          <div class="rounded-xl bg-blue-50 p-4 text-center">
+            <p class="text-2xl font-bold text-blue-700">{{ stats.paid }}</p>
+            <p class="text-xs text-blue-600 uppercase tracking-wide mt-1">Paid</p>
           </div>
           <div class="rounded-xl p-4 text-center" style="background-color: rgba(254,80,103,0.08);">
             <p class="text-2xl font-bold" style="color: rgb(254,80,103);">{{ stats.attended }}</p>
             <p class="text-xs uppercase tracking-wide mt-1" style="color: rgb(254,80,103);">Attended</p>
           </div>
           <div class="rounded-xl bg-yellow-50 p-4 text-center">
-            <p class="text-2xl font-bold text-yellow-700">{{ stats.total - stats.attended }}</p>
-            <p class="text-xs text-yellow-600 uppercase tracking-wide mt-1">Absent</p>
+            <p class="text-2xl font-bold text-yellow-700">{{ stats.notAttended }}</p>
+            <p class="text-xs text-yellow-600 uppercase tracking-wide mt-1">Not attended (paid)</p>
           </div>
-          <div class="rounded-xl bg-green-50 p-4 text-center">
+          <div class="rounded-xl bg-green-50 p-4 text-center col-span-2 lg:col-span-1">
             <p class="text-2xl font-bold text-green-700">{{ attendanceRate }}%</p>
-            <p class="text-xs text-green-600 uppercase tracking-wide mt-1">Attendance rate</p>
+            <p class="text-xs text-green-600 uppercase tracking-wide mt-1">Attendance rate (paid)</p>
           </div>
         </div>
 
@@ -148,7 +164,7 @@
                 <th class="px-3 py-2.5 text-left">Day</th>
                 <th class="px-3 py-2.5 text-left">Date</th>
                 <th class="px-3 py-2.5 text-center">Attended</th>
-                <th class="px-3 py-2.5 text-center">Not attended</th>
+                <th class="px-3 py-2.5 text-center">Not attended (paid)</th>
               </tr>
             </thead>
             <tbody>
@@ -156,7 +172,60 @@
                 <td class="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{{ r.longLabel }}</td>
                 <td class="px-3 py-2.5 text-gray-500 whitespace-nowrap">{{ r.date }}</td>
                 <td class="px-3 py-2.5 text-center font-semibold" style="color: rgb(254,80,103);">{{ r.count }}</td>
-                <td class="px-3 py-2.5 text-center text-gray-500">{{ stats.total - r.count }}</td>
+                <td class="px-3 py-2.5 text-center text-gray-500">{{ r.notAttended }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Country breakdown -->
+        <div class="mt-7 overflow-x-auto">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400">Attendance by country</h3>
+            <button type="button" @click="exportAllCountries" data-html2canvas-ignore
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+              style="background-color: rgb(34,197,94);">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export all countries (sheet per country)
+            </button>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500">
+              <tr>
+                <th class="px-3 py-2.5 text-left">Country</th>
+                <th class="px-3 py-2.5 text-center">Registered</th>
+                <th class="px-3 py-2.5 text-center">Paid</th>
+                <th class="px-3 py-2.5 text-center">Attended</th>
+                <th class="px-3 py-2.5 text-center">Not attended (paid)</th>
+                <th class="px-3 py-2.5 text-center">Rate</th>
+                <th class="px-3 py-2.5 text-right" data-html2canvas-ignore></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in countryCounts" :key="c.country" class="border-b border-gray-50"
+                :class="countryFilter === c.country ? 'bg-pink-50' : 'hover:bg-gray-50'">
+                <td class="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{{ c.country }}</td>
+                <td class="px-3 py-2.5 text-center text-gray-600">{{ c.registered }}</td>
+                <td class="px-3 py-2.5 text-center text-gray-600">{{ c.paid }}</td>
+                <td class="px-3 py-2.5 text-center font-semibold" style="color: rgb(254,80,103);">{{ c.attended }}</td>
+                <td class="px-3 py-2.5 text-center text-gray-500">{{ c.notAttended }}</td>
+                <td class="px-3 py-2.5 text-center text-gray-600">{{ c.paid ? c.rate + '%' : '—' }}</td>
+                <td class="px-3 py-2.5 text-right whitespace-nowrap" data-html2canvas-ignore>
+                  <button type="button" @click="setCountry(c.country)"
+                    class="px-2.5 py-1 rounded-lg text-xs font-semibold transition"
+                    :class="countryFilter === c.country ? 'text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'"
+                    :style="countryFilter === c.country ? { backgroundColor: 'rgb(254,80,103)' } : {}">
+                    {{ countryFilter === c.country ? 'Viewing' : 'View' }}
+                  </button>
+                  <button type="button" @click="exportCountry(c.country)" :title="`Export ${c.country} participants`"
+                    class="ml-1 p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition align-middle">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -168,7 +237,7 @@
 
         <!-- Search -->
         <div class="px-5 py-4 border-b border-gray-50 flex items-center gap-3">
-          <input v-model="search" type="text" placeholder="Search participant…"
+          <input v-model="search" type="text" placeholder="Search participant or country…"
             class="flex-1 sm:max-w-xs border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
           <span class="text-xs text-gray-400 font-medium hidden sm:block">
             {{ filteredRegistrations.length }} of {{ scannedRegistrations.length }} scanned shown
@@ -198,6 +267,7 @@
               <tr class="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
                 <th class="px-3 py-3 text-left whitespace-nowrap">#</th>
                 <th class="px-3 py-3 text-left whitespace-nowrap">Participant</th>
+                <th class="px-3 py-3 text-left whitespace-nowrap">Country</th>
                 <th class="px-3 py-3 text-left whitespace-nowrap">Category</th>
                 <th v-for="d in eventDays" :key="d.date" class="px-3 py-3 text-center whitespace-nowrap">{{ d.label }}</th>
                 <th class="px-3 py-3 text-center whitespace-nowrap">Days</th>
@@ -211,6 +281,7 @@
                 <td class="px-3 py-3 font-semibold text-gray-800 whitespace-nowrap">
                   {{ [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ') || '—' }}
                 </td>
+                <td class="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">{{ countryOf(reg) }}</td>
                 <td class="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">{{ formatRole(reg.participation_role) }}</td>
                 <td v-for="d in eventDays" :key="d.date" class="px-3 py-3 text-center">
                   <input type="checkbox"
@@ -266,6 +337,8 @@ import { exportToExcel } from '@/utils/exportToExcel'
 
 const API_URL = import.meta.env.VITE_API_URL
 
+const NO_COUNTRY = 'Not specified'
+
 const ROLE_MAP = {
   member_state: 'Member State', participant: 'Participant', other_africa: 'Other Africa',
   world: 'International', student: 'Student', exhibitor: 'Exhibitor', secretariat: 'Secretariat',
@@ -285,6 +358,8 @@ export default {
       // registration_id -> { 'YYYY-MM-DD': attendanceId }
       attendanceMap: {},
       search: '',
+      // '' = all countries. Scopes the report, the table and the exports.
+      countryFilter: '',
       selectedDays: [],
       toggling: null,
       toast: { show: false, message: '', type: 'success' },
@@ -319,8 +394,18 @@ export default {
       }
       return days.sort((a, b) => a.date.localeCompare(b.date))
     },
+    // Registrations in the selected country (all of them when no country is picked).
+    scopedRegistrations() {
+      if (!this.countryFilter) return this.registrations
+      return this.registrations.filter(r => this.countryOf(r) === this.countryFilter)
+    },
+    // "Not attended" only counts people expected to attend: paid registrations
+    // (the API's `paid` already treats secretariat as paid).
+    paidRegistrations() {
+      return this.scopedRegistrations.filter(r => r.paid)
+    },
     scannedRegistrations() {
-      return this.registrations.filter(r => this.daysAttended(r) > 0)
+      return this.sortByCountry(this.scopedRegistrations.filter(r => this.daysAttended(r) > 0))
     },
     filteredRegistrations() {
       let base = this.scannedRegistrations
@@ -332,12 +417,18 @@ export default {
       return base.filter(r => {
         const name = `${r.firstname || ''} ${r.lastname || ''}`.toLowerCase()
         return name.includes(term) || (r.email || '').toLowerCase().includes(term)
+          || this.countryOf(r).toLowerCase().includes(term)
       })
     },
     stats() {
+      const paid = this.paidRegistrations
+      const paidAttended = paid.filter(r => this.daysAttended(r) > 0).length
       return {
-        total: this.registrations.length,
-        attended: this.registrations.filter(r => this.daysAttended(r) > 0).length,
+        total: this.scopedRegistrations.length,
+        paid: paid.length,
+        attended: this.scopedRegistrations.filter(r => this.daysAttended(r) > 0).length,
+        paidAttended,
+        notAttended: paid.length - paidAttended,
       }
     },
     hasAttendance() {
@@ -345,7 +436,7 @@ export default {
         Object.keys(this.attendanceMap[regId] || {}).length > 0)
     },
     attendanceRate() {
-      return this.stats.total ? Math.round((this.stats.attended / this.stats.total) * 100) : 0
+      return this.stats.paid ? Math.round((this.stats.paidAttended / this.stats.paid) * 100) : 0
     },
     reportByDay() {
       return this.eventDays.map(d => ({
@@ -355,6 +446,7 @@ export default {
           weekday: 'short', day: '2-digit', month: 'short',
         }),
         count: this.dayCount(d.date),
+        notAttended: this.paidRegistrations.filter(r => !this.isPresent(r, d.date)).length,
       }))
     },
     maxDayCount() {
@@ -362,13 +454,33 @@ export default {
     },
     roleCounts() {
       const map = {}
-      this.registrations.forEach(r => {
+      this.scopedRegistrations.forEach(r => {
         const role = r.participation_role || 'unknown'
         if (!map[role]) map[role] = { role, registered: 0, attended: 0 }
         map[role].registered++
         if (this.daysAttended(r) > 0) map[role].attended++
       })
       return Object.values(map).sort((a, b) => b.registered - a.registered)
+    },
+    // Per-country breakdown over ALL registrations (independent of the filter),
+    // A–Z with "Not specified" last.
+    countryCounts() {
+      const map = {}
+      this.registrations.forEach(r => {
+        const country = this.countryOf(r)
+        if (!map[country]) map[country] = { country, registered: 0, paid: 0, attended: 0, notAttended: 0 }
+        const row = map[country]
+        const came = this.daysAttended(r) > 0
+        row.registered++
+        if (came) row.attended++
+        if (r.paid) {
+          row.paid++
+          if (!came) row.notAttended++
+        }
+      })
+      return Object.values(map)
+        .map(r => ({ ...r, rate: r.paid ? Math.round(((r.paid - r.notAttended) / r.paid) * 100) : 0 }))
+        .sort((a, b) => this.compareCountry(a.country, b.country))
     },
     maxCategoryAttended() {
       return Math.max(1, ...this.roleCounts.map(r => r.attended))
@@ -446,6 +558,27 @@ export default {
       }
     },
 
+    countryOf(reg) {
+      return String(reg.country || '').trim() || NO_COUNTRY
+    },
+    compareCountry(a, b) {
+      if (a === b) return 0
+      if (a === NO_COUNTRY) return 1
+      if (b === NO_COUNTRY) return -1
+      return a.localeCompare(b)
+    },
+    fullName(reg) {
+      return [reg.title, reg.firstname, reg.lastname].filter(Boolean).join(' ')
+    },
+    // Country A–Z, then name — how the table and every export are ordered.
+    sortByCountry(list) {
+      return [...list].sort((a, b) =>
+        this.compareCountry(this.countryOf(a), this.countryOf(b))
+        || `${a.firstname || ''} ${a.lastname || ''}`.localeCompare(`${b.firstname || ''} ${b.lastname || ''}`))
+    },
+    setCountry(country) {
+      this.countryFilter = this.countryFilter === country ? '' : country
+    },
     isPresent(reg, dateStr) {
       return !!(this.attendanceMap[reg.id] && this.attendanceMap[reg.id][dateStr])
     },
@@ -453,7 +586,7 @@ export default {
       return Object.keys(this.attendanceMap[reg.id] || {}).length
     },
     dayCount(dateStr) {
-      return this.registrations.filter(r => this.isPresent(r, dateStr)).length
+      return this.scopedRegistrations.filter(r => this.isPresent(r, dateStr)).length
     },
     toggleDayFilter(dateStr) {
       const i = this.selectedDays.indexOf(dateStr)
@@ -560,27 +693,62 @@ export default {
     },
 
     // ---- Exports ----
+    participantRow(r, i) {
+      const row = {
+        '#': i + 1,
+        'Title': r.title || '',
+        'First Name': r.firstname || '',
+        'Last Name': r.lastname || '',
+        'Email': r.email || '',
+        'Organisation': r.organisation || r.institution || '',
+        'Country': this.countryOf(r),
+        'Category': this.formatRole(r.participation_role),
+        'Paid': r.paid ? 'Yes' : 'No',
+        'Days Attended': this.daysAttended(r),
+      }
+      this.eventDays.forEach(d => {
+        row[`${d.label} (${d.date})`] = this.isPresent(r, d.date) ? 'Yes' : 'No'
+      })
+      return row
+    },
+    // Respects the country filter: all countries, or just the selected one.
     extractAttendance() {
       const eventName = this.selectedEvent?.event || 'Event'
-      const rows = this.registrations.map((r, i) => {
-        const row = {
-          '#': i + 1,
-          'Title': r.title || '',
-          'First Name': r.firstname || '',
-          'Last Name': r.lastname || '',
-          'Email': r.email || '',
-          'Organisation': r.organisation || r.institution || '',
-          'Country': r.country || '',
-          'Category': this.formatRole(r.participation_role),
-          'Paid': r.paid ? 'Yes' : 'No',
-          'Days Attended': this.daysAttended(r),
-        }
-        this.eventDays.forEach(d => {
-          row[`${d.label} (${d.date})`] = this.isPresent(r, d.date) ? 'Yes' : 'No'
-        })
-        return row
+      const rows = this.sortByCountry(this.scopedRegistrations).map(this.participantRow)
+      const suffix = this.countryFilter ? `_${this.countryFilter}` : ''
+      exportToExcel(rows, `Attendance_${eventName}${suffix}`)
+    },
+    exportCountry(country) {
+      const eventName = this.selectedEvent?.event || 'Event'
+      const regs = this.registrations.filter(r => this.countryOf(r) === country)
+      exportToExcel(this.sortByCountry(regs).map(this.participantRow), `Attendance_${eventName}_${country}`)
+    },
+    // One workbook: a summary sheet plus one participants sheet per country.
+    async exportAllCountries() {
+      const eventName = this.selectedEvent?.event || 'Event'
+      const XLSX = await import('xlsx')
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(this.countrySummaryRows()), 'Summary')
+      const used = new Set(['Summary'])
+      this.countryCounts.forEach(c => {
+        const regs = this.sortByCountry(this.registrations.filter(r => this.countryOf(r) === c.country))
+        // Excel sheet names: max 31 chars, no []:*?/\, unique
+        let name = c.country.replace(/[\[\]:*?/\\]/g, ' ').slice(0, 31).trim() || 'Sheet'
+        for (let n = 2; used.has(name); n++) name = `${name.slice(0, 28)} ${n}`
+        used.add(name)
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(regs.map(this.participantRow)), name)
       })
-      exportToExcel(rows, `Attendance_${eventName}`)
+      XLSX.writeFile(wb, `Attendance_By_Country_${eventName}.xlsx`)
+    },
+    countrySummaryRows() {
+      return this.countryCounts.map(c => ({
+        Country: c.country,
+        Registered: c.registered,
+        Paid: c.paid,
+        Attended: c.attended,
+        'Not attended (paid)': c.notAttended,
+        'Attendance rate (% of paid)': c.rate,
+      }))
     },
 
     async exportReportExcel() {
@@ -590,16 +758,18 @@ export default {
 
       const summary = [
         { Metric: 'Event', Value: eventName },
+        { Metric: 'Country', Value: this.countryFilter || 'All countries' },
         { Metric: 'Registered', Value: this.stats.total },
+        { Metric: 'Paid', Value: this.stats.paid },
         { Metric: 'Attended (at least one day)', Value: this.stats.attended },
-        { Metric: 'Absent', Value: this.stats.total - this.stats.attended },
-        { Metric: 'Attendance rate (%)', Value: this.attendanceRate },
+        { Metric: 'Not attended (paid)', Value: this.stats.notAttended },
+        { Metric: 'Attendance rate (% of paid)', Value: this.attendanceRate },
       ]
       const daily = this.reportByDay.map(r => ({
         Day: r.longLabel,
         Date: r.date,
         Attended: r.count,
-        'Not attended': this.stats.total - r.count,
+        'Not attended (paid)': r.notAttended,
       }))
       const categories = this.roleCounts.map(r => ({
         Category: this.formatRole(r.role),
@@ -610,7 +780,9 @@ export default {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Summary')
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(daily), 'Daily')
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(categories), 'Categories')
-      XLSX.writeFile(wb, `Attendance_Report_${eventName}.xlsx`)
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(this.countrySummaryRows()), 'Countries')
+      const suffix = this.countryFilter ? `_${this.countryFilter}` : ''
+      XLSX.writeFile(wb, `Attendance_Report_${eventName}${suffix}.xlsx`)
     },
 
     async exportReportPDF() {
