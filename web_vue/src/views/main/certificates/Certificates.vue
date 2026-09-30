@@ -344,6 +344,38 @@
           </div>
         </div>
       </div>
+
+      <!-- Certificates of Appreciation for the drivers — no emails, so these
+           are only generated/downloaded (never emailed). -->
+      <div class="bg-white rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-widest text-gray-400">Certificates of Appreciation — Drivers</div>
+            <p class="text-xs text-gray-400 mt-1">Ministry of Health Zanzibar drivers and driver-officers. No emails on file, so these are generated/downloaded as one PDF (a page per person), not emailed.</p>
+          </div>
+        </div>
+        <div class="mt-3 divide-y divide-gray-100 border border-gray-100 rounded-xl">
+          <div v-for="g in appreciationDriverGroups" :key="g.key" class="px-4 py-3">
+            <div class="text-sm font-semibold text-gray-800">{{ g.designation }}</div>
+            <div class="mt-1.5 flex flex-wrap gap-1.5">
+              <span v-for="n in g.names" :key="n"
+                class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[12px] text-gray-700">
+                {{ n }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button type="button" @click="generateDrivers"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
+            style="background-color: rgb(254,80,103);">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+            </svg>
+            Generate {{ driverCount }} Certificates of Appreciation
+          </button>
+        </div>
+      </div>
     </template>
 
     <!-- Preview & edit email modal (both per-row Send and bulk Email open this) -->
@@ -521,7 +553,7 @@ import CertificateSheet from '@/components/CertificateSheet.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
 import { fetchData } from '@/services/apiService'
 import { useAuthStore } from '@/store/authStore'
-import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, APPRECIATION_TYPE, APPRECIATION_RECIPIENTS, DEFAULT_EVENT_NAME, certificateCategory, tidyName, ensureCertificateFonts } from '@/utils/certificateTypes'
+import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, APPRECIATION_TYPE, APPRECIATION_RECIPIENTS, APPRECIATION_DRIVER_GROUPS, DEFAULT_EVENT_NAME, certificateCategory, tidyName, ensureCertificateFonts } from '@/utils/certificateTypes'
 
 const API_URL = import.meta.env.VITE_API_URL
 // A paid abstract presenter who doesn't appear anywhere in the programme book.
@@ -882,6 +914,14 @@ export default {
       const person = m.recipients.find(p => p.key === m.previewKey) || m.recipients[0]
       return person ? person.designation || '' : ''
     },
+    // Driver appreciation groups — each entry has `designation` (group heading)
+    // and `names`. Used by the Generate card in the template.
+    appreciationDriverGroups() {
+      return APPRECIATION_DRIVER_GROUPS
+    },
+    driverCount() {
+      return APPRECIATION_DRIVER_GROUPS.reduce((n, g) => n + (g.names || []).length, 0)
+    },
     // Same scaling the print page uses, sized to the modal's content width
     // (max-w-2xl) rather than the full window.
     previewScaleStyle() {
@@ -1070,7 +1110,9 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
     },
       openPrint(job) {
         // The usher/secretariat certificate names the event it supports, so the
-        // print tab needs the selected event's name to render it.
+        // print tab needs the selected event's name to render it. `designations`
+        // (optional) aligns 1:1 with `names` — used by Certificates of
+        // Appreciation, where each person carries a designation line.
         localStorage.setItem(CERTIFICATE_JOB_KEY, JSON.stringify({
           eventName: this.selectedEventName, ...job,
         }))
@@ -1082,6 +1124,23 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
     },
     preview() {
       this.openPrint({ type: this.type, names: ['Full Name'], autoPrint: false })
+    },
+    // Certificates of Appreciation for the drivers — no emails, so straight to
+    // the print tab for a one-PDF-per-page download. Uses APPRECIATION_TYPE
+    // (0 CPD, "OF APPRECIATION") with each group's heading as the designation.
+    generateDrivers() {
+      if (!this.driverCount) return
+      const names = []
+      const designations = []
+      APPRECIATION_DRIVER_GROUPS.forEach(g => {
+        (g.names || []).forEach(n => {
+          names.push(tidyName(n))
+          designations.push(g.designation)
+        })
+      })
+      this.openPrint({
+        type: 'appreciation', names, designations, autoPrint: true,
+      })
     },
 
     // html2canvas reads the live DOM, so the certificate webfonts must be

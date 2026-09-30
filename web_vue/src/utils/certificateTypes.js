@@ -69,6 +69,39 @@ export const APPRECIATION_RECIPIENTS = [
   },
 ]
 
+// Certificates of Appreciation for the drivers and driver-officers of the
+// Ministry of Health Zanzibar. They have no emails on file, so these are only
+// ever generated/downloaded (never emailed) — a Generate button on the
+// Certificates page opens the print tab with every name. `designation` is the
+// group heading shown under each name, exactly as supplied.
+export const APPRECIATION_DRIVER_GROUPS = [
+  {
+    key: 'appreciation-drivers-afisa',
+    designation: 'AFISA MUUGUZI WIZARA YA AFYA',
+    names: [
+      'JAFFAR KHAMIS LUOGA',
+      'HASNUU SAID NYANGA',
+      'SHAABAN FAKI OMAR',
+    ],
+  },
+  {
+    key: 'appreciation-drivers-madereva',
+    designation: 'MADEREVA WA WIZARA YA AFYA',
+    names: [
+      'RASHID OMAR HAMAD',
+      'HAROUN FAHMI ALAWI',
+      'SULEIMAN ALI ISHAU',
+      'OMAR ALI OMAR',
+      'RAJAB SULEIMAN JABU',
+      'HASSAN HAJI HASSAN',
+      'SULTAN SALUM MBARAK',
+      'KASSIM RASHID KHAMIS',
+      'AHMED ABDALLA MAULID',
+      "MOH'D HASSAN MAKAME",
+    ],
+  },
+]
+
 // localStorage key the admin page writes the print job to; the print tab reads it.
 export const CERTIFICATE_JOB_KEY = 'certificatePrintJob'
 

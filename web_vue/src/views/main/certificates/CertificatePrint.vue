@@ -11,7 +11,8 @@
 
     <template v-if="type">
       <div v-for="(name, i) in names" :key="i" class="cert-page">
-        <CertificateSheet ref="sheets" :name="name" :type="type" :event-name="eventName" :uid="i" />
+        <CertificateSheet ref="sheets" :name="name" :type="type" :event-name="eventName"
+          :designation="designations && designations[i]" :uid="i" />
       </div>
     </template>
   </div>
@@ -19,22 +20,24 @@
 
 <script>
 import CertificateSheet from '@/components/CertificateSheet.vue'
-import { CERTIFICATE_TYPES, CERTIFICATE_JOB_KEY, ensureCertificateFonts } from '@/utils/certificateTypes'
+import { CERTIFICATE_TYPES, APPRECIATION_TYPE, CERTIFICATE_JOB_KEY, ensureCertificateFonts } from '@/utils/certificateTypes'
 
 export default {
   name: 'CertificatePrintView',
   components: { CertificateSheet },
   data() {
-    return { type: null, names: [], eventName: '', scale: 1, ready: false, autoPrint: false }
+    return { type: null, names: [], designations: [], eventName: '', scale: 1, ready: false, autoPrint: false }
   },
   created() {
     // Written by Certificates.vue just before opening this tab. Left in place
     // so a refresh of this tab still works.
     try {
       const job = JSON.parse(localStorage.getItem(CERTIFICATE_JOB_KEY) || 'null')
-      if (job && CERTIFICATE_TYPES[job.type] && Array.isArray(job.names)) {
-        this.type = CERTIFICATE_TYPES[job.type]
+      const type = job && (CERTIFICATE_TYPES[job.type] || (job.type === 'appreciation' ? APPRECIATION_TYPE : null))
+      if (job && type && Array.isArray(job.names)) {
+        this.type = type
         this.names = job.names
+        this.designations = Array.isArray(job.designations) ? job.designations : []
         this.eventName = job.eventName || ''
         this.autoPrint = !!job.autoPrint
       }
