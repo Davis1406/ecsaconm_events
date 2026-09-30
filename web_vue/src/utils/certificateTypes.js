@@ -67,6 +67,13 @@ export const APPRECIATION_RECIPIENTS = [
     email: 'ayshajuly@gmail.com',
     cc: APPRECIATION_CC,
   },
+  {
+    key: 'appreciation-afisa-khairat',
+    name: 'Ms. Khairat Rashid Ali',
+    designation: 'AFISA MUUGUZI WIZARA YA AFYA ZANZIBAR IDARA YA UUGUZI NA UKUNGA',
+    email: 'alikhairat67@gmail.com',
+    cc: APPRECIATION_CC,
+  },
 ]
 
 // Certificates of Appreciation for the drivers and driver-officers of the
