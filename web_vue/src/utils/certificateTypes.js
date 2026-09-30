@@ -86,7 +86,7 @@ export const APPRECIATION_DRIVER_GROUPS = [
   },
   {
     key: 'appreciation-drivers-madereva',
-    designation: 'MADEREVA WA WIZARA YA AFYA',
+    designation: 'DEREVA WIZARA YA AFYA',
     names: [
       'RASHID OMAR HAMAD',
       'HAROUN FAHMI ALAWI',

@@ -351,7 +351,7 @@
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="text-xs font-bold uppercase tracking-widest text-gray-400">Certificates of Appreciation — Drivers</div>
-            <p class="text-xs text-gray-400 mt-1">Ministry of Health Zanzibar drivers and driver-officers. No emails on file, so these are generated/downloaded as one PDF (a page per person), not emailed.</p>
+            <p class="text-xs text-gray-400 mt-1">Ministry of Health Zanzibar drivers and driver-officers. No emails on file, so these are downloaded as one ZIP containing a PDF per person, not emailed.</p>
           </div>
         </div>
         <div class="mt-3 divide-y divide-gray-100 border border-gray-100 rounded-xl">
@@ -365,14 +365,17 @@
             </div>
           </div>
         </div>
-        <div class="mt-3">
-          <button type="button" @click="generateDrivers"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
+<div class="mt-3">
+          <button type="button" @click="generateDrivers" :disabled="driverZipping"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             style="background-color: rgb(254,80,103);">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg v-if="driverZipping" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
             </svg>
-            Generate {{ driverCount }} Certificates of Appreciation
+            {{ driverZipping ? `Zipping ${driverCount} Certificates…` : `Download ${driverCount} Certificates of Appreciation (.zip)` }}
           </button>
         </div>
       </div>
@@ -548,6 +551,8 @@
 
 <script>
 import axios from 'axios'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 import HeaderView from '@/includes/Header.vue'
 import CertificateSheet from '@/components/CertificateSheet.vue'
 import SpinnerComponent from '@/components/Spinner.vue'
@@ -665,6 +670,7 @@ export default {
       // inside an interpolation.
       mergeTagExample: '{{name}}',
       mergeTagEventExample: '{{event}}',
+      driverZipping: false,
     }
   },
   computed: {
@@ -1125,22 +1131,37 @@ const [regs, attendance, programme, event, sent] = await Promise.allSettled([
     preview() {
       this.openPrint({ type: this.type, names: ['Full Name'], autoPrint: false })
     },
-    // Certificates of Appreciation for the drivers — no emails, so straight to
-    // the print tab for a one-PDF-per-page download. Uses APPRECIATION_TYPE
-    // (0 CPD, "OF APPRECIATION") with each group's heading as the designation.
-    generateDrivers() {
-      if (!this.driverCount) return
-      const names = []
-      const designations = []
-      APPRECIATION_DRIVER_GROUPS.forEach(g => {
-        (g.names || []).forEach(n => {
-          names.push(tidyName(n))
-          designations.push(g.designation)
+    // Certificates of Appreciation for the drivers — no emails, so rendered
+    // straight to PDFs and downloaded as one ZIP (one PDF per person). Uses
+    // APPRECIATION_TYPE (0 CPD, "OF APPRECIATION") with each group's heading
+    // as the designation.
+    async generateDrivers() {
+      if (!this.driverCount || this.driverZipping) return
+      this.driverZipping = true
+      try {
+        const names = []
+        const designations = []
+        APPRECIATION_DRIVER_GROUPS.forEach(g => {
+          (g.names || []).forEach(n => {
+            names.push(tidyName(n))
+            designations.push(g.designation)
+          })
         })
-      })
-      this.openPrint({
-        type: 'appreciation', names, designations, autoPrint: true,
-      })
+        const zip = new JSZip()
+        for (let i = 0; i < names.length; i++) {
+          const { pdfBlob } = await this.renderCertificateAssets(names[i], {
+            type: APPRECIATION_TYPE,
+            designation: designations[i],
+          })
+          zip.file(`${String(i + 1).padStart(2, '0')} - ${names[i]}.pdf`, pdfBlob)
+        }
+        const blob = await zip.generateAsync({ type: 'blob' })
+        saveAs(blob, 'ECSACONM Driver Certificates of Appreciation.zip')
+      } catch (e) {
+        console.error('Failed to generate driver certificates:', e)
+      } finally {
+        this.driverZipping = false
+      }
     },
 
     // html2canvas reads the live DOM, so the certificate webfonts must be
