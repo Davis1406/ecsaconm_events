@@ -163,7 +163,7 @@
     </section>
 
     <!-- ── NO CURRENT EVENT → PAST EVENT PHOTOS & RECAP ─────────────────── -->
-    <div v-if="!isLoading && !featuredEvent && pastEvent" class="bg-[#0e0f13]">
+    <div v-if="!isLoading && !featuredEvent && pastEvent" class="bg-[#fff7f8]">
     <Transition name="stage" mode="out-in" @before-enter="toTop" @after-enter="toTop">
       <section v-if="!isLoading && !featuredEvent && pastEvent && !showRecap" key="intro"
         class="relative overflow-hidden bg-black flex items-center justify-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100svh-5rem)]">
@@ -176,7 +176,7 @@
           </div>
         </div>
         <div v-else class="absolute inset-0 bg-center bg-cover" :style="pastHeroBgStyle"></div>
-        <div class="absolute inset-0 bg-gradient-to-b from-black/80 via-black/70 to-black/85"></div>
+        <div class="absolute inset-0 bg-gradient-to-b from-black/60 via-black/45 to-black/65"></div>
 
         <div class="relative z-10 max-w-3xl mx-auto px-6 py-16 text-center text-white intro-content">
           <span class="inline-flex items-center gap-2 text-sm font-semibold px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm mb-6">
@@ -191,7 +191,7 @@
             Our next event will be announced here soon. In the meantime, look back at our most recent conference.
           </p>
 
-          <div class="rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 px-6 py-6 sm:px-8 mb-8">
+          <div class="rounded-2xl bg-black/35 backdrop-blur-md border border-white/20 px-6 py-6 sm:px-8 mb-8">
             <p class="text-xs uppercase tracking-[0.25em] font-bold mb-2" style="color: rgb(254,80,103);">Past event</p>
             <p class="text-lg sm:text-2xl font-bold leading-snug" v-html="formatOrdinals(pastEvent.event)"></p>
             <p class="text-sm text-white/70 mt-2">
